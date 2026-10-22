@@ -83,7 +83,6 @@ export class ArenaScene {
   private targetCamZ: number = 0;
   private graphicsQuality: GraphicsQuality = 'balanced';
   private vfxFrameTasks = new Set<(now: number) => void>();
-  private nextVfxFrameTasks = new Set<(now: number) => void>();
   private disposed = false;
 
   // Current Scene Theme
@@ -2856,10 +2855,10 @@ export class ArenaScene {
   }
 
   private flushVfxFrameTasks = (now: number) => {
-    const tasks = this.vfxFrameTasks;
-    this.vfxFrameTasks = this.nextVfxFrameTasks;
-    this.nextVfxFrameTasks = tasks;
-    this.nextVfxFrameTasks.clear();
+    // Snapshot first, then clear the live queue so callbacks can safely
+    // enqueue their next animation frame while this batch is running.
+    const tasks = [...this.vfxFrameTasks];
+    this.vfxFrameTasks.clear();
 
     for (const task of tasks) {
       try {
@@ -3368,7 +3367,6 @@ export class ArenaScene {
   public dispose() {
     this.disposed = true;
     this.vfxFrameTasks.clear();
-    this.nextVfxFrameTasks.clear();
     while (this.activeParticles.length > 0) this.removeCombatParticle(this.activeParticles.length - 1);
 
     if (this.renderer.domElement && this.renderer.domElement.parentElement) {
