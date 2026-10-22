@@ -88,7 +88,7 @@ export interface EnemyActor {
   hp: number;
   speed: number;
   damage: number;
-  state: 'chase' | 'windup' | 'skill_windup' | 'attack' | 'recover' | 'hurt' | 'dead';
+  state: 'chase' | 'windup' | 'skill_windup' | 'skill_release' | 'attack' | 'recover' | 'hurt' | 'dead';
   stateTimer: number;
   facing: number;
   mesh: THREE.Mesh;
@@ -113,7 +113,7 @@ export interface EnemyActor {
   hpBarWidth?: number;
   bossAttackType?: 'smash' | 'dash' | 'happy_wave' | 'happy_coin_rain';
   skillCooldown?: number;
-  skillKind?: 'bolt' | 'slam';
+  skillKind?: 'bolt' | 'slam' | 'volley';
   skillTargetX?: number;
   skillTargetZ?: number;
   skillColor?: number;
@@ -3241,27 +3241,60 @@ export class CombatEngine {
 
   private getEnemySkillColor(type: string) {
     if (/(ice|snow|frost)/i.test(type)) return 0x38bdf8;
-    if (/(fire|lava|forge|goblin)/i.test(type)) return 0xf97316;
+    if (/(fire|lava|forge|goblin|genie)/i.test(type)) return 0xf97316;
     if (/(ghost|shadow|crypt|blood|undead)/i.test(type)) return 0xa855f7;
     if (/(sky|wind|archer|bird|wisp|angel)/i.test(type)) return 0x22d3ee;
     return 0xef4444;
   }
 
+  private getEnemySkillKind(type: string): NonNullable<EnemyActor['skillKind']> {
+    if (/(archer|gunslinger|outlaw|inquisitor|frostmage)/i.test(type)) return 'volley';
+    if (/(wisp|ghost|genie|phantom|drone|mage|angel|shadow)/i.test(type)) return 'bolt';
+    return 'slam';
+  }
+
   private beginEnemySkill(enemy: EnemyActor) {
-    const ranged = /(archer|mage|priest|wisp|ghost|genie|assassin|inquisitor|frost|shadow|angel|bird|shooter)/i.test(enemy.type);
-    enemy.skillKind = ranged ? 'bolt' : 'slam';
+    enemy.skillKind = this.getEnemySkillKind(enemy.type);
     enemy.skillColor = this.getEnemySkillColor(enemy.type);
     enemy.skillTargetX = this.playerX;
     enemy.skillTargetZ = this.playerZ;
     enemy.state = 'skill_windup';
-    enemy.stateTimer = 0.78;
-    enemy.bossActionName = ranged ? 'ร่ายกระสุนอาคม' : 'กระแทกพื้น';
-    if (ranged) {
+    enemy.stateTimer = enemy.skillKind === 'volley' ? 0.92 : 0.78;
+    enemy.bossActionName = enemy.skillKind === 'volley'
+      ? 'ปล่อยพายุศรสามทาง'
+      : enemy.skillKind === 'bolt'
+        ? 'ชาร์จกระสุนอาคม'
+        : 'สะสมพลังทุบพื้น';
+    if (enemy.skillKind === 'volley') {
+      this.arena.showEnemyVolleyTelegraph(enemy.x, enemy.z, enemy.skillTargetX, enemy.skillTargetZ, enemy.stateTimer, enemy.skillColor);
+    } else if (enemy.skillKind === 'bolt') {
       this.arena.showDashTelegraph(enemy.x, enemy.z, enemy.skillTargetX, enemy.skillTargetZ, enemy.stateTimer, enemy.skillColor);
     } else {
-      this.arena.showEnemySkillTelegraph(enemy.skillTargetX, enemy.skillTargetZ, 2.7, enemy.stateTimer, enemy.skillColor);
+      this.arena.showEnemySkillTelegraph(enemy.skillTargetX, enemy.skillTargetZ, 3.0, enemy.stateTimer, enemy.skillColor);
     }
     soundEngine.playTelegraph();
+  }
+
+  private launchEnemySkill(enemy: EnemyActor) {
+    const targetX = enemy.skillTargetX ?? this.playerX;
+    const targetZ = enemy.skillTargetZ ?? this.playerZ;
+    const dx = targetX - enemy.x;
+    const dz = targetZ - enemy.z;
+    const distance = Math.max(0.6, Math.hypot(dx, dz));
+    const angle = Math.atan2(dz, dx);
+    const offsets = enemy.skillKind === 'volley' ? [-0.2, 0, 0.2] : [0];
+    const scale = enemy.skillKind === 'volley' ? 0.42 : 0.68;
+
+    offsets.forEach((offset) => {
+      if (enemy.skillKind === 'volley') {
+        this.arena.spawnEnemyArrowProjectileVFX(enemy.x, enemy.z, angle + offset, distance, enemy.skillColor ?? 0x22d3ee, scale * 1.7);
+      } else {
+        const style = /(fire|lava|forge|goblin|genie)/i.test(enemy.type) ? 'dragon' : 'orb';
+        this.arena.spawnSkillProjectileVFX(enemy.x, enemy.z, angle + offset, distance, enemy.skillColor ?? 0x22d3ee, style, scale);
+      }
+    });
+    enemy.state = 'skill_release';
+    enemy.stateTimer = 0.36;
   }
 
   private resolveEnemySkill(enemy: EnemyActor) {
@@ -3269,18 +3302,31 @@ export class CombatEngine {
     const targetZ = enemy.skillTargetZ ?? this.playerZ;
     const color = enemy.skillColor ?? 0xef4444;
     let hitsPlayer = false;
-    if (enemy.skillKind === 'bolt') {
+    if (enemy.skillKind === 'bolt' || enemy.skillKind === 'volley') {
+      const rangedSkill = enemy.skillKind === 'volley' ? 'volley' : 'bolt';
       const dx = targetX - enemy.x;
       const dz = targetZ - enemy.z;
-      const lengthSq = dx * dx + dz * dz;
-      const t = lengthSq > 0 ? THREE.MathUtils.clamp(((this.playerX - enemy.x) * dx + (this.playerZ - enemy.z) * dz) / lengthSq, 0, 1) : 0;
-      const nearestX = enemy.x + dx * t;
-      const nearestZ = enemy.z + dz * t;
-      hitsPlayer = Math.hypot(this.playerX - nearestX, this.playerZ - nearestZ) <= 1.35;
-      this.arena.spawnEnemySkillBurst(targetX, targetZ, color);
+      const distance = Math.hypot(dx, dz);
+      const baseAngle = Math.atan2(dz, dx);
+      const offsets = rangedSkill === 'volley' ? [-0.2, 0, 0.2] : [0];
+      const hitRadius = rangedSkill === 'volley' ? 0.9 : 1.35;
+
+      offsets.forEach((offset) => {
+        const angle = baseAngle + offset;
+        const endX = enemy.x + Math.cos(angle) * distance;
+        const endZ = enemy.z + Math.sin(angle) * distance;
+        const lengthSq = distance * distance;
+        const t = lengthSq > 0
+          ? THREE.MathUtils.clamp(((this.playerX - enemy.x) * (endX - enemy.x) + (this.playerZ - enemy.z) * (endZ - enemy.z)) / lengthSq, 0, 1)
+          : 0;
+        const nearestX = enemy.x + (endX - enemy.x) * t;
+        const nearestZ = enemy.z + (endZ - enemy.z) * t;
+        if (Math.hypot(this.playerX - nearestX, this.playerZ - nearestZ) <= hitRadius) hitsPlayer = true;
+        this.arena.spawnEnemySkillBurst(endX, endZ, color, rangedSkill);
+      });
     } else {
       hitsPlayer = Math.hypot(this.playerX - targetX, this.playerZ - targetZ) <= 2.35;
-      this.arena.spawnEnemySkillBurst(targetX, targetZ, color);
+      this.arena.spawnEnemySkillBurst(targetX, targetZ, color, 'slam');
     }
     if (hitsPlayer && !this.isDashing && !this.isInvulnerable) {
       this.damagePlayer(Math.max(1, Math.round(enemy.damage * 1.15)));
@@ -3339,7 +3385,7 @@ export class CombatEngine {
         meshMat.color.setHex(0xfde047); // Shock yellow
       } else if (enemy.statuses.some((s) => s.type === 'stun')) {
         meshMat.color.setHex(0xfacc15); // Stun Gold
-      } else if (enemy.state === 'skill_windup') {
+      } else if (enemy.state === 'skill_windup' || enemy.state === 'skill_release') {
         meshMat.color.setHex(enemy.skillColor ?? 0xef4444);
       } else {
         meshMat.color.setHex(0xffffff);
@@ -3385,7 +3431,8 @@ export class CombatEngine {
 
         if (enemy.state === 'chase') {
           const preferredDist = enemy.isBoss ? 2.8 : (enemy.type.includes('genie') || enemy.type.includes('wisp') ? 2.2 : 1.4);
-          if (!enemy.isBoss && enemy.skillCooldown === 0 && dist <= 9.5) {
+          const skillRange = this.getEnemySkillKind(enemy.type) === 'slam' ? 5.6 : 9.5;
+          if (!enemy.isBoss && enemy.skillCooldown === 0 && dist <= skillRange) {
             this.beginEnemySkill(enemy);
           } else {
             if (dist > preferredDist) {
@@ -3508,6 +3555,12 @@ export class CombatEngine {
             }
           }
         } else if (enemy.state === 'skill_windup') {
+          enemy.stateTimer -= dt;
+          if (enemy.stateTimer <= 0) {
+            if (enemy.skillKind === 'slam') this.resolveEnemySkill(enemy);
+            else this.launchEnemySkill(enemy);
+          }
+        } else if (enemy.state === 'skill_release') {
           enemy.stateTimer -= dt;
           if (enemy.stateTimer <= 0) this.resolveEnemySkill(enemy);
         } else if (enemy.state === 'attack') {

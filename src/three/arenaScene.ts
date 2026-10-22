@@ -997,9 +997,90 @@ export class ArenaScene {
     requestAnimationFrame(animate);
   }
 
-  public spawnEnemySkillBurst(x: number, z: number, color: number) {
+  public showEnemyVolleyTelegraph(fromX: number, fromZ: number, targetX: number, targetZ: number, duration: number, color: number) {
+    const group = new THREE.Group();
+    this.telegraphGroup.add(group);
+
+    const distance = Math.max(0.6, Math.hypot(targetX - fromX, targetZ - fromZ));
+    const baseAngle = Math.atan2(targetZ - fromZ, targetX - fromX);
+    const geometries: THREE.BufferGeometry[] = [];
+    const materials: THREE.Material[] = [];
+    const lanes: Array<{ lineMaterial: THREE.LineBasicMaterial; ring: THREE.Mesh; ringMaterial: THREE.MeshBasicMaterial }> = [];
+
+    for (const offset of [-0.2, 0, 0.2]) {
+      const angle = baseAngle + offset;
+      const startX = fromX + Math.cos(angle) * 0.7;
+      const startZ = fromZ + Math.sin(angle) * 0.7;
+      const endX = fromX + Math.cos(angle) * distance;
+      const endZ = fromZ + Math.sin(angle) * distance;
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(startX, 0.075, startZ),
+        new THREE.Vector3(endX, 0.075, endZ),
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.88,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      group.add(line);
+      geometries.push(lineGeometry);
+      materials.push(lineMaterial);
+
+      const ringGeometry = new THREE.RingGeometry(0.36, 0.5, 28);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.82,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(endX, 0.08, endZ);
+      group.add(ring);
+      geometries.push(ringGeometry);
+      materials.push(ringMaterial);
+      lanes.push({ lineMaterial, ring, ringMaterial });
+    }
+
+    const startedAt = performance.now();
+    const dispose = () => {
+      group.removeFromParent();
+      geometries.forEach((geometry) => geometry.dispose());
+      materials.forEach((material) => material.dispose());
+    };
+    const animate = (now: number) => {
+      const progress = (now - startedAt) / (duration * 1000);
+      if (progress >= 1 || !group.parent) {
+        dispose();
+        return;
+      }
+      const pulse = 0.48 + Math.sin(progress * Math.PI * 8) * 0.22;
+      lanes.forEach(({ lineMaterial, ring, ringMaterial }, index) => {
+        lineMaterial.opacity = pulse + (index === 1 ? 0.16 : 0);
+        ringMaterial.opacity = 0.55 + Math.sin(progress * Math.PI * 10 + index) * 0.28;
+        ring.scale.setScalar(0.7 + progress * 0.35);
+        ring.rotation.z += index % 2 === 0 ? 0.035 : -0.035;
+      });
+      requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }
+
+  public spawnEnemySkillBurst(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley' = 'slam') {
+    const isSlam = kind === 'slam';
+    const radius = isSlam ? 3.25 : kind === 'volley' ? 1.25 : 1.75;
+    const duration = isSlam ? 0.62 : 0.4;
+    this.spawnSkillRing(x, z, color, radius, duration);
+    this.spawnSkillBurst(x, isSlam ? 0.68 : 0.9, z, color, isSlam ? 30 : 14, isSlam ? 7.2 : 5.1, isSlam ? 0.72 : 0.48);
+
     const sparkTex = this.getSparkTexture();
-    for (let i = 0; i < 12; i++) {
+    const particleCount = isSlam ? 16 : 7;
+    for (let i = 0; i < particleCount; i++) {
       const material = new THREE.MeshBasicMaterial({
         map: sparkTex,
         color,
@@ -1012,8 +1093,8 @@ export class ArenaScene {
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), material);
       mesh.rotation.x = -Math.PI / 3;
       mesh.position.set(x, 0.35 + Math.random() * 0.6, z);
-      const angle = (Math.PI * 2 * i) / 12;
-      const speed = 1.8 + Math.random() * 2.2;
+      const angle = (Math.PI * 2 * i) / particleCount;
+      const speed = isSlam ? 2.8 + Math.random() * 2.8 : 1.8 + Math.random() * 2.2;
       this.vfxGroup.add(mesh);
       this.activeParticles.push({
         mesh,
@@ -1022,9 +1103,9 @@ export class ArenaScene {
         vz: Math.sin(angle) * speed,
         gravity: -4.5,
         drag: 1.1,
-        life: 0.48 + Math.random() * 0.18,
-        maxLife: 0.66,
-        initialScale: 1.15,
+        life: isSlam ? 0.56 + Math.random() * 0.2 : 0.48 + Math.random() * 0.18,
+        maxLife: isSlam ? 0.76 : 0.66,
+        initialScale: isSlam ? 1.4 : 1.15,
         shrink: true,
         spin: (Math.random() - 0.5) * 12,
       });
@@ -1936,11 +2017,107 @@ export class ArenaScene {
     requestAnimationFrame(animate);
   }
 
-  public spawnSkillProjectileVFX(x: number, z: number, angle: number, distance: number, color: number, style: 'blade' | 'orb' | 'dragon') {
+  public spawnEnemyArrowProjectileVFX(x: number, z: number, angle: number, distance: number, color: number, projectileScale: number = 0.72) {
+    const group = new THREE.Group();
+    group.position.set(x, 1.08, z);
+    group.rotation.y = -angle;
+    group.scale.setScalar(projectileScale);
+    this.vfxGroup.add(group);
+
+    const shaftMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe0f2fe,
+      emissive: color,
+      emissiveIntensity: 2.4,
+      metalness: 0.68,
+      roughness: 0.22,
+      transparent: true,
+      opacity: 0.98,
+    });
+    const crystalMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: color,
+      emissiveIntensity: 3.1,
+      metalness: 0.52,
+      roughness: 0.16,
+      transparent: true,
+      opacity: 0.98,
+    });
+    const featherMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const featherMaterials: THREE.Material[] = [];
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.28, 8), shaftMaterial);
+    shaft.rotation.z = -Math.PI / 2;
+    group.add(shaft);
+
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.38, 8), crystalMaterial);
+    tip.rotation.z = -Math.PI / 2;
+    tip.position.x = 0.77;
+    group.add(tip);
+
+    const feathers: THREE.Mesh[] = [];
+    for (const side of [-1, 1]) {
+      const material = featherMaterial.clone();
+      featherMaterials.push(material);
+      const feather = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.28, 5), material);
+      feather.rotation.z = Math.PI / 2;
+      feather.position.set(-0.57, 0.02, side * 0.09);
+      group.add(feather);
+      feathers.push(feather);
+    }
+    featherMaterial.dispose();
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.18, 0.025, 6, 20),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    ring.rotation.y = Math.PI / 2;
+    ring.position.x = -0.12;
+    group.add(ring);
+
+    const fadeMaterials: THREE.Material[] = [shaftMaterial, crystalMaterial, ...featherMaterials, ring.material as THREE.Material];
+    let progress = 0;
+    let frame = 0;
+    const animate = () => {
+      progress += 1 / 22;
+      frame++;
+      const travel = Math.min(1, progress);
+      group.position.x = x + Math.cos(angle) * distance * travel;
+      group.position.z = z + Math.sin(angle) * distance * travel;
+      ring.rotation.x += 0.18;
+      feathers.forEach((feather, index) => {
+        feather.rotation.x += index === 0 ? 0.1 : -0.1;
+      });
+      const fade = Math.max(0, 1 - Math.max(0, progress - 0.78) / 0.22);
+      fadeMaterials.forEach((material) => { material.opacity = fade; });
+      if (frame % 4 === 0 && progress < 0.88) {
+        this.spawnSkillBurst(group.position.x, group.position.y, group.position.z, color, 2, 1.1, 0.22);
+      }
+      if (progress < 1) requestAnimationFrame(animate);
+      else {
+        this.vfxGroup.remove(group);
+        group.traverse((object) => {
+          const mesh = object as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.geometry.dispose();
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          materials.forEach((material) => material.dispose());
+        });
+      }
+    };
+    requestAnimationFrame(animate);
+  }
+
+  public spawnSkillProjectileVFX(x: number, z: number, angle: number, distance: number, color: number, style: 'blade' | 'orb' | 'dragon', projectileScale: number = 1) {
     const group = new THREE.Group();
     const orbLike = style === 'orb' || style === 'dragon';
     group.position.set(x, orbLike ? 1.15 : 1.0, z);
     group.rotation.y = -angle;
+    group.scale.setScalar(projectileScale);
     this.vfxGroup.add(group);
 
     const meshes: THREE.Mesh[] = [];
