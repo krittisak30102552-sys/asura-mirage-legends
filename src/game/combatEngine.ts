@@ -240,6 +240,7 @@ export class CombatEngine {
   // Dash & Dodge
   public isDashing: boolean = false;
   public dashTimer: number = 0;
+  private dashTrailTimer: number = 0;
   public dashCooldown: number = 0;
   public dashMaxCooldown: number = 1.0;
   public isInvulnerable: boolean = false;
@@ -2208,6 +2209,7 @@ export class CombatEngine {
     }
     this.playerVx = Math.cos(angle) * dashSpeed;
     this.playerVz = Math.sin(angle) * dashSpeed;
+    this.dashTrailTimer = 0.055;
 
     soundEngine.playDash();
     this.spawnGhostTrail();
@@ -2630,14 +2632,17 @@ export class CombatEngine {
     const slash = new THREE.Mesh(geo, mat);
     slash.position.set(x, 1.2, z);
     slash.rotation.y = -angle + Math.PI / 2;
+    slash.scale.setScalar(0.82);
     this.arena.vfxGroup.add(slash);
+    this.arena.spawnSkillBurst(x, 0.95, z, 0xfbcfe8, 3, 2.0, 0.22);
 
-    let life = 0.16;
+    let life = 0.2;
     const fade = () => {
       life -= 0.03;
       if (life > 0) {
-        slash.scale.multiplyScalar(1.08);
-        mat.opacity = life / 0.16;
+        slash.scale.multiplyScalar(1.09);
+        slash.rotation.z += Math.sign(angle || 1) * 0.035;
+        mat.opacity = life / 0.2;
         requestAnimationFrame(fade);
       } else {
         this.arena.vfxGroup.remove(slash);
@@ -2653,8 +2658,8 @@ export class CombatEngine {
     const mat = new THREE.MeshBasicMaterial({
       map: (this.heroMesh.material as THREE.MeshBasicMaterial).map,
       transparent: true,
-      opacity: 0.6,
-      color: 0x38bdf8,
+      opacity: 0.48,
+      color: 0xffd9e9,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -2662,7 +2667,7 @@ export class CombatEngine {
     ghost.position.copy(this.heroMesh.position);
     ghost.scale.copy(this.heroMesh.scale);
     this.arena.vfxGroup.add(ghost);
-    this.ghostTrails.push({ mesh: ghost, opacity: 0.6 });
+    this.ghostTrails.push({ mesh: ghost, opacity: 0.48 });
   }
 
   // ----------------------------------------------------------------------
@@ -2770,6 +2775,7 @@ export class CombatEngine {
     enemy.vz = Math.sin(angle) * force;
 
     this.spawnDamageNumber(enemy.x, 1.2, enemy.z, dealtDamage, isCrit);
+    this.arena.spawnHitImpactVFX(enemy.x, 0.92, enemy.z, isCrit, isHeavy, 0xef4458);
 
     this.applyEquipmentStatusOnHit(enemy);
     if (isCrit) this.handleEquipmentCritical();
@@ -2868,7 +2874,7 @@ export class CombatEngine {
       x: x + (Math.random() - 0.5) * 0.4,
       y: y + 1.2,
       z: z + (Math.random() - 0.5) * 0.4,
-      color: isHeal ? '#22c55e' : isPlayer ? '#ef4444' : isCrit ? '#facc15' : '#ffffff',
+      color: isHeal ? '#22c55e' : isPlayer ? '#ef4444' : isCrit ? '#facc15' : '#60e35a',
       scale: isCrit ? 1.4 : 1.0,
       life: 0.75,
       maxLife: 0.75,
@@ -3099,9 +3105,19 @@ export class CombatEngine {
       g.opacity -= dt * 2.5;
       if (g.opacity <= 0) {
         this.arena.vfxGroup.remove(g.mesh);
+        g.mesh.geometry.dispose();
+        (g.mesh.material as THREE.Material).dispose();
         this.ghostTrails.splice(i, 1);
       } else {
         (g.mesh.material as THREE.MeshBasicMaterial).opacity = g.opacity;
+      }
+    }
+
+    if (this.isDashing) {
+      this.dashTrailTimer -= dt;
+      if (this.dashTrailTimer <= 0) {
+        this.spawnGhostTrail();
+        this.dashTrailTimer = 0.055;
       }
     }
 

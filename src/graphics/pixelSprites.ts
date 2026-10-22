@@ -30,6 +30,17 @@ function createActorPixelTexture(source: HTMLCanvasElement): THREE.CanvasTexture
   return createCanvasTexture(canvas);
 }
 
+function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): THREE.CanvasTexture {
+  const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(source.width * scale));
+  canvas.height = Math.max(1, Math.round(source.height * scale));
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return createCanvasTexture(canvas);
+}
+
 // ----------------------------------------------------------------------
 // HERO SPRITE RENDERER: High-Definition Humanoid Anatomy (Ginzo, Quan, Katherine)
 // Canvas: 256 x 320 px (smooth vector drawing, anti-aliased curves and shading)
@@ -1551,32 +1562,44 @@ export function generateWeaponSlashTexture(weaponType: string = 'katana', comboS
     ctx.stroke();
 
   } else {
-    // Katana: Crisp Razor Silver & Sakura Crimson Crescent
+    // Katana: a pale rose outer trail, bright silver edge, and clean white core.
     const r = isFinisher ? 100 : 90;
-    // Outer cherry blossom / crimson halo
-    ctx.strokeStyle = isFinisher ? 'rgba(244, 63, 94, 0.5)' : 'rgba(225, 29, 72, 0.35)';
-    ctx.lineWidth = isFinisher ? 28 : 20;
+    ctx.strokeStyle = isFinisher ? 'rgba(244, 63, 94, 0.42)' : 'rgba(244, 114, 182, 0.36)';
+    ctx.lineWidth = isFinisher ? 34 : 27;
     ctx.beginPath();
     ctx.arc(0, 0, r, -Math.PI * 0.78, Math.PI * 0.25);
     ctx.stroke();
 
-    // Radiant silver katana edge
-    ctx.strokeStyle = '#f43f5e';
-    ctx.lineWidth = isFinisher ? 12 : 8;
+    // Soft blush trail around the razor edge
+    ctx.strokeStyle = isFinisher ? '#f9a8d4' : '#fbcfe8';
+    ctx.lineWidth = isFinisher ? 18 : 14;
     ctx.beginPath();
     ctx.arc(0, 0, r, -Math.PI * 0.72, Math.PI * 0.2);
     ctx.stroke();
 
-    // Diamond razor core
+    // Bright white blade trail, with tiny glints at both ends.
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = isFinisher ? 8 : 6;
     ctx.beginPath();
     ctx.arc(0, 0, r, -Math.PI * 0.68, Math.PI * 0.16);
     ctx.stroke();
+
+    ctx.fillStyle = '#fff7fb';
+    [-Math.PI * 0.68, Math.PI * 0.16].forEach((angle) => {
+      const px = Math.cos(angle) * r;
+      const py = Math.sin(angle) * r;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 7);
+      ctx.lineTo(px + 10, py);
+      ctx.lineTo(px, py + 7);
+      ctx.lineTo(px - 10, py);
+      ctx.closePath();
+      ctx.fill();
+    });
   }
 
   ctx.restore();
-  return createCanvasTexture(canvas);
+  return weaponType === 'katana' ? createPixelEffectTexture(canvas, 128) : createCanvasTexture(canvas);
 }
 
 export function generateSlashTexture(): THREE.CanvasTexture {
@@ -1608,25 +1631,29 @@ export function generateHitFlashTexture(): THREE.CanvasTexture {
   ctx.save();
   ctx.translate(64, 64);
 
-  // 4-pointed radiant flare star
-  const drawFlare = (color: string, scale: number) => {
+  // Jagged red impact burst with a warm core, like a crisp hit frame in a pixel brawler.
+  const drawBurst = (color: string, scale: number, points: number, innerRatio: number) => {
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(0, -60 * scale);
-    ctx.quadraticCurveTo(0, 0, 60 * scale, 0);
-    ctx.quadraticCurveTo(0, 0, 0, 60 * scale);
-    ctx.quadraticCurveTo(0, 0, -60 * scale, 0);
-    ctx.quadraticCurveTo(0, 0, 0, -60 * scale);
+    for (let i = 0; i < points * 2; i++) {
+      const angle = (i * Math.PI) / points - Math.PI / 2;
+      const radius = (i % 2 === 0 ? 58 : 58 * innerRatio) * scale;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
     ctx.closePath();
     ctx.fill();
   };
 
-  drawFlare('rgba(250, 204, 21, 0.45)', 1.0);
-  drawFlare('rgba(254, 240, 138, 0.75)', 0.65);
-  drawFlare('#ffffff', 0.35);
+  drawBurst('#be123c', 1.0, 8, 0.58);
+  drawBurst('#fb3f55', 0.82, 8, 0.62);
+  drawBurst('#ffd166', 0.47, 6, 0.56);
+  drawBurst('#ffffff', 0.22, 4, 0.34);
 
   ctx.restore();
-  return createCanvasTexture(canvas);
+  return createPixelEffectTexture(canvas, 64);
 }
 
 export function generateShockwaveRingTexture(): THREE.CanvasTexture {

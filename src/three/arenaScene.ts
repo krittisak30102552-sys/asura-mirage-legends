@@ -2954,7 +2954,7 @@ export class ArenaScene {
   }
 
   /**
-   * High-impact hit sparks: 4-pointed star flash, kinetic flying sparks, and ground shockwave rings on crits
+   * Pixel-crisp impact bursts, flying sparks, and a short ground ring on heavy hits.
    */
   public spawnHitImpactVFX(
     x: number,
@@ -2981,7 +2981,7 @@ export class ArenaScene {
     starMesh.position.set(x, y + 0.1, z);
     starMesh.rotation.x = -Math.PI / 4;
     starMesh.rotation.z = Math.random() * Math.PI;
-    const starScale = isCrit ? 2.5 : isHeavy ? 1.9 : 1.35;
+    const starScale = isCrit ? 1.55 : isHeavy ? 1.12 : 0.78;
     starMesh.scale.set(starScale, starScale, 1);
     this.vfxGroup.add(starMesh);
 
@@ -3001,15 +3001,15 @@ export class ArenaScene {
     this.scheduleVfxFrame(fadeStar);
 
     // 2. Kinetic Glowing Spark Particles (Burst outward)
-    const count = this.scaleParticleCount(isCrit ? 18 : isHeavy ? 13 : 8);
+    const count = this.scaleParticleCount(isCrit ? 14 : isHeavy ? 9 : 5);
     const baseColors = isCrit
       ? [0xfef08a, 0xfacc15, 0xfbbf24, 0xef4444]
       : themeColor
-      ? [themeColor, 0xffffff, 0xfef08a]
+      ? [themeColor, 0xffffff, 0xffd166]
       : [0xfef08a, 0xfbbf24, 0xffffff];
 
     for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
-      const pGeo = new THREE.PlaneGeometry(0.32, 0.32);
+      const pGeo = new THREE.PlaneGeometry(0.24, 0.38);
       const col = baseColors[Math.floor(Math.random() * baseColors.length)];
       const pMat = new THREE.MeshBasicMaterial({
         map: sparkTex,
@@ -3022,7 +3022,7 @@ export class ArenaScene {
       });
       const pMesh = new THREE.Mesh(pGeo, pMat);
       pMesh.position.set(x + (Math.random() - 0.5) * 0.2, y + (Math.random() - 0.5) * 0.2, z + (Math.random() - 0.5) * 0.2);
-      pMesh.rotation.x = -Math.PI / 3;
+      pMesh.rotation.set(-Math.PI / 3, 0, Math.random() * Math.PI);
 
       const angle = Math.random() * Math.PI * 2;
       const speed = (isCrit ? 6.5 : 4.5) + Math.random() * 4.0;
@@ -3035,7 +3035,7 @@ export class ArenaScene {
         drag: 3.5,
         life: 0.28 + Math.random() * 0.2,
         maxLife: 0.45,
-        initialScale: (isCrit ? 1.4 : 1.0) + Math.random() * 0.4,
+        initialScale: (isCrit ? 1.15 : isHeavy ? 0.85 : 0.6) + Math.random() * 0.28,
         shrink: true,
         spin: (Math.random() - 0.5) * 12,
       };
@@ -3047,7 +3047,7 @@ export class ArenaScene {
       const ringGeo = new THREE.PlaneGeometry(3.2, 3.2);
       const ringMat = new THREE.MeshBasicMaterial({
         map: this.getShockwaveRingTexture(),
-        color: isCrit ? 0xfacc15 : 0xf97316,
+        color: isCrit ? 0xfacc15 : 0xf9a8d4,
         transparent: true,
         opacity: 0.95,
         blending: THREE.AdditiveBlending,
