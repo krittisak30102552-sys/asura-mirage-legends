@@ -133,6 +133,7 @@ export default function App() {
   const [currentWave, setCurrentWave] = useState<number>(1);
   const [currentDungeonMap, setCurrentDungeonMap] = useState<DungeonMapId>('desert');
   const [nearbyInteractable, setNearbyInteractable] = useState<'trainer' | 'gate' | null>(null);
+  const [oneHitMode, setOneHitMode] = useState(false);
 
   // ----------------------------------------------------------------------
   // RENDER COMIC STARBURST DAMAGE NUMBERS & TARGET LOCK BRACKETS [ ]
@@ -497,6 +498,11 @@ export default function App() {
     // KEYBOARD & MOUSE EVENT LISTENERS
     // ------------------------------------------------------------------
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, [contenteditable="true"]')) {
+        keysHeld.current[e.code] = false;
+        return;
+      }
       keysHeld.current[e.code] = true;
 
       // Escape / P for Pause
@@ -574,8 +580,9 @@ export default function App() {
       const h = mountRef.current.clientHeight || window.innerHeight;
       arena.handleResize(w, h);
       if (damageCanvasRef.current) {
-        damageCanvasRef.current.width = w;
-        damageCanvasRef.current.height = h;
+        damageCanvasRef.current.width = arena.renderer.domElement.width;
+        damageCanvasRef.current.height = arena.renderer.domElement.height;
+        damageCanvasRef.current.style.imageRendering = 'pixelated';
       }
     };
 
@@ -760,9 +767,16 @@ export default function App() {
 
   const currentMapConfig = DUNGEON_MAPS.find((m) => m.id === currentDungeonMap);
 
+  const handleRunCommand = useCallback((command: string) => {
+    if (command.trim().replace(/\s+/g, '') !== '1คิว' || !engineRef.current) return false;
+    engineRef.current.oneHitMode = true;
+    setOneHitMode(true);
+    return true;
+  }, []);
+
   return (
     <div className="relative w-screen h-[100dvh] min-h-[100svh] overflow-hidden bg-zinc-950 font-rajdhani select-none">
-      {/* 3D WebGL Canvas */}
+      {/* Low-resolution WebGL scene with nearest-neighbor scaling for pixel-art rendering */}
       <div
         ref={mountRef}
         className="absolute inset-0 z-0 pointer-events-auto cursor-crosshair w-full h-full touch-none"
@@ -830,6 +844,8 @@ export default function App() {
           onSkill2={() => engineRef.current?.handleSkill2()}
           onSkill3={() => engineRef.current?.handleSkill3()}
           onInteract={() => engineRef.current?.triggerInteraction()}
+          onRunCommand={handleRunCommand}
+          oneHitMode={oneHitMode}
           onJoystickMove={(x, z) => {
             joystickMoveRef.current = { x, z };
           }}

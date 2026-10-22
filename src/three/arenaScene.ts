@@ -101,9 +101,6 @@ export class ArenaScene {
     this.camera.position.set(0, 18, 18.5);
     this.camera.lookAt(0, 0.5, 0);
 
-    const isHeadless =
-      typeof navigator !== 'undefined' &&
-      (navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent));
     const deviceMemory = typeof navigator !== 'undefined'
       ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8
       : 8;
@@ -115,16 +112,19 @@ export class ArenaScene {
     this.graphicsQuality = isLowPowerDevice ? 'low' : isBalancedDevice ? 'balanced' : 'high';
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: !isHeadless && this.graphicsQuality === 'high',
+      antialias: false,
       powerPreference: 'high-performance',
     });
-    this.renderer.setSize(width, height);
-    const maxPixelRatio = this.graphicsQuality === 'low' ? 1 : this.graphicsQuality === 'balanced' ? 1.25 : 1.5;
-    this.renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio || 1, maxPixelRatio));
+    this.renderer.setPixelRatio(1);
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
+    this.renderer.domElement.style.display = 'block';
+    this.renderer.domElement.style.imageRendering = 'pixelated';
+    this.setPixelatedRenderSize(width, height);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
-    this.renderer.shadowMap.enabled = !isHeadless && this.graphicsQuality === 'high';
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     container.appendChild(this.renderer.domElement);
@@ -169,55 +169,48 @@ export class ArenaScene {
   // ----------------------------------------------------------------------
   // PROCEDURAL TILE FLOORS
   // ----------------------------------------------------------------------
-  private createPalaceTealFloorTexture(): THREE.CanvasTexture {
+  private createPixelWoodFloorTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = '#064e3b';
-    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = '#211612';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const tileSize = 64;
-    for (let y = 0; y < 512; y += tileSize) {
-      for (let x = 0; x < 512; x += tileSize) {
-        const isAlt = ((x / tileSize) + (y / tileSize)) % 2 === 0;
-        ctx.fillStyle = isAlt ? '#0f766e' : '#115e59';
-        ctx.fillRect(x + 2, y + 2, tileSize - 4, tileSize - 4);
-
-        ctx.fillStyle = isAlt ? 'rgba(45, 212, 191, 0.28)' : 'rgba(20, 184, 166, 0.18)';
-        ctx.beginPath();
-        ctx.moveTo(x + tileSize / 2, y + 6);
-        ctx.lineTo(x + tileSize - 6, y + tileSize / 2);
-        ctx.lineTo(x + tileSize / 2, y + tileSize - 6);
-        ctx.lineTo(x + 6, y + tileSize / 2);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-        ctx.fillRect(x + tileSize / 2 - 2, y + tileSize / 2 - 2, 4, 4);
+    const plankWidth = 128;
+    const plankHeight = 32;
+    const plankColors = ['#68402b', '#754a31', '#5e3828', '#805236'];
+    for (let row = 0; row < canvas.height / plankHeight; row++) {
+      const offset = row % 2 === 0 ? 0 : -64;
+      for (let col = -1; col < 3; col++) {
+        const x = col * plankWidth + offset;
+        const y = row * plankHeight;
+        const shadeIndex = (row * 3 + col * 5 + 40) % plankColors.length;
+        ctx.fillStyle = '#2a1b16';
+        ctx.fillRect(x, y, plankWidth, plankHeight);
+        ctx.fillStyle = plankColors[shadeIndex];
+        ctx.fillRect(x + 2, y + 2, plankWidth - 4, plankHeight - 4);
+        ctx.fillStyle = 'rgba(244, 181, 119, 0.16)';
+        ctx.fillRect(x + 5, y + 4, plankWidth - 10, 2);
+        ctx.fillStyle = 'rgba(27, 14, 11, 0.42)';
+        ctx.fillRect(x + 5, y + plankHeight - 5, plankWidth - 10, 2);
+        ctx.fillStyle = 'rgba(37, 20, 14, 0.42)';
+        ctx.fillRect(x + 23, y + 9, 36, 2);
+        ctx.fillRect(x + 75, y + 20, 41, 2);
+        ctx.fillStyle = '#39251b';
+        ctx.fillRect(x + 63, y + 3, 3, 4);
       }
-    }
-
-    ctx.strokeStyle = '#d97706';
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i <= 512; i += tileSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(512, i);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, 512);
-      ctx.stroke();
     }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(10, 8);
+    texture.repeat.set(20, 15);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
     return texture;
   }
 
@@ -372,20 +365,21 @@ export class ArenaScene {
   // LOBBY: restore the lounge scenery while keeping the shop removed.
   // ----------------------------------------------------------------------
   private buildLobbyScene() {
-    this.scene.background = new THREE.Color(0x061118);
-    this.scene.fog = new THREE.FogExp2(0x061118, 0.016);
-    this.keyLight.color.setHex(0xfff5e6);
-    this.keyLight.intensity = 2.5;
-    this.ambientLight.color.setHex(0x38bdf8);
-    this.ambientLight.groundColor.setHex(0x064e3b);
-    this.ambientLight.intensity = 1.4;
+    this.scene.background = new THREE.Color(0x160d0b);
+    this.scene.fog = new THREE.FogExp2(0x160d0b, 0.008);
+    this.keyLight.color.setHex(0xffd3a3);
+    this.keyLight.intensity = 2.0;
+    this.ambientLight.color.setHex(0xffc68a);
+    this.ambientLight.groundColor.setHex(0x34201c);
+    this.ambientLight.intensity = 1.05;
 
-    const floorGeo = new THREE.PlaneGeometry(38, 26);
-    const floorTex = this.createPalaceTealFloorTexture();
+    // Extend the timber floor past the walkable area so the camera never shows a hard map edge.
+    const floorGeo = new THREE.PlaneGeometry(80, 60);
+    const floorTex = this.createPixelWoodFloorTexture();
     const floorMat = new THREE.MeshStandardMaterial({
       map: floorTex,
-      roughness: 0.45,
-      metalness: 0.3,
+      roughness: 0.96,
+      metalness: 0,
     });
     this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
     this.floorMesh.rotation.x = -Math.PI / 2;
@@ -393,8 +387,7 @@ export class ArenaScene {
     this.scene.add(this.floorMesh);
 
     this.buildPalaceBackWall();
-    this.buildOrnateCarpet(0, 0, 5, 14);
-    this.buildMarbleFountain(6, 1);
+    this.buildPixelLobbyTable(6, 1);
     this.buildTrainerStation(8, -4);
 
     this.createInteractionPad(8, -4, 0x38bdf8, 1.8);
@@ -402,10 +395,10 @@ export class ArenaScene {
     this.createFloatingBadge('📜 [E] MASTER CHANYI', '#38bdf8', 8, 3.2, -4);
     this.createFloatingBadge('🌀 [E] DUNGEON GATE', '#10b981', 0, 5.8, -7.2);
 
-    this.createPalaceLantern(-4, 3, 0x38bdf8);
-    this.createPalaceLantern(4, 3, 0x10b981);
-    this.createPalaceLantern(-8, -5, 0xfbbf24);
-    this.createPalaceLantern(8, -5, 0xfbbf24);
+    this.createPalaceLantern(-4, 3, 0xff9a46);
+    this.createPalaceLantern(4, 3, 0xffc45e);
+    this.createPalaceLantern(-8, -5, 0xffc45e);
+    this.createPalaceLantern(8, -5, 0xffc45e);
     this.createGoldOnionVase(-7, 5);
     this.createGoldOnionVase(7, 5);
 
@@ -1507,19 +1500,19 @@ export class ArenaScene {
     wallGroup.position.set(0, 0, z);
 
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x042f2e,
-      roughness: 0.5,
-      metalness: 0.25,
+      color: 0x2a1b18,
+      roughness: 0.95,
+      metalness: 0,
     });
     const goldTrim = new THREE.MeshStandardMaterial({
-      color: 0xd97706,
-      roughness: 0.3,
-      metalness: 0.8,
+      color: 0x88452b,
+      roughness: 0.9,
+      metalness: 0.05,
     });
     const panelMat = new THREE.MeshStandardMaterial({
-      color: 0x115e59,
-      roughness: 0.4,
-      metalness: 0.3,
+      color: 0x493024,
+      roughness: 0.95,
+      metalness: 0,
     });
 
     const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(width, 8, 1.0), wallMat);
@@ -1631,33 +1624,34 @@ export class ArenaScene {
     this.staticDecorGroup.add(group);
   }
 
-  private buildMarbleFountain(x: number, z: number) {
+  private buildPixelLobbyTable(x: number, z: number) {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
 
-    const marbleMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.1 });
-    const waterMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0.85 });
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.8 });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x332018, roughness: 0.96 });
+    const warmWood = new THREE.MeshStandardMaterial({ color: 0x70462d, roughness: 0.96 });
+    const fadedCloth = new THREE.MeshStandardMaterial({ color: 0x8d3029, roughness: 0.98 });
 
-    const basin = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 3.6), marbleMat);
-    basin.position.y = 0.3;
-    basin.castShadow = true;
-    group.add(basin);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.24, 2.4), darkWood);
+    top.position.y = 1.14;
+    group.add(top);
+    const tabletop = new THREE.Mesh(new THREE.BoxGeometry(3.14, 0.13, 2.14), warmWood);
+    tabletop.position.y = 1.31;
+    group.add(tabletop);
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.06, 1.45), fadedCloth);
+    cloth.position.set(0, 1.405, 0);
+    group.add(cloth);
 
-    const pool = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 3.0), waterMat);
-    pool.rotation.x = -Math.PI / 2;
-    pool.position.y = 0.55;
-    group.add(pool);
-
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 1.2, 10), marbleMat);
-    pillar.position.y = 0.85;
-    pillar.castShadow = true;
-    group.add(pillar);
-
-    const spout = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), goldMat);
-    spout.position.y = 1.5;
-    spout.castShadow = true;
-    group.add(spout);
+    for (const px of [-1.42, 1.42]) {
+      for (const pz of [-0.94, 0.94]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.08, 0.24), darkWood);
+        leg.position.set(px, 0.54, pz);
+        group.add(leg);
+      }
+    }
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(2.95, 0.36, 0.2), warmWood);
+    apron.position.set(0, 0.86, 0.94);
+    group.add(apron);
 
     this.staticDecorGroup.add(group);
   }
@@ -3254,7 +3248,7 @@ export class ArenaScene {
     this.flushVfxFrameTasks(performance.now());
     const isLobby = this.currentTheme === 'lobby';
 
-    // Give the dungeon more breathing room; keep the lounge's original overview framing.
+    // Keep the lobby framed from above so its walkable room reads like a pixel RPG hub.
     const targetFov = isLobby ? 42 : 48;
     if (this.camera.fov !== targetFov) {
       this.camera.fov = targetFov;
@@ -3264,11 +3258,11 @@ export class ArenaScene {
     if (isLobby) {
       // 1. LOBBY: Grand overhead lounge view
       this.targetCamX = THREE.MathUtils.clamp(heroX * 0.45, -5, 5);
-      this.targetCamZ = THREE.MathUtils.clamp(heroZ * 0.35 + 14.5, 11, 17);
+      this.targetCamZ = THREE.MathUtils.clamp(heroZ * 0.35 + 10.5, 7, 13);
 
       const camLerp = 1 - Math.exp(-6 * dt);
       this.camera.position.x += (this.targetCamX - this.camera.position.x) * camLerp;
-      this.camera.position.y += (15.5 - this.camera.position.y) * camLerp;
+      this.camera.position.y += (21 - this.camera.position.y) * camLerp;
       this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
 
       this.camera.lookAt(this.camera.position.x * 0.6, 0.5, heroZ * 0.25);
@@ -3288,10 +3282,10 @@ export class ArenaScene {
         const shakeX = (Math.random() - 0.5) * this.cameraShake * 1.2;
         const shakeY = (Math.random() - 0.5) * this.cameraShake * 1.2;
         this.camera.position.x += shakeX;
-        this.camera.position.y = (isLobby ? 15.5 : 18) + shakeY;
+        this.camera.position.y = (isLobby ? 21 : 18) + shakeY;
         this.cameraShake *= Math.exp(-10 * dt);
       } else {
-        this.camera.position.y = isLobby ? 15.5 : 18;
+        this.camera.position.y = isLobby ? 21 : 18;
         this.cameraShake = 0;
       }
 
@@ -3361,7 +3355,14 @@ export class ArenaScene {
   public handleResize(width: number, height: number) {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.setPixelatedRenderSize(width, height);
+  }
+
+  private setPixelatedRenderSize(width: number, height: number) {
+    const maxWidth = this.graphicsQuality === 'low' ? 480 : this.graphicsQuality === 'balanced' ? 640 : 800;
+    const logicalWidth = Math.min(width, maxWidth, Math.max(280, Math.round(width * 0.62)));
+    const logicalHeight = Math.max(1, Math.round(logicalWidth / (width / height)));
+    this.renderer.setSize(logicalWidth, logicalHeight, false);
   }
 
   public dispose() {

@@ -13,3 +13,9 @@ body {
   background: #09090b;
   overscroll-behavior: none;
 }
+
+.pixel-rpg-hud .rounded-xl,
+.pixel-rpg-hud .rounded-lg,
+.pixel-rpg-hud .rounded-md {
+  border-radius: 2px !important;
+}

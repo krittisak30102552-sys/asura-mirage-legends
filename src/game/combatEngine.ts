@@ -142,6 +142,7 @@ export class CombatEngine {
 
   // Engine Mode & Procedural Multi-Room Branching
   public currentMode: 'lobby' | 'dungeon' = 'lobby';
+  public oneHitMode: boolean = false;
   public currentDungeonMap: DungeonMapId = 'desert';
   public currentRoom: DungeonRoomId = 'center';
   public currentRoomType: DungeonRoomType = 'combat';
@@ -2754,7 +2755,9 @@ export class CombatEngine {
 
   public damageEnemy(enemy: EnemyActor, amount: number, isCrit: boolean, isHeavy: boolean) {
     if (enemy.state === 'dead') return;
-    const finalDamage = Math.max(1, Math.round(amount * this.getConditionalDamageMultiplier()));
+    const finalDamage = this.oneHitMode
+      ? enemy.hp
+      : Math.max(1, Math.round(amount * this.getConditionalDamageMultiplier()));
     const dealtDamage = Math.min(enemy.hp, finalDamage);
     if (enemy.isHappyBoss) enemy.lastHitDamage = Math.max(1, dealtDamage);
     enemy.hp = Math.max(0, enemy.hp - finalDamage);

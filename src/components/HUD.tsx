@@ -8,11 +8,11 @@
  * - 3 Character Skill slots + Dash + Normal Attack
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerStats, SkillInfo, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
 import { HERO_CONFIGS } from '../data/gameData';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
-import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase } from 'lucide-react';
+import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
 import { VirtualJoystick } from './VirtualJoystick';
 import type { StageRoomNode, StageRoomType } from '../game/levelSystem';
 import { generateHeroTexture } from '../graphics/pixelSprites';
@@ -125,6 +125,8 @@ interface HUDProps {
   onSkill2?: () => void;
   onSkill3?: () => void;
   onInteract?: () => void;
+  onRunCommand?: (command: string) => boolean;
+  oneHitMode?: boolean;
   // Mobile Joystick handler
   onJoystickMove?: (x: number, z: number) => void;
   onJoystickAim?: (angle: number) => void;
@@ -166,11 +168,17 @@ export const HUD: React.FC<HUDProps> = ({
   onSkill2,
   onSkill3,
   onInteract,
+  onRunCommand,
+  oneHitMode = false,
   onJoystickMove,
   onJoystickAim,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandInput, setCommandInput] = useState('');
+  const [commandMessage, setCommandMessage] = useState('');
+  const commandInputRef = useRef<HTMLInputElement>(null);
   // Auto-detect touch device or small screen, with user override
   const [forceTouchControls, setForceTouchControls] = useState<boolean>(() => {
     return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 1024);
@@ -185,6 +193,10 @@ export const HUD: React.FC<HUDProps> = ({
     window.addEventListener('resize', handleCheck);
     return () => window.removeEventListener('resize', handleCheck);
   }, []);
+
+  useEffect(() => {
+    if (commandOpen) commandInputRef.current?.focus();
+  }, [commandOpen]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -252,7 +264,67 @@ export const HUD: React.FC<HUDProps> = ({
   }, [activeHeroId]);
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between p-2 sm:p-3 md:p-6 pt-[max(env(safe-area-inset-top),0.5rem)] pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+    <div className="pixel-rpg-hud absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between p-2 sm:p-3 md:p-6 pt-[max(env(safe-area-inset-top),0.5rem)] pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+      {commandOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center bg-black/65 p-3 pt-[16vh] pointer-events-auto sm:pt-[20vh]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setCommandOpen(false);
+          }}
+        >
+          <section role="dialog" aria-modal="true" aria-labelledby="game-command-title" className="w-full max-w-sm border-[3px] border-[#bd9557] bg-[#171416] p-3 text-[#f6e7c9] shadow-[8px_8px_0_rgba(0,0,0,.6)] sm:p-4">
+            <div className="mb-3 flex items-center justify-between border-b-2 border-[#514239] pb-2">
+              <h2 id="game-command-title" className="flex items-center gap-2 font-pixel text-xs text-amber-200">
+                <Terminal size={16} /> ช่องคำสั่ง
+              </h2>
+              <button type="button" onClick={() => setCommandOpen(false)} className="border-2 border-[#74634f] bg-[#29221d] p-1 text-zinc-200 hover:text-white" aria-label="ปิดช่องคำสั่ง">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mb-3 font-rajdhani text-sm text-[#c3b8a5]">พิมพ์คำสั่งแล้วกด Enter เพื่อใช้ในเกม</p>
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const command = commandInput.trim().replace(/\s+/g, '');
+                if (!command) return;
+                const accepted = onRunCommand?.(command) ?? false;
+                setCommandMessage(accepted ? 'เปิดใช้ 1คิว แล้ว — โจมตีมอนสเตอร์ตายทันที' : `ไม่รู้จักคำสั่ง “${command}”`);
+                if (accepted) setCommandInput('');
+              }}
+            >
+              <input
+                ref={commandInputRef}
+                value={commandInput}
+                onChange={(event) => setCommandInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    setCommandOpen(false);
+                  }
+                }}
+                maxLength={32}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder="เช่น 1คิว"
+                aria-label="พิมพ์คำสั่งเกม"
+                className="min-w-0 flex-1 border-2 border-[#685846] bg-[#090a0d] px-3 py-2 font-pixel text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400 select-text"
+              />
+              <button type="submit" className="border-2 border-[#f2ca75] bg-[#a86327] px-3 font-pixel text-[10px] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,.25)] active:translate-y-px">
+                ใช้
+              </button>
+            </form>
+            <div className="mt-3 flex items-center justify-between gap-2 font-rajdhani text-xs">
+              <span className={commandMessage.includes('ไม่รู้จัก') ? 'text-rose-300' : 'text-emerald-200'} aria-live="polite">
+                {commandMessage || (oneHitMode ? 'สถานะ: 1คิว เปิดอยู่' : 'คำสั่งที่ใช้ได้: 1คิว')}
+              </span>
+              {oneHitMode && <span className="shrink-0 border border-emerald-400 px-1.5 py-1 font-pixel text-[8px] text-emerald-200">1คิว ON</span>}
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* TOP HEADER */}
       <div className="flex flex-col gap-2 w-full">
         <div className="flex flex-wrap items-start justify-between gap-1 w-full">
@@ -260,9 +332,7 @@ export const HUD: React.FC<HUDProps> = ({
           <div className={`pointer-events-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 shadow-xl shadow-black/80 ${referenceDungeonHud ? 'border-[3px] border-[#b98a4d] rounded-sm bg-[#171416]/95' : 'bg-zinc-950/90 border-2 border-amber-600/70 rounded-xl backdrop-blur-xs'}`}>
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={`${referenceDungeonHud ? 'w-12 h-12 sm:w-16 sm:h-16 border-[3px] border-[#d0a65e] rounded-sm bg-[#3a2423]' : 'w-10 h-10 sm:w-12 sm:h-12 bg-zinc-900 border-2 border-amber-500 rounded-lg'} flex items-center justify-center font-pixel text-amber-200 shadow-inner shrink-0 overflow-hidden`}>
-                {referenceDungeonHud ? (
-                  <img src={heroPortrait} alt={heroCfg.nameTh} className="h-full w-full object-cover object-top [image-rendering:pixelated]" />
-                ) : <span className="text-2xl">{heroCfg.icon}</span>}
+                <img src={heroPortrait} alt={heroCfg.nameTh} className="h-full w-full object-cover object-top [image-rendering:pixelated]" />
               </div>
 
               <div className="flex flex-col space-y-1 w-32 sm:w-44 lg:w-56">
@@ -431,6 +501,18 @@ export const HUD: React.FC<HUDProps> = ({
 
           {/* Top-Right: Quick Control Buttons */}
           <div className={`pointer-events-auto ml-auto flex max-w-[calc(100vw-12rem)] ${referenceDungeonHud ? 'flex-col items-end gap-1' : 'flex-wrap items-center justify-end gap-1 sm:max-w-none sm:flex-nowrap sm:gap-2'}`}>
+            <button
+              type="button"
+              onClick={() => {
+                setCommandMessage('');
+                setCommandOpen(true);
+              }}
+              className="flex items-center gap-1 border-2 border-[#9b805d] bg-[#171416]/95 px-2 py-1.5 font-pixel text-[9px] text-[#f5d898] shadow-[0_2px_0_#09090b] hover:border-amber-300"
+              title="เปิดช่องใส่คำสั่งเกม"
+            >
+              <Terminal size={14} /> <span>คำสั่ง</span>
+              {oneHitMode && <span className="border border-emerald-400 px-1 text-emerald-200">1คิว</span>}
+            </button>
             {mode === 'lobby' && (
               <div className="flex items-center gap-1.5 mr-1">
                 <button

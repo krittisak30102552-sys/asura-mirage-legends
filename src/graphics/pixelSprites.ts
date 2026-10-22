@@ -1,14 +1,7 @@
 /**
- * High-Definition Illustrated Vector/Sprite Renderer for Mirage Legends
- * Inspired directly by Otherworld Legends (https://otherworld-legends.fandom.com/wiki/Category:Characters)
- *
- * Smooth, anti-aliased character graphics (NO blocky square pixels):
- * - Clean silhouettes with smooth bezier curves and fine contour outlines
- * - Distinct humanoid anatomy (proportioned head, expressive anime eyes, styled hair)
- * - Layered detailed clothing (flowing coats, kimonos, tunics, robes, embroidery)
- * - Volumetric articulated limbs (curved arms, muscular shoulders, legs with distinct folds)
- * - Dynamic weapons in hands (Katana with metallic gleam, Golden Dragon Gauntlets with Chi, Starlight Staff with floating runes)
- * - Rich dynamic animations: idle breathing, fluid sprint, dynamic combo strikes, dash, and skills
+ * Procedural sprite textures for heroes, monsters, and combat effects.
+ * The renderer uses nearest-neighbor sampling and a low-resolution game canvas
+ * so these sprites read as crisp pixel art in motion.
  */
 
 import * as THREE from 'three';
@@ -17,9 +10,9 @@ import { drawBiomeEnemy } from './biomeSprites';
 
 export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = true;
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }

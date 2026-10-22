@@ -35,11 +35,11 @@
 
 import * as THREE from 'three';
 
-export function createSmoothCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
+export function createPixelCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = true;
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -596,7 +596,7 @@ export function generateChestTexture(rarity: 'white' | 'blue' | 'gold' | 'themed
   ctx.fill();
   ctx.fillRect(60, 66, 8, 14);
 
-  return createSmoothCanvasTexture(canvas);
+  return createPixelCanvasTexture(canvas);
 }
 
 /**
@@ -627,5 +627,5 @@ export function generateDistortedWallTexture(): THREE.CanvasTexture {
     ctx.stroke();
   });
 
-  return createSmoothCanvasTexture(canvas);
+  return createPixelCanvasTexture(canvas);
 }
