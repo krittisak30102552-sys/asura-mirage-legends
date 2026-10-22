@@ -54,6 +54,9 @@ export default function App() {
   const engineRef = useRef<CombatEngine | null>(null);
   const animFrameId = useRef<number>(0);
   const lastTimeRef = useRef<number>(performance.now());
+  const lastGameUpdateRef = useRef<number>(performance.now());
+  const frameAccumulatorRef = useRef(0);
+  const overlayVectorRef = useRef<THREE.Vector3 | null>(null);
   const keysHeld = useRef<Record<string, boolean>>({});
   const joystickMoveRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
 
@@ -144,7 +147,7 @@ export default function App() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const halfW = canvas.width / 2;
     const halfH = canvas.height / 2;
-    const _v = new THREE.Vector3();
+    const _v = overlayVectorRef.current ?? (overlayVectorRef.current = new THREE.Vector3());
 
     // 1. Target Lock-On Yellow Brackets [ ] on closest targeted enemy
     if (engine.currentMode === 'dungeon' && engine.lockedTarget && engine.lockedTarget.state !== 'dead') {
@@ -439,9 +442,19 @@ export default function App() {
     // 60FPS GAME LOOP
     // ------------------------------------------------------------------
     lastTimeRef.current = performance.now();
+    lastGameUpdateRef.current = lastTimeRef.current;
+    frameAccumulatorRef.current = 0;
     const tick = (currentTime: number) => {
-      const rawDt = (currentTime - lastTimeRef.current) / 1000;
+      const elapsed = Math.max(0, currentTime - lastTimeRef.current);
       lastTimeRef.current = currentTime;
+      frameAccumulatorRef.current += elapsed;
+      if (frameAccumulatorRef.current < 1000 / 60 - 0.5) {
+        animFrameId.current = requestAnimationFrame(tick);
+        return;
+      }
+      const rawDt = (currentTime - lastGameUpdateRef.current) / 1000;
+      lastGameUpdateRef.current = currentTime;
+      frameAccumulatorRef.current %= 1000 / 60;
       const dt = Math.min(rawDt, 0.05);
 
       const currentMode = gameModeRef.current;

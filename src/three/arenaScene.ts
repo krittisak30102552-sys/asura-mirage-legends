@@ -42,6 +42,8 @@ export interface RoomDoorLabel {
 
 export type RoomDoorLabels = Partial<Record<'north' | 'east' | 'south' | 'west', RoomDoorLabel>>;
 
+type GraphicsQuality = 'low' | 'balanced' | 'high';
+
 export class ArenaScene {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
@@ -79,6 +81,10 @@ export class ArenaScene {
   public cameraShake: number = 0;
   private targetCamX: number = 0;
   private targetCamZ: number = 0;
+  private graphicsQuality: GraphicsQuality = 'balanced';
+  private vfxFrameTasks = new Set<(now: number) => void>();
+  private nextVfxFrameTasks = new Set<(now: number) => void>();
+  private disposed = false;
 
   // Current Scene Theme
   public currentTheme: 'lobby' | DungeonMapId = 'lobby';
@@ -99,19 +105,28 @@ export class ArenaScene {
     const isHeadless =
       typeof navigator !== 'undefined' &&
       (navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent));
-    const isSmallScreen = width < 768;
+    const deviceMemory = typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8
+      : 8;
+    const logicalCores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 8 : 8;
+    const touchPoints = typeof navigator !== 'undefined' ? navigator.maxTouchPoints || 0 : 0;
+    const isSmallScreen = width < 768 || (touchPoints > 0 && width < 900);
+    const isLowPowerDevice = isSmallScreen || deviceMemory <= 4 || logicalCores <= 4;
+    const isBalancedDevice = isLowPowerDevice || deviceMemory <= 8 || logicalCores <= 8 || window.devicePixelRatio > 1.75;
+    this.graphicsQuality = isLowPowerDevice ? 'low' : isBalancedDevice ? 'balanced' : 'high';
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: !isHeadless && !isSmallScreen,
+      antialias: !isHeadless && this.graphicsQuality === 'high',
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, isSmallScreen ? 1.5 : 2));
+    const maxPixelRatio = this.graphicsQuality === 'low' ? 1 : this.graphicsQuality === 'balanced' ? 1.25 : 1.5;
+    this.renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio || 1, maxPixelRatio));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
-    this.renderer.shadowMap.enabled = !isHeadless;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = !isHeadless && this.graphicsQuality === 'high';
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     container.appendChild(this.renderer.domElement);
 
@@ -134,9 +149,10 @@ export class ArenaScene {
   private setupLighting() {
     this.keyLight = new THREE.DirectionalLight(0xfff5e6, 2.5);
     this.keyLight.position.set(8, 18, 12);
-    this.keyLight.castShadow = true;
-    this.keyLight.shadow.mapSize.width = 2048;
-    this.keyLight.shadow.mapSize.height = 2048;
+    this.keyLight.castShadow = this.renderer.shadowMap.enabled;
+    const shadowResolution = this.graphicsQuality === 'high' ? 1024 : 512;
+    this.keyLight.shadow.mapSize.width = shadowResolution;
+    this.keyLight.shadow.mapSize.height = shadowResolution;
     this.keyLight.shadow.camera.near = 0.5;
     this.keyLight.shadow.camera.far = 45;
     this.keyLight.shadow.camera.left = -20;
@@ -992,9 +1008,9 @@ export class ArenaScene {
       outer.material.opacity = pulse;
       inner.material.opacity = 0.5 + Math.sin(progress * Math.PI * 10) * 0.35;
       inner.rotation.z += 0.055;
-      requestAnimationFrame(animate);
+      this.scheduleVfxFrame(animate);
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   public showEnemyVolleyTelegraph(fromX: number, fromZ: number, targetX: number, targetZ: number, duration: number, color: number) {
@@ -1066,9 +1082,9 @@ export class ArenaScene {
         ring.scale.setScalar(0.7 + progress * 0.35);
         ring.rotation.z += index % 2 === 0 ? 0.035 : -0.035;
       });
-      requestAnimationFrame(animate);
+      this.scheduleVfxFrame(animate);
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   public spawnEnemySkillBurst(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley' = 'slam') {
@@ -1079,8 +1095,8 @@ export class ArenaScene {
     this.spawnSkillBurst(x, isSlam ? 0.68 : 0.9, z, color, isSlam ? 30 : 14, isSlam ? 7.2 : 5.1, isSlam ? 0.72 : 0.48);
 
     const sparkTex = this.getSparkTexture();
-    const particleCount = isSlam ? 16 : 7;
-    for (let i = 0; i < particleCount; i++) {
+    const particleCount = this.scaleParticleCount(isSlam ? 16 : 7);
+    for (let i = 0; i < particleCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const material = new THREE.MeshBasicMaterial({
         map: sparkTex,
         color,
@@ -1095,8 +1111,7 @@ export class ArenaScene {
       mesh.position.set(x, 0.35 + Math.random() * 0.6, z);
       const angle = (Math.PI * 2 * i) / particleCount;
       const speed = isSlam ? 2.8 + Math.random() * 2.8 : 1.8 + Math.random() * 2.2;
-      this.vfxGroup.add(mesh);
-      this.activeParticles.push({
+      this.addCombatParticle({
         mesh,
         vx: Math.cos(angle) * speed,
         vy: 2.4 + Math.random() * 1.8,
@@ -1911,7 +1926,8 @@ export class ArenaScene {
 
   public spawnSkillBurst(x: number, y: number, z: number, color: number, count: number, speed: number, life: number) {
     const sparkTex = this.getSparkTexture();
-    for (let i = 0; i < count; i++) {
+    const particleCount = this.scaleParticleCount(count);
+    for (let i = 0; i < particleCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const size = 0.24 + Math.random() * 0.28;
       const geo = new THREE.PlaneGeometry(size, size);
       const mat = new THREE.MeshBasicMaterial({
@@ -1928,8 +1944,7 @@ export class ArenaScene {
       mesh.rotation.x = -Math.PI / 3;
       const angle = Math.random() * Math.PI * 2;
       const particleLife = life * (0.72 + Math.random() * 0.56);
-      this.vfxGroup.add(mesh);
-      this.activeParticles.push({
+      this.addCombatParticle({
         mesh,
         vx: Math.cos(angle) * speed * (0.55 + Math.random() * 0.65),
         vy: 1.8 + Math.random() * speed * 0.55,
@@ -1952,8 +1967,9 @@ export class ArenaScene {
     seal.scale.setScalar(0.18);
     this.vfxGroup.add(seal);
 
-    const ringGeo = new THREE.RingGeometry(0.72, 1, 64);
-    const innerGeo = new THREE.RingGeometry(0.79, 0.83, 64);
+    const ringSegments = this.graphicsQuality === 'high' ? 64 : 32;
+    const ringGeo = new THREE.RingGeometry(0.72, 1, ringSegments);
+    const innerGeo = new THREE.RingGeometry(0.79, 0.83, ringSegments);
     const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const outer = new THREE.Mesh(ringGeo, ringMat);
@@ -1962,8 +1978,9 @@ export class ArenaScene {
     seal.add(outer, inner);
 
     const tickPoints: number[] = [];
-    for (let i = 0; i < 32; i++) {
-      const angle = (i / 32) * Math.PI * 2;
+    const tickCount = this.graphicsQuality === 'low' ? 16 : 32;
+    for (let i = 0; i < tickCount; i++) {
+      const angle = (i / tickCount) * Math.PI * 2;
       const innerRadius = i % 4 === 0 ? 0.72 : 0.83;
       const outerRadius = i % 4 === 0 ? 1.04 : 0.94;
       tickPoints.push(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius, 0.02);
@@ -1977,8 +1994,9 @@ export class ArenaScene {
     const runeGeo = new THREE.OctahedronGeometry(0.105, 0);
     const runeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
     const runes: THREE.Mesh[] = [];
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
+    const runeCount = this.graphicsQuality === 'low' ? 4 : this.graphicsQuality === 'balanced' ? 6 : 8;
+    for (let i = 0; i < runeCount; i++) {
+      const angle = (i / runeCount) * Math.PI * 2;
       const rune = new THREE.Mesh(runeGeo, runeMat.clone());
       rune.position.set(Math.cos(angle) * 0.68, Math.sin(angle) * 0.68, 0.035);
       rune.rotation.set(Math.PI / 4, angle, Math.PI / 4);
@@ -2001,7 +2019,7 @@ export class ArenaScene {
         rune.rotation.y += index % 2 === 0 ? 0.055 : -0.055;
         (rune.material as THREE.MeshBasicMaterial).opacity = 0.95 * fade;
       });
-      if (progress < 1) requestAnimationFrame(animate);
+      if (progress < 1) this.scheduleVfxFrame(animate);
       else {
         this.vfxGroup.remove(seal);
         ringGeo.dispose();
@@ -2014,7 +2032,7 @@ export class ArenaScene {
         runes.forEach((rune) => (rune.material as THREE.Material).dispose());
       }
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   public spawnEnemyArrowProjectileVFX(x: number, z: number, angle: number, distance: number, color: number, projectileScale: number = 0.72) {
@@ -2097,7 +2115,7 @@ export class ArenaScene {
       if (frame % 4 === 0 && progress < 0.88) {
         this.spawnSkillBurst(group.position.x, group.position.y, group.position.z, color, 2, 1.1, 0.22);
       }
-      if (progress < 1) requestAnimationFrame(animate);
+      if (progress < 1) this.scheduleVfxFrame(animate);
       else {
         this.vfxGroup.remove(group);
         group.traverse((object) => {
@@ -2109,7 +2127,7 @@ export class ArenaScene {
         });
       }
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   public spawnSkillProjectileVFX(x: number, z: number, angle: number, distance: number, color: number, style: 'blade' | 'orb' | 'dragon', projectileScale: number = 1) {
@@ -2248,7 +2266,7 @@ export class ArenaScene {
       if (frame % 6 === 0 && progress < 0.82) {
         this.spawnSkillBurst(group.position.x, group.position.y, group.position.z, color, style === 'dragon' ? 5 : 3, style === 'dragon' ? 1.7 : style === 'orb' ? 1.3 : 0.95, 0.32);
       }
-      if (progress < 1) requestAnimationFrame(animate);
+      if (progress < 1) this.scheduleVfxFrame(animate);
       else {
         this.vfxGroup.remove(group);
         meshes.forEach((mesh) => {
@@ -2258,7 +2276,7 @@ export class ArenaScene {
         });
       }
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   public spawnMartialFlurryVFX(x: number, z: number, angle: number) {
@@ -2298,7 +2316,7 @@ export class ArenaScene {
       ring.rotation.z += 0.18;
       ring.scale.setScalar(1 + t * 0.65);
       ringMat.opacity = Math.max(0, 0.8 * (1 - t));
-      if (t < 0.95) requestAnimationFrame(animate);
+      if (t < 0.95) this.scheduleVfxFrame(animate);
       else {
         this.vfxGroup.remove(group);
         fistGeos.forEach((geo) => geo.dispose());
@@ -2307,7 +2325,7 @@ export class ArenaScene {
         ringMat.dispose();
       }
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   // 1. Frost Nova (Katherine Skill 1): magic circle, ice shards, and a radial burst
@@ -2403,9 +2421,9 @@ export class ArenaScene {
         haloMat.dispose();
         return;
       }
-      requestAnimationFrame(animate);
+      this.scheduleVfxFrame(animate);
     };
-    requestAnimationFrame(animate);
+    this.scheduleVfxFrame(animate);
   }
 
   // 2. Thunderbolt Surge (Katherine Skill 2): Electric lightning bolt with plasma glow
@@ -2449,7 +2467,7 @@ export class ArenaScene {
       if (life > 0) {
         mat.opacity = life / 0.22;
         forkMat.opacity = life / 0.22 * 0.9;
-        requestAnimationFrame(fade);
+        this.scheduleVfxFrame(fade);
       } else {
         this.vfxGroup.remove(bolt);
         this.vfxGroup.remove(fork);
@@ -2459,7 +2477,7 @@ export class ArenaScene {
         forkMat.dispose();
       }
     };
-    requestAnimationFrame(fade);
+    this.scheduleVfxFrame(fade);
   }
 
   // 3. Meteor Calamity (Katherine Skill 3): Giant blazing meteorite plunging and exploding
@@ -2521,7 +2539,7 @@ export class ArenaScene {
         meteor.rotation.x += 0.06;
         meteor.rotation.y += 0.09;
         if (Math.round(t * 20) % 4 === 0) this.spawnSkillBurst(meteor.position.x, meteor.position.y, meteor.position.z, 0xf97316, 4, 2.2, 0.36);
-        requestAnimationFrame(step);
+        this.scheduleVfxFrame(step);
       } else {
         // IMPACT!
         this.vfxGroup.remove(meteor);
@@ -2553,17 +2571,17 @@ export class ArenaScene {
           if (rLife > 0) {
             ring.scale.multiplyScalar(1.06);
             ringMat.opacity = rLife / 0.45;
-            requestAnimationFrame(fadeRing);
+            this.scheduleVfxFrame(fadeRing);
           } else {
             this.vfxGroup.remove(ring);
             ringGeo.dispose();
             ringMat.dispose();
           }
         };
-        requestAnimationFrame(fadeRing);
+        this.scheduleVfxFrame(fadeRing);
       }
     };
-    requestAnimationFrame(step);
+    this.scheduleVfxFrame(step);
   }
 
   // 4. Sakura Storm (Ginzo Skill 3): 8 criss-crossing razor slashes & cherry blossom explosion
@@ -2632,14 +2650,14 @@ export class ArenaScene {
           coreMat.emissive.setHex(0xffffff);
           glowMat.emissive.setHex(0x7c3aed);
         }
-        requestAnimationFrame(fade);
+        this.scheduleVfxFrame(fade);
       } else {
         this.vfxGroup.remove(slashGroup);
         [glowGeo, coreGeo, trailGeo].forEach((geo) => geo.dispose());
         [glowMat, coreMat, trailMat].forEach((mat) => mat.dispose());
       }
     };
-    requestAnimationFrame(fade);
+    this.scheduleVfxFrame(fade);
   }
 
   // 6. Dragon Ascension (Quan Skill 3): Spiraling celestial golden vortex
@@ -2705,7 +2723,7 @@ export class ArenaScene {
         (r.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - t / 0.8);
       });
       if (t < 0.8) {
-        requestAnimationFrame(spin);
+        this.scheduleVfxFrame(spin);
       } else {
         this.vfxGroup.remove(group);
         helixGeo.dispose();
@@ -2721,7 +2739,7 @@ export class ArenaScene {
         });
       }
     };
-    requestAnimationFrame(spin);
+    this.scheduleVfxFrame(spin);
   }
 
   // Ground Shockwave (Greatsword combo finisher)
@@ -2744,14 +2762,14 @@ export class ArenaScene {
       mesh.scale.set(1 + t * 0.8, 1 + t * 0.8, 1);
       mat.opacity = Math.max(0, 0.9 - t);
       if (t < 0.9) {
-        requestAnimationFrame(expand);
+        this.scheduleVfxFrame(expand);
       } else {
         this.vfxGroup.remove(mesh);
         geo.dispose();
         mat.dispose();
       }
     };
-    requestAnimationFrame(expand);
+    this.scheduleVfxFrame(expand);
   }
 
   // Whirlwind Spin VFX (Daggers / spinning attacks)
@@ -2786,7 +2804,7 @@ export class ArenaScene {
         (r.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.7 - t);
       });
       if (t < 0.7) {
-        requestAnimationFrame(spin);
+        this.scheduleVfxFrame(spin);
       } else {
         this.vfxGroup.remove(group);
         rings.forEach((r) => {
@@ -2795,11 +2813,11 @@ export class ArenaScene {
         });
       }
     };
-    requestAnimationFrame(spin);
+    this.scheduleVfxFrame(spin);
   }
 
   private buildAmbientParticles() {
-    const count = 160;
+    const count = this.graphicsQuality === 'low' ? 16 : this.graphicsQuality === 'balanced' ? 40 : 80;
     const geo = new THREE.BufferGeometry();
     this.petalPositions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -2830,6 +2848,59 @@ export class ArenaScene {
 
     this.petalParticles = new THREE.Points(geo, pMat);
     this.scene.add(this.petalParticles);
+  }
+
+  private scheduleVfxFrame(task: (now: number) => void) {
+    if (this.disposed) return;
+    this.vfxFrameTasks.add(task);
+  }
+
+  private flushVfxFrameTasks = (now: number) => {
+    const tasks = this.vfxFrameTasks;
+    this.vfxFrameTasks = this.nextVfxFrameTasks;
+    this.nextVfxFrameTasks = tasks;
+    this.nextVfxFrameTasks.clear();
+
+    for (const task of tasks) {
+      try {
+        task(now);
+      } catch (error) {
+        console.error('[ArenaScene] VFX animation failed', error);
+      }
+    }
+
+  };
+
+  private get maxActiveCombatParticles() {
+    return this.graphicsQuality === 'low' ? 72 : this.graphicsQuality === 'balanced' ? 140 : 220;
+  }
+
+  private scaleParticleCount(count: number) {
+    if (count <= 4 || this.graphicsQuality === 'high') return count;
+    const multiplier = this.graphicsQuality === 'low' ? 0.35 : 0.65;
+    return Math.max(2, Math.round(count * multiplier));
+  }
+
+  private disposeParticleMesh(mesh: THREE.Mesh) {
+    mesh.geometry.dispose();
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach((material) => material.dispose());
+  }
+
+  private addCombatParticle(particle: CombatParticle) {
+    if (this.disposed || this.activeParticles.length >= this.maxActiveCombatParticles) {
+      this.disposeParticleMesh(particle.mesh);
+      return;
+    }
+    this.vfxGroup.add(particle.mesh);
+    this.activeParticles.push(particle);
+  }
+
+  private removeCombatParticle(index: number) {
+    const [particle] = this.activeParticles.splice(index, 1);
+    if (!particle) return;
+    this.vfxGroup.remove(particle.mesh);
+    this.disposeParticleMesh(particle.mesh);
   }
 
   public setPortalActive(active: boolean) {
@@ -2906,24 +2977,24 @@ export class ArenaScene {
       if (flashLife > 0) {
         starMesh.scale.multiplyScalar(0.92);
         starMat.opacity = flashLife / 0.14;
-        requestAnimationFrame(fadeStar);
+        this.scheduleVfxFrame(fadeStar);
       } else {
         this.vfxGroup.remove(starMesh);
         starGeo.dispose();
         starMat.dispose();
       }
     };
-    requestAnimationFrame(fadeStar);
+    this.scheduleVfxFrame(fadeStar);
 
     // 2. Kinetic Glowing Spark Particles (Burst outward)
-    const count = isCrit ? 18 : isHeavy ? 13 : 8;
+    const count = this.scaleParticleCount(isCrit ? 18 : isHeavy ? 13 : 8);
     const baseColors = isCrit
       ? [0xfef08a, 0xfacc15, 0xfbbf24, 0xef4444]
       : themeColor
       ? [themeColor, 0xffffff, 0xfef08a]
       : [0xfef08a, 0xfbbf24, 0xffffff];
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const pGeo = new THREE.PlaneGeometry(0.32, 0.32);
       const col = baseColors[Math.floor(Math.random() * baseColors.length)];
       const pMat = new THREE.MeshBasicMaterial({
@@ -2954,8 +3025,7 @@ export class ArenaScene {
         shrink: true,
         spin: (Math.random() - 0.5) * 12,
       };
-      this.vfxGroup.add(pMesh);
-      this.activeParticles.push(p);
+      this.addCombatParticle(p);
     }
 
     // 3. Ground Shockwave Ring on Crits or Heavy Finisher
@@ -2985,14 +3055,14 @@ export class ArenaScene {
           const sc = 0.3 + prog * (isCrit ? 3.0 : 2.4);
           ringMesh.scale.set(sc, sc, 1);
           ringMat.opacity = Math.max(0, (ringLife / maxRingLife) * 0.95);
-          requestAnimationFrame(expandRing);
+          this.scheduleVfxFrame(expandRing);
         } else {
           this.vfxGroup.remove(ringMesh);
           ringGeo.dispose();
           ringMat.dispose();
         }
       };
-      requestAnimationFrame(expandRing);
+      this.scheduleVfxFrame(expandRing);
     }
   }
 
@@ -3001,10 +3071,10 @@ export class ArenaScene {
    */
   public spawnProjectileExplosionVFX(x: number, y: number, z: number, colorHex: number | string = 0xfacc15) {
     const sparkTex = this.getSparkTexture();
-    const numParticles = 14;
+    const numParticles = this.scaleParticleCount(14);
     const colVal = typeof colorHex === 'string' ? new THREE.Color(colorHex).getHex() : colorHex;
 
-    for (let i = 0; i < numParticles; i++) {
+    for (let i = 0; i < numParticles && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const geo = new THREE.PlaneGeometry(0.38, 0.38);
       const mat = new THREE.MeshBasicMaterial({
         map: sparkTex,
@@ -3036,8 +3106,7 @@ export class ArenaScene {
         shrink: true,
         spin: (Math.random() - 0.5) * 8,
       };
-      this.vfxGroup.add(mesh);
-      this.activeParticles.push(p);
+      this.addCombatParticle(p);
     }
   }
 
@@ -3046,10 +3115,10 @@ export class ArenaScene {
    */
   public spawnEnemyDeathVFX(x: number, y: number, z: number) {
     const sparkTex = this.getSparkTexture();
-    const count = 20;
+    const count = this.scaleParticleCount(20);
     const colors = [0xa855f7, 0xec4899, 0xef4444, 0x3b82f6];
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const geo = new THREE.PlaneGeometry(0.42, 0.42);
       const col = colors[Math.floor(Math.random() * colors.length)];
       const mat = new THREE.MeshBasicMaterial({
@@ -3081,8 +3150,7 @@ export class ArenaScene {
         shrink: true,
         spin: (Math.random() - 0.5) * 10,
       };
-      this.vfxGroup.add(mesh);
-      this.activeParticles.push(p);
+      this.addCombatParticle(p);
     }
 
     // Expanding soul glyph ring
@@ -3109,28 +3177,28 @@ export class ArenaScene {
         const sc = 0.4 + (1 - life / 0.38) * 2.2;
         ringMesh.scale.set(sc, sc, 1);
         ringMat.opacity = (life / 0.38) * 0.85;
-        requestAnimationFrame(fade);
+        this.scheduleVfxFrame(fade);
       } else {
         this.vfxGroup.remove(ringMesh);
         ringGeo.dispose();
         ringMat.dispose();
       }
     };
-    requestAnimationFrame(fade);
+    this.scheduleVfxFrame(fade);
   }
 
   public spawnHappyCoinBurst(x: number, z: number) {
-    for (let i = 0; i < 10; i++) {
+    const coinCount = this.graphicsQuality === 'low' ? 5 : this.graphicsQuality === 'balanced' ? 7 : 10;
+    for (let i = 0; i < coinCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const gold = i % 3 !== 0;
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(gold ? 0.16 : 0.2, 8, 6),
         new THREE.MeshStandardMaterial({ color: gold ? 0xfbbf24 : 0xf472b6, emissive: gold ? 0xf59e0b : 0xec4899, emissiveIntensity: 0.45 })
       );
       mesh.position.set(x, 0.3, z);
-      this.vfxGroup.add(mesh);
-      const angle = (Math.PI * 2 * i) / 10;
+      const angle = (Math.PI * 2 * i) / coinCount;
       const speed = 1.4 + Math.random() * 1.2;
-      this.activeParticles.push({
+      this.addCombatParticle({
         mesh,
         vx: Math.cos(angle) * speed,
         vy: 3.2 + Math.random() * 1.8,
@@ -3150,6 +3218,7 @@ export class ArenaScene {
    * Ambient status effect particles (Burn flames, freeze vapor, poison bubbles)
    */
   public spawnStatusSparks(x: number, y: number, z: number, type: 'burn' | 'freeze' | 'poison') {
+    if (this.activeParticles.length >= this.maxActiveCombatParticles) return;
     const sparkTex = this.getSparkTexture();
     const col = type === 'burn' ? 0xf97316 : type === 'freeze' ? 0x38bdf8 : 0x22c55e;
     const geo = new THREE.PlaneGeometry(0.26, 0.26);
@@ -3179,11 +3248,11 @@ export class ArenaScene {
       shrink: true,
       spin: (Math.random() - 0.5) * 6,
     };
-    this.vfxGroup.add(mesh);
-    this.activeParticles.push(p);
+    this.addCombatParticle(p);
   }
 
   public update(dt: number, heroX: number, heroZ: number) {
+    this.flushVfxFrameTasks(performance.now());
     const isLobby = this.currentTheme === 'lobby';
 
     // Give the dungeon more breathing room; keep the lounge's original overview framing.
@@ -3262,10 +3331,7 @@ export class ArenaScene {
       const p = this.activeParticles[i];
       p.life -= dt;
       if (p.life <= 0) {
-        this.vfxGroup.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
-        this.activeParticles.splice(i, 1);
+        this.removeCombatParticle(i);
         continue;
       }
 
@@ -3300,12 +3366,10 @@ export class ArenaScene {
   }
 
   public dispose() {
-    this.activeParticles.forEach((p) => {
-      this.vfxGroup.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      (p.mesh.material as THREE.Material).dispose();
-    });
-    this.activeParticles = [];
+    this.disposed = true;
+    this.vfxFrameTasks.clear();
+    this.nextVfxFrameTasks.clear();
+    while (this.activeParticles.length > 0) this.removeCombatParticle(this.activeParticles.length - 1);
 
     if (this.renderer.domElement && this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
