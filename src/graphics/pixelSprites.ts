@@ -1,7 +1,7 @@
 /**
  * Procedural sprite textures for heroes, monsters, and combat effects.
- * The renderer uses nearest-neighbor sampling and a low-resolution game canvas
- * so these sprites read as crisp pixel art in motion.
+ * The renderer keeps the scene at display resolution while these source textures
+ * retain crisp nearest-neighbor sampling for a clean pixel-art silhouette.
  */
 
 import * as THREE from 'three';
@@ -15,6 +15,19 @@ export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasText
   texture.generateMipmaps = false;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+/** Reduce only character art to a deliberate pixel grid; scene and HUD resolution stay untouched. */
+function createActorPixelTexture(source: HTMLCanvasElement): THREE.CanvasTexture {
+  const longestSide = Math.max(source.width, source.height);
+  const scale = Math.min(1, 80 / longestSide);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(source.width * scale));
+  canvas.height = Math.max(1, Math.round(source.height * scale));
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return createCanvasTexture(canvas);
 }
 
 // ----------------------------------------------------------------------
@@ -801,7 +814,7 @@ export function generateHeroTexture(
     ctx.restore();
   }
 
-  return createCanvasTexture(canvas);
+  return createActorPixelTexture(canvas);
 }
 
 // ----------------------------------------------------------------------
@@ -829,7 +842,7 @@ export function generateEnemyTexture(
 
   // Check 6 Biome Mobs, Bosses, and Secret Bosses first
   if (drawBiomeEnemy(ctx, type, cx, cy, bob, hurt)) {
-    return createCanvasTexture(canvas);
+    return createActorPixelTexture(canvas);
   }
 
   const fillPoly = (pts: [number, number][], fill: string, stroke?: string, lw: number = 2) => {
@@ -1105,11 +1118,11 @@ export function generateEnemyTexture(
     fillPoly([[cx - 24, cy - 10 + bob], [cx + 24, cy - 10 + bob], [cx + 18, cy + 45 + bob], [cx - 18, cy + 45 + bob]], mainCol, '#09090b', 2);
   }
 
-  return createCanvasTexture(canvas);
+  return createActorPixelTexture(canvas);
 }
 
 // ----------------------------------------------------------------------
-// NPC SPRITE GENERATOR (Smooth Illustrated)
+// NPC SPRITE GENERATOR
 // ----------------------------------------------------------------------
 export function generateNpcTexture(id: 'blacksmith' | 'trainer' | 'gatekeeper'): THREE.CanvasTexture {
   const size = 160;
@@ -1199,7 +1212,7 @@ export function generateNpcTexture(id: 'blacksmith' | 'trainer' | 'gatekeeper'):
     ctx.fill();
   }
 
-  return createCanvasTexture(canvas);
+  return createActorPixelTexture(canvas);
 }
 
 export function generateHappyTexture(): THREE.CanvasTexture {
@@ -1365,7 +1378,7 @@ export function generateHappyTexture(): THREE.CanvasTexture {
   ctx.lineTo(172, 288);
   ctx.stroke();
 
-  return createCanvasTexture(canvas);
+  return createActorPixelTexture(canvas);
 }
 
 // ----------------------------------------------------------------------

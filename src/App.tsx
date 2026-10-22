@@ -582,7 +582,6 @@ export default function App() {
       if (damageCanvasRef.current) {
         damageCanvasRef.current.width = arena.renderer.domElement.width;
         damageCanvasRef.current.height = arena.renderer.domElement.height;
-        damageCanvasRef.current.style.imageRendering = 'pixelated';
       }
     };
 
@@ -776,7 +775,7 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-[100dvh] min-h-[100svh] overflow-hidden bg-zinc-950 font-rajdhani select-none">
-      {/* Low-resolution WebGL scene with nearest-neighbor scaling for pixel-art rendering */}
+      {/* Full-resolution scene; the pixel-art treatment comes from the game assets. */}
       <div
         ref={mountRef}
         className="absolute inset-0 z-0 pointer-events-auto cursor-crosshair w-full h-full touch-none"

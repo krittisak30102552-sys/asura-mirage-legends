@@ -112,15 +112,20 @@ export class ArenaScene {
     this.graphicsQuality = isLowPowerDevice ? 'low' : isBalancedDevice ? 'balanced' : 'high';
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false,
+      // Keep the 3D scene crisp while letting the sprite textures carry the pixel-art style.
+      antialias: !isSmallScreen,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(1);
+    const renderScale = this.graphicsQuality === 'high'
+      ? Math.min(window.devicePixelRatio || 1, 1.5)
+      : this.graphicsQuality === 'balanced'
+        ? Math.min(window.devicePixelRatio || 1, 1.15)
+        : 1;
+    this.renderer.setPixelRatio(renderScale);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     this.renderer.domElement.style.display = 'block';
-    this.renderer.domElement.style.imageRendering = 'pixelated';
-    this.setPixelatedRenderSize(width, height);
+    this.renderer.setSize(width, height, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
@@ -171,9 +176,11 @@ export class ArenaScene {
   // ----------------------------------------------------------------------
   private createPixelWoodFloorTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = 512;
+    canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
+    // Draw on a 256px grid, then keep the extra resolution for clean close views.
+    ctx.scale(2, 2);
 
     ctx.fillStyle = '#211612';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -200,6 +207,20 @@ export class ArenaScene {
         ctx.fillRect(x + 75, y + 20, 41, 2);
         ctx.fillStyle = '#39251b';
         ctx.fillRect(x + 63, y + 3, 3, 4);
+
+        // Fine grain and small knots give each plank texture without muddying the floor.
+        ctx.fillStyle = 'rgba(214, 153, 99, 0.18)';
+        ctx.fillRect(x + 12, y + 11, 30 + ((row + col + 4) % 3) * 7, 1);
+        ctx.fillRect(x + 48, y + 24, 19 + ((row * 2 + col + 8) % 4) * 6, 1);
+        ctx.fillStyle = 'rgba(29, 15, 11, 0.2)';
+        ctx.fillRect(x + 8, y + 17, 24 + ((row + col + 6) % 3) * 8, 1);
+        ctx.fillRect(x + 82, y + 8, 18 + ((row * 3 + col + 12) % 3) * 7, 1);
+        if ((row + col * 3) % 4 === 0) {
+          ctx.fillStyle = 'rgba(41, 22, 16, 0.36)';
+          ctx.fillRect(x + 96, y + 14, 5, 2);
+          ctx.fillStyle = 'rgba(223, 164, 113, 0.16)';
+          ctx.fillRect(x + 97, y + 15, 3, 1);
+        }
       }
     }
 
@@ -209,8 +230,8 @@ export class ArenaScene {
     texture.repeat.set(20, 15);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestFilter;
-    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearMipmapNearestFilter;
+    texture.generateMipmaps = true;
     return texture;
   }
 
@@ -3355,14 +3376,7 @@ export class ArenaScene {
   public handleResize(width: number, height: number) {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.setPixelatedRenderSize(width, height);
-  }
-
-  private setPixelatedRenderSize(width: number, height: number) {
-    const maxWidth = this.graphicsQuality === 'low' ? 480 : this.graphicsQuality === 'balanced' ? 640 : 800;
-    const logicalWidth = Math.min(width, maxWidth, Math.max(280, Math.round(width * 0.62)));
-    const logicalHeight = Math.max(1, Math.round(logicalWidth / (width / height)));
-    this.renderer.setSize(logicalWidth, logicalHeight, false);
+    this.renderer.setSize(width, height, false);
   }
 
   public dispose() {
