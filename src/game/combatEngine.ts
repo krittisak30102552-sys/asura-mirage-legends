@@ -1,0 +1,3602 @@
+/**
+ * Enhanced Combat & Lobby Engine for Mirage Legends
+ * Supports:
+ * - 6 Core Combat Stats: Health, Armor, Damage, Critical Rate, Attack Speed, Movement Speed
+ * - 10 Official Wiki Areas and Bosses: Valentine, Tengu, Muno Wonda, Dr. Universelove, Iblis, Logan, Chen, Kraken, Navy and Louis, Asurendra
+ * - Status Effects: Burn (fire DoT), Freeze (ice immobilize), Poison (DoT + slow), Stun (stars interrupt), Slow
+ * - Combo system (Step 1, Step 2, Step 3 Finisher with knockback)
+ * - Dodge roll repositioning with i-frames and relic shockwaves
+ * - Relic acquisition on room clears (Roguelike choice cards)
+ * - Random Dungeon Expedition vs Direct Area Selection
+ */
+
+import * as THREE from 'three';
+import {
+  PlayerStats,
+  SkillInfo,
+  RelicItem,
+  DamageNumberItem,
+  Projectile,
+  GroundItem,
+  BreakableProp,
+  HeroAnimationState,
+  HeroId,
+  DungeonMapId,
+  WeaponItem,
+  EnemyType,
+  StatusType,
+  ActiveStatus,
+  DifficultyMode,
+  DungeonRoomId,
+  StatUpgradeType,
+  DungeonInteractableType,
+  EquipmentItem,
+  EquipmentPerk,
+  EquipmentPerkType,
+  MAX_EQUIPPED_ITEMS,
+  DungeonRoomType,
+} from '../types/game';
+import {
+  levelSystem,
+  StageRoomType,
+  BiomeDetails,
+  ShopOfferItem,
+  RoomDirection,
+  ROOM_DIRECTIONS,
+} from './levelSystem';
+import {
+  HERO_CONFIGS,
+  INITIAL_WEAPONS,
+  INITIAL_EQUIPMENT,
+  DUNGEON_MAPS,
+  ALL_RELICS,
+  STAT_UPGRADES_CONFIG,
+} from '../data/gameData';
+import { ArenaScene } from '../three/arenaScene';
+import { soundEngine } from '../audio/soundEngine';
+import { rollEquipmentVariant } from './equipmentStats';
+import {
+  generateHeroTexture,
+  generateEnemyTexture,
+  generateNpcTexture,
+  generateHappyTexture,
+  generateKiBlastTexture,
+  generateSlashTexture,
+  generateWhirlwindTexture,
+  generateCoinTexture,
+  generatePotionTexture,
+  generateContactShadowTexture,
+} from '../graphics/pixelSprites';
+import {
+  calculateDamage,
+  applyArmorMitigation,
+  calculateAttackCadence,
+  createStatusEffect,
+  tickStatuses,
+  aggregateRelicBonuses,
+  DIFFICULTY_CONFIGS,
+} from './combatRules';
+
+export interface EnemyActor {
+  id: number;
+  type: string;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  maxHp: number;
+  hp: number;
+  speed: number;
+  damage: number;
+  state: 'chase' | 'windup' | 'skill_windup' | 'attack' | 'recover' | 'hurt' | 'dead';
+  stateTimer: number;
+  facing: number;
+  mesh: THREE.Mesh;
+  shadowMesh: THREE.Mesh;
+  hpBarGroup: THREE.Group;
+  hpBarFill: THREE.Mesh;
+  attackCooldown: number;
+  targetX: number;
+  targetZ: number;
+  animFrame: number;
+  animTimer: number;
+  statuses: ActiveStatus[];
+  isBoss?: boolean;
+  bossName?: string;
+  hasSummonedMinions?: boolean;
+  isPhase2?: boolean;
+  isHappyBoss?: boolean;
+  lastHitDamage?: number;
+  happyAttackCount?: number;
+  happyTelegraphPoints?: Array<{ x: number; z: number }>;
+  bossActionName?: string;
+  hpBarWidth?: number;
+  bossAttackType?: 'smash' | 'dash' | 'happy_wave' | 'happy_coin_rain';
+  skillCooldown?: number;
+  skillKind?: 'bolt' | 'slam';
+  skillTargetX?: number;
+  skillTargetZ?: number;
+  skillColor?: number;
+}
+
+type LegacyDungeonMapId = Exclude<DungeonMapId, 'bamboo' | 'crypt' | 'ice' | 'forge' | 'sky' | 'test_dungeon'>;
+
+const BIOME_ENEMIES: Record<
+  LegacyDungeonMapId,
+  { mobA: string; mobB: string; boss: string; bossHp: number; bossDmg: number; bossName: string }
+> = {
+  undead: { mobA: 'undead_skeleton', mobB: 'undead_ghoul', boss: 'boss_valentine', bossHp: 350, bossDmg: 14, bossName: 'Valentine' },
+  japan: { mobA: 'japan_ronin', mobB: 'japan_archer', boss: 'boss_tengu', bossHp: 370, bossDmg: 15, bossName: 'Tengu' },
+  elfland: { mobA: 'elf_wisp', mobB: 'elf_treant', boss: 'boss_muno_wonda', bossHp: 380, bossDmg: 15, bossName: 'Muno Wonda' },
+  stronghold: { mobA: 'stronghold_drone', mobB: 'stronghold_cyborg', boss: 'boss_dr_universelove', bossHp: 400, bossDmg: 16, bossName: 'Dr. Universelove' },
+  desert: { mobA: 'desert_genie', mobB: 'desert_assassin', boss: 'boss_iblis', bossHp: 410, bossDmg: 16, bossName: 'Iblis' },
+  wild_west: { mobA: 'west_outlaw', mobB: 'west_gunslinger', boss: 'boss_logan', bossHp: 390, bossDmg: 17, bossName: 'Logan' },
+  china: { mobA: 'china_monk', mobB: 'china_spearman', boss: 'boss_chen', bossHp: 420, bossDmg: 17, bossName: 'Chen' },
+  norse: { mobA: 'norse_berserker', mobB: 'norse_frostmage', boss: 'boss_kraken', bossHp: 430, bossDmg: 16, bossName: 'Kraken' },
+  imperium: { mobA: 'imperium_crusader', mobB: 'imperium_inquisitor', boss: 'boss_navy_louis', bossHp: 440, bossDmg: 18, bossName: 'Navy & Louis' },
+  mirage: { mobA: 'mirage_phantom', mobB: 'mirage_sentinel', boss: 'boss_asurendra', bossHp: 480, bossDmg: 20, bossName: 'Asurendra' },
+};
+
+export class CombatEngine {
+  public arena: ArenaScene;
+
+  // Engine Mode & Procedural Multi-Room Branching
+  public currentMode: 'lobby' | 'dungeon' = 'lobby';
+  public currentDungeonMap: DungeonMapId = 'desert';
+  public currentRoom: DungeonRoomId = 'center';
+  public currentRoomType: DungeonRoomType = 'combat';
+  public dungeonRoomDepth: number = 1;
+  public maxDungeonRooms: number = 8;
+  public doorOptions: { north: DungeonRoomType; west: DungeonRoomType; east: DungeonRoomType } = {
+    north: 'combat',
+    west: 'equipment_shop',
+    east: 'equipment_shop',
+  };
+
+  public difficulty: DifficultyMode = 'normal';
+  public isRandomExpedition: boolean = false;
+  public expeditionSequence: DungeonMapId[] = [];
+  public expeditionIndex: number = 0;
+
+  // Level & Biome System (levels.json)
+  public isLevelRun: boolean = true;
+  public totalRoomWaves: number = 2;
+  public currentRoomWave: number = 1;
+  public lastNonSecretRoomType: StageRoomType = 'combat';
+  public lastOpenedChestReward: any = null;
+
+  // Hero & Inventory
+  public activeHeroId: HeroId = 'ginzo';
+  public weapons: WeaponItem[] = [INITIAL_WEAPONS.find((weapon) => weapon.id === 'training_katana') || INITIAL_WEAPONS[0]];
+  public equippedWeaponId: string = 'training_katana';
+
+  // Room Altar / Stat Device temporary run upgrades
+  public statAltarBonuses = {
+    hp: 0,
+    shield: 0,
+    attack: 0,
+    attackSpeed: 0,
+    moveSpeed: 0,
+    crit: 0,
+  };
+  public statUpgradeCounts: Record<StatUpgradeType, number> = {
+    hp: 0,
+    shield: 0,
+    attack: 0,
+    attackSpeed: 0,
+    moveSpeed: 0,
+    crit: 0,
+  };
+
+  // 6 Primary Combat Stats (Scaled for 10-20 damage range)
+  public playerStats: PlayerStats = {
+    heroId: 'ginzo',
+    maxHp: 95,
+    hp: 95,
+    maxShield: 40,
+    shield: 40,
+    attackPower: 12,
+    defense: 5,
+    attackSpeed: 1.3,
+    moveSpeed: 8.2,
+    critChance: 0.35,
+    critMultiplier: 1.8,
+    damageReduction: 0,
+    dodgeChance: 0,
+    hpRegen: 0,
+    lifesteal: 0,
+    cooldownReduction: 0,
+    coinGain: 0,
+    chestLuck: 0,
+    gold: 150,
+    kills: 0,
+    comboCount: 0,
+    comboTimer: 0,
+    equippedWeaponId: 'training_katana',
+    equippedItems: [],
+    inventory: [],
+  };
+
+  public playerX: number = 0;
+  public playerZ: number = 2;
+  public playerVx: number = 0;
+  public playerVz: number = 0;
+  public playerFacing: number = 1;
+  public playerAimAngle: number = 0;
+  public mouseWorldX: number = 0;
+  public mouseWorldZ: number = 0;
+
+  public animState: HeroAnimationState = 'idle';
+  public animFrame: number = 0;
+  public animTimer: number = 0;
+
+  // Combo system
+  public comboStep: number = 0;
+  public comboWindowTimer: number = 0;
+  public isAttacking: boolean = false;
+  public attackTimer: number = 0;
+
+  // Dash & Dodge
+  public isDashing: boolean = false;
+  public dashTimer: number = 0;
+  public dashCooldown: number = 0;
+  public dashMaxCooldown: number = 1.0;
+  public isInvulnerable: boolean = false;
+  public invulnerableTimer: number = 0;
+  public shieldRechargeDelay: number = 0;
+  private temporaryAttackSpeedBonus = 0;
+  private temporaryAttackSpeedTimer = 0;
+  private temporaryGuardShield = 0;
+  private temporaryGuardShieldTimer = 0;
+  private temporaryDamageReduction = 0;
+  private temporaryDamageReductionTimer = 0;
+  private critSpeedStacks = 0;
+  private critSpeedTimer = 0;
+  private lowHpShieldUsedRoomKey: string | null = null;
+
+  // Active Skills
+  public skills: SkillInfo[] = [];
+
+  // Entities & Relics
+  public enemies: EnemyActor[] = [];
+  public projectiles: Projectile[] = [];
+  public damageNumbers: DamageNumberItem[] = [];
+  public groundItems: GroundItem[] = [];
+  public relics: RelicItem[] = [];
+  public relicChoices: RelicItem[] = [];
+  public breakables: BreakableProp[] = [];
+
+  // The lounge has a hero trainer and dungeon gate, but no equipment shop.
+  private trainerNpcMesh: THREE.Mesh | null = null;
+  public nearbyInteractable: 'trainer' | 'gate' | null = null;
+  public nearbyDungeonInteractable: DungeonInteractableType | null = null;
+  public nearbyShopItemIndex: number | null = null;
+  private hasAutoTriggeredGate: boolean = false;
+
+  // Targeting lock
+  public lockedTarget: EnemyActor | null = null;
+
+  // Stage tracking (20 Waves)
+  public currentWave: number = 1;
+  public maxWaves: number = 20;
+  public waveState: 'spawning' | 'fighting' | 'cleared' = 'spawning';
+  public currentBoss: EnemyActor | null = null;
+
+  // Three.js Meshes
+  private heroMesh!: THREE.Mesh;
+  private heroShadowMesh!: THREE.Mesh;
+  private aimCursorMesh!: THREE.Mesh;
+  private raycaster = new THREE.Raycaster();
+  private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private ghostTrails: { mesh: THREE.Mesh; opacity: number }[] = [];
+  private hitstopTimer: number = 0;
+
+  // Textures Cache
+  private contactShadowTex!: THREE.CanvasTexture;
+  private kiBlastTex!: THREE.CanvasTexture;
+  private slashTex!: THREE.CanvasTexture;
+  private whirlwindTex!: THREE.CanvasTexture;
+  private coinTex!: THREE.CanvasTexture;
+  private potionTex!: THREE.CanvasTexture;
+
+  // Callbacks
+  public onStateChange?: () => void;
+  public onGameOver?: (won: boolean) => void;
+  public onOpenModal?: (
+    modal:
+      | 'blacksmith'
+      | 'trainer'
+      | 'gate'
+      | 'relic_choice'
+      | 'stat_device'
+      | 'equipment_shop'
+      | 'inventory'
+      | 'happy_dialogue'
+      | 'forge'
+      | 'chest_reward'
+      | 'shop_item_detail'
+  ) => void;
+
+  constructor(arena: ArenaScene) {
+    this.arena = arena;
+    this.initTextures();
+    this.recalcHeroStats();
+    this.initHero();
+    this.initAimCursor();
+    this.enterLobby();
+  }
+
+  private initTextures() {
+    this.contactShadowTex = generateContactShadowTexture();
+    this.kiBlastTex = generateKiBlastTexture();
+    this.slashTex = generateSlashTexture();
+    this.whirlwindTex = generateWhirlwindTexture();
+    this.coinTex = generateCoinTexture();
+    this.potionTex = generatePotionTexture();
+  }
+
+  public recalcHeroStats() {
+    const heroCfg = HERO_CONFIGS[this.activeHeroId] || HERO_CONFIGS.ginzo;
+    const weapon = this.weapons.find((w) => w.id === this.equippedWeaponId);
+
+    const bonusAtk = weapon ? weapon.attackBonus : 0;
+    const bonusCrit = weapon ? weapon.critBonus : 0;
+    const bonusAtkSpd = weapon ? (weapon.attackSpeedBonus || 0) : 0;
+    const relicBonus = aggregateRelicBonuses(this.relics.map((r) => r.id));
+
+    // Calculate sum of equipped gear bonuses
+    let gearHp = 0;
+    let gearShield = 0;
+    let gearAtk = 0;
+    let gearDef = 0;
+    let gearCrit = 0;
+    let gearSpd = 0;
+    let gearAtkSpd = 0;
+    let gearDamagePercent = 0;
+    let gearAttackSpeedPercent = 0;
+    let gearCritDamagePercent = 0;
+    let gearLifesteal = 0;
+    let gearMaxHpPercent = 0;
+    let gearDamageReduction = 0;
+    let gearDodge = 0;
+    let gearHpRegen = 0;
+    let gearMoveSpeedPercent = 0;
+    let gearCooldownReduction = 0;
+    let gearCoinGain = 0;
+    let gearChestLuck = 0;
+
+    for (const item of this.playerStats.equippedItems ?? []) {
+      gearHp += item.bonusHp || 0;
+      gearShield += item.bonusShield || 0;
+      gearAtk += item.bonusAttack || 0;
+      gearDef += item.bonusDefense || 0;
+      gearCrit += item.bonusCritChance || 0;
+      gearSpd += item.bonusMoveSpeed || 0;
+      gearAtkSpd += item.bonusAttackSpeed || 0;
+      gearDamagePercent += item.bonusDamagePercent || 0;
+      gearAttackSpeedPercent += item.bonusAttackSpeedPercent || 0;
+      gearCritDamagePercent += item.bonusCritDamagePercent || 0;
+      gearLifesteal += item.bonusLifesteal || 0;
+      gearMaxHpPercent += item.bonusMaxHpPercent || 0;
+      gearDamageReduction += item.bonusDamageReduction || 0;
+      gearDodge += item.bonusDodgeChance || 0;
+      gearHpRegen += item.bonusHpRegen || 0;
+      gearMoveSpeedPercent += item.bonusMoveSpeedPercent || 0;
+      gearCooldownReduction += item.bonusCooldownReduction || 0;
+      gearCoinGain += item.bonusCoinGain || 0;
+      gearChestLuck += item.bonusChestLuck || 0;
+    }
+
+    this.playerStats.heroId = this.activeHeroId;
+    const rawMaxHp = heroCfg.maxHp + relicBonus.bonusHp + this.statAltarBonuses.hp + gearHp;
+    this.playerStats.maxHp = Math.max(1, Math.round(rawMaxHp * (1 + gearMaxHpPercent)));
+    this.playerStats.maxShield = heroCfg.maxShield + relicBonus.bonusShield + this.statAltarBonuses.shield + gearShield;
+    this.playerStats.attackPower = Number(
+      ((heroCfg.attackPower + bonusAtk + relicBonus.bonusAttack + this.statAltarBonuses.attack + gearAtk) * (1 + gearDamagePercent)).toFixed(2)
+    );
+    this.playerStats.attackSpeed = Number(
+      ((heroCfg.attackSpeed + bonusAtkSpd + relicBonus.bonusAttackSpeed + this.statAltarBonuses.attackSpeed + gearAtkSpd) * (1 + Math.min(0.75, gearAttackSpeedPercent))).toFixed(2)
+    );
+    this.playerStats.moveSpeed = Number(
+      ((heroCfg.moveSpeed + relicBonus.bonusMoveSpeed + this.statAltarBonuses.moveSpeed + gearSpd) * (1 + Math.min(0.75, gearMoveSpeedPercent))).toFixed(2)
+    );
+    this.playerStats.critChance = Math.min(
+      0.75,
+      heroCfg.critChance + bonusCrit + relicBonus.bonusCritChance + this.statAltarBonuses.crit + gearCrit
+    );
+    this.playerStats.critMultiplier = heroCfg.critMultiplier + gearCritDamagePercent;
+    this.playerStats.defense = 5 + gearDef;
+    this.playerStats.damageReduction = Math.min(0.75, gearDamageReduction);
+    this.playerStats.dodgeChance = Math.min(0.75, gearDodge);
+    this.playerStats.hpRegen = gearHpRegen;
+    this.playerStats.lifesteal = Math.min(0.35, gearLifesteal);
+    this.playerStats.cooldownReduction = Math.min(0.75, gearCooldownReduction);
+    this.playerStats.coinGain = Math.min(1.0, gearCoinGain);
+    this.playerStats.chestLuck = Math.min(0.5, gearChestLuck);
+    this.playerStats.hp = Math.min(this.playerStats.hp, this.playerStats.maxHp);
+    this.playerStats.shield = Math.min(this.playerStats.shield, this.playerStats.maxShield + 60);
+
+    // Build skill set based on character
+    if (this.activeHeroId === 'ginzo') {
+      this.skills = [
+        {
+          id: 'skill1',
+          key: '1',
+          name: 'Hiken: Yatagarasu',
+          nameTh: 'ดาบลับ: อีกาตรีเนตร (Yatagarasu)',
+          desc: 'Swift forward katana draw cutting through all enemies in an instant.',
+          descTh: 'ชักดาบพุ่งฟันผ่านศัตรูอย่างรวดเร็ว สร้างความเสียหายคริติคอลสูง',
+          cooldown: 4.5,
+          currentCooldown: 0,
+          icon: '🦅',
+        },
+        {
+          id: 'skill2',
+          key: '2',
+          name: 'Blade Beam: Murasame',
+          nameTh: 'คลื่นดาบพิฆาตมุราซาเมะ',
+          desc: 'Unleashes a supersonic crescent blade shockwave piercing targets.',
+          descTh: 'ตวัดดาบปล่อยคลื่นสูญญากาศสีฟ้าคมกริบ ทะลวงศัตรูเป็นเส้นตรง',
+          cooldown: 6.5,
+          currentCooldown: 0,
+          icon: '⚡',
+        },
+        {
+          id: 'skill3',
+          key: '3',
+          name: 'Cherry Blossom Flurry',
+          nameTh: 'พายุกลีบซากุระร้อยคม (Sakura Storm)',
+          desc: 'Enters a blade trance slicing 8 times in rapid succession with invulnerability.',
+          descTh: 'ระบำดาบตัดเฉือน 8 ครั้งต่อเนื่องในพริบตา พร้อมสถานะอมตะชั่วขณะ',
+          cooldown: 12.0,
+          currentCooldown: 0,
+          icon: '🌸',
+        },
+      ];
+    } else if (this.activeHeroId === 'quan') {
+      this.skills = [
+        {
+          id: 'skill1',
+          key: '1',
+          name: 'Shadow Flurry',
+          nameTh: 'หมัดเงาพยัคฆ์ต่อเนื่อง',
+          desc: 'Rapid-fire punches knocking enemies back.',
+          descTh: 'ระดมต่อย 6 หมัดต่อเนื่องอย่างรวดเร็ว',
+          cooldown: 5.5,
+          currentCooldown: 0,
+          icon: '👊',
+        },
+        {
+          id: 'skill2',
+          key: '2',
+          name: 'Ki Tiger Blast',
+          nameTh: 'คลื่นพยัคฆ์คำรามมังกรฟ้า',
+          desc: 'High-speed piercing ki sphere.',
+          descTh: 'ปล่อยลูกแก้วลมปราณระเบิดกว้าง',
+          cooldown: 7.5,
+          currentCooldown: 0,
+          icon: '🐯',
+        },
+        {
+          id: 'skill3',
+          key: '3',
+          name: 'Dragon Whirlwind',
+          nameTh: 'เตะพายุมังกรทะยานฟ้า',
+          desc: 'Cyclone kick pulling enemies in.',
+          descTh: 'หมุนตัวเตะพายุ 360 องศา พร้อมดูดศัตรูเข้าศูนย์กลาง',
+          cooldown: 13.0,
+          currentCooldown: 0,
+          icon: '🐉',
+        },
+      ];
+    } else {
+      // Katherine
+      this.skills = [
+        {
+          id: 'skill1',
+          key: '1',
+          name: 'Glacial Nova',
+          nameTh: 'ระเบิดเหมันต์แช่แข็ง (Glacial Nova)',
+          desc: 'Freezes all surrounding enemies with sharp ice crystals.',
+          descTh: 'ปล่อยคลื่นไอเย็นเยือกแข็งศัตรูรอบตัว พร้อมทำดาเมจรุนแรงและติดสถานะ Freeze',
+          cooldown: 5.0,
+          currentCooldown: 0,
+          icon: '❄️',
+        },
+        {
+          id: 'skill2',
+          key: '2',
+          name: 'Thunderbolt Surge',
+          nameTh: 'สายฟ้าอัสนีบาต (Thunderbolt)',
+          desc: 'Calls down piercing lightning bolts across the battlefield.',
+          descTh: 'ฟาดสายฟ้าทะลวงศัตรูเป็นเส้นตรง พร้อมสตันเป้าหมาย',
+          cooldown: 7.0,
+          currentCooldown: 0,
+          icon: '⚡',
+        },
+        {
+          id: 'skill3',
+          key: '3',
+          name: 'Meteor Calamity',
+          nameTh: 'อุกกาบาตเพลิงอเวจี (Meteor)',
+          desc: 'Rains devastating fire meteors scorching the arena.',
+          descTh: 'อัญเชิญฝนดาวตกเพลิงระเบิดกวาดล้างทั้งห้อง ติดสถานะ Burn',
+          cooldown: 12.0,
+          currentCooldown: 0,
+          icon: '🔥',
+        },
+      ];
+    }
+  }
+
+  private getEquippedPerks(type?: EquipmentPerkType): EquipmentPerk[] {
+    return (this.playerStats.equippedItems ?? [])
+      .map((item) => item.perk)
+      .filter((perk): perk is EquipmentPerk => Boolean(perk && (!type || perk.type === type)));
+  }
+
+  private getEffectiveAttackSpeed(): number {
+    return this.playerStats.attackSpeed * (1 + this.temporaryAttackSpeedBonus + this.critSpeedStacks * 0.02);
+  }
+
+  private getEffectiveSkillCooldown(cooldown: number): number {
+    return cooldown * (1 - this.playerStats.cooldownReduction);
+  }
+
+  private getConditionalDamageMultiplier(): number {
+    let bonus = 0;
+    const hpRatio = this.playerStats.hp / Math.max(1, this.playerStats.maxHp);
+    if (hpRatio < 0.3) {
+      bonus += this.getEquippedPerks('low_hp_damage').reduce((sum, perk) => sum + perk.value, 0);
+    }
+    if (hpRatio >= 0.999) {
+      bonus += this.getEquippedPerks('full_hp_damage').reduce((sum, perk) => sum + perk.value, 0);
+    }
+    return 1 + Math.min(0.75, bonus);
+  }
+
+  private applyEquipmentStatusOnHit(enemy: EnemyActor) {
+    for (const perk of this.playerStats.equippedItems.map((item) => item.perk).filter((p): p is EquipmentPerk => Boolean(p?.status))) {
+      if (Math.random() <= (perk.chance ?? 0.15)) {
+        this.applyStatusEffect(enemy, perk.status!, perk.duration ?? 2, perk.value);
+      }
+    }
+  }
+
+  private handleEquipmentCritical() {
+    const perks = this.getEquippedPerks('crit_haste');
+    if (!perks.length) return;
+    this.critSpeedStacks = Math.min(10, this.critSpeedStacks + perks.length);
+    this.critSpeedTimer = Math.max(...perks.map((perk) => perk.duration ?? 4));
+  }
+
+  private triggerEquipmentKillEffects() {
+    for (const perk of this.getEquippedPerks()) {
+      if (perk.type === 'kill_heal') {
+        const heal = Math.max(1, Math.round(this.playerStats.maxHp * perk.value));
+        const before = this.playerStats.hp;
+        this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + heal);
+        if (this.playerStats.hp > before) this.spawnDamageNumber(this.playerX, 1.4, this.playerZ, this.playerStats.hp - before, false, false, true);
+      } else if (perk.type === 'kill_gold') {
+        const amount = Math.round(perk.value * (1 + this.playerStats.coinGain));
+        this.playerStats.gold += amount;
+      } else if (perk.type === 'kill_haste') {
+        this.temporaryAttackSpeedBonus = Math.max(this.temporaryAttackSpeedBonus, perk.value);
+        this.temporaryAttackSpeedTimer = Math.max(this.temporaryAttackSpeedTimer, perk.duration ?? 3);
+      }
+    }
+  }
+
+  private triggerEquipmentHitEffects() {
+    for (const perk of this.getEquippedPerks()) {
+      if (perk.type === 'hit_guard') {
+        const shieldGain = Math.max(0, Math.min(perk.value, this.playerStats.maxShield + 60 - this.playerStats.shield));
+        this.playerStats.shield += shieldGain;
+        this.temporaryGuardShield = Math.min(60, this.temporaryGuardShield + shieldGain);
+        this.temporaryGuardShieldTimer = Math.max(this.temporaryGuardShieldTimer, perk.duration ?? 3);
+        if (shieldGain > 0) this.arena.spawnSkillBurst(this.playerX, 0.95, this.playerZ, 0x7dd3fc, 10, 2.8, 0.4);
+      } else if (perk.type === 'hit_reduce') {
+        this.temporaryDamageReduction = Math.max(this.temporaryDamageReduction, perk.value);
+        this.temporaryDamageReductionTimer = Math.max(this.temporaryDamageReductionTimer, perk.duration ?? 3);
+      } else if (perk.type === 'hit_push') {
+        this.arena.spawnSkillBurst(this.playerX, 0.9, this.playerZ, 0x67e8f9, 14, 4.1, 0.38);
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dx = enemy.x - this.playerX;
+          const dz = enemy.z - this.playerZ;
+          const distance = Math.hypot(dx, dz);
+          if (distance > 0 && distance <= 4.5) {
+            enemy.vx += (dx / distance) * perk.value;
+            enemy.vz += (dz / distance) * perk.value;
+          }
+        }
+      }
+    }
+  }
+
+  private triggerLowHealthShield() {
+    if (this.playerStats.hp / Math.max(1, this.playerStats.maxHp) >= 0.3) return;
+    const perks = this.getEquippedPerks('low_hp_shield');
+    if (!perks.length) return;
+    const stage = levelSystem.run?.stage;
+    const roomKey = stage ? `${stage.stageNumber}:${stage.currentRoomIndex}` : `wave:${this.currentWave}`;
+    if (this.lowHpShieldUsedRoomKey === roomKey) return;
+    this.lowHpShieldUsedRoomKey = roomKey;
+    const amount = perks.reduce((sum, perk) => sum + perk.value, 0);
+    this.playerStats.shield = Math.min(this.playerStats.maxShield + 60, this.playerStats.shield + amount);
+    this.arena.spawnSkillBurst(this.playerX, 0.9, this.playerZ, 0x60a5fa, 14, 2.2, 0.4);
+  }
+
+  private getCoinAmount(amount: number): number {
+    return Math.max(1, Math.round(amount * (1 + this.playerStats.coinGain)));
+  }
+
+  public setHero(heroId: HeroId) {
+    this.activeHeroId = heroId;
+    this.recalcHeroStats();
+    this.playerStats.hp = this.playerStats.maxHp;
+    this.playerStats.shield = this.playerStats.maxShield;
+    this.updateHeroTexture();
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public addRelic(relic: RelicItem) {
+    this.relics.push(relic);
+    this.recalcHeroStats();
+    soundEngine.playCoin();
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public equipItem(item: EquipmentItem, replaceItemId?: string): boolean {
+    const equipped = this.playerStats.equippedItems;
+    if (equipped.some((current) => current.id === item.id)) return true;
+
+    if (replaceItemId) {
+      const replaceIndex = equipped.findIndex((current) => current.id === replaceItemId);
+      if (replaceIndex < 0) return false;
+      equipped[replaceIndex] = item;
+    } else {
+      if (equipped.length >= MAX_EQUIPPED_ITEMS) return false;
+      equipped.push(item);
+    }
+    if (!this.playerStats.inventory.some((current) => current.id === item.id)) {
+      this.playerStats.inventory.push(item);
+    }
+    soundEngine.playEquipItem();
+    this.recalcHeroStats();
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
+  public unequipItem(itemId: string) {
+    this.playerStats.equippedItems = this.playerStats.equippedItems.filter((item) => item.id !== itemId);
+    soundEngine.playEquipItem();
+    this.recalcHeroStats();
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public buyEquipment(item: EquipmentItem): boolean {
+    const cost = item.cost ?? 50;
+    if (this.playerStats.gold < cost) return false;
+    const templateId = item.templateId ?? item.id;
+    const ownedItem = !item.templateId || item.id === templateId
+      ? {
+          ...rollEquipmentVariant(item),
+          id: `${templateId}_owned_${Math.random().toString(36).slice(2, 9)}`,
+          templateId,
+        }
+      : item;
+    this.playerStats.gold -= cost;
+    if (!this.playerStats.inventory.some((i) => i.id === ownedItem.id)) {
+      this.playerStats.inventory.push(ownedItem);
+    }
+    const alreadyHasThisKind = this.playerStats.equippedItems.some(
+      (current) => (current.templateId ?? current.id) === templateId
+    );
+    if (!alreadyHasThisKind && this.playerStats.equippedItems.length < MAX_EQUIPPED_ITEMS) {
+      this.playerStats.equippedItems.push(ownedItem);
+    }
+    this.recalcHeroStats();
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
+  private initHero() {
+    const geo = new THREE.PlaneGeometry(2.4, 2.8);
+    const mat = new THREE.MeshBasicMaterial({
+      map: generateHeroTexture(this.activeHeroId, 'idle', 0),
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+    });
+    this.heroMesh = new THREE.Mesh(geo, mat);
+    this.heroMesh.rotation.x = -0.58;
+    this.heroMesh.position.set(this.playerX, 1.4, this.playerZ);
+    this.arena.actorsGroup.add(this.heroMesh);
+
+    const shadowGeo = new THREE.PlaneGeometry(1.6, 1.1);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: this.contactShadowTex,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+    });
+    this.heroShadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+    this.heroShadowMesh.rotation.x = -Math.PI / 2;
+    this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
+    this.arena.actorsGroup.add(this.heroShadowMesh);
+  }
+
+  private updateHeroTexture() {
+    if (!this.heroMesh) return;
+    (this.heroMesh.material as THREE.MeshBasicMaterial).map = generateHeroTexture(
+      this.activeHeroId,
+      this.animState,
+      this.animFrame
+    );
+  }
+
+  private initAimCursor() {
+    const ringGeo = new THREE.RingGeometry(0.35, 0.45, 16);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.aimCursorMesh = new THREE.Mesh(ringGeo, ringMat);
+    this.aimCursorMesh.rotation.x = -Math.PI / 2;
+    this.aimCursorMesh.position.set(0, 0.03, 0);
+    this.arena.vfxGroup.add(this.aimCursorMesh);
+  }
+
+  // ----------------------------------------------------------------------
+  // LOBBY MODE
+  // ----------------------------------------------------------------------
+  public enterLobby() {
+    this.currentMode = 'lobby';
+    this.clearDungeonEntities();
+    this.arena.loadTheme('lobby');
+
+    this.playerX = 0;
+    this.playerZ = 4;
+    this.playerVx = 0;
+    this.playerVz = 0;
+
+    // Training dummies & urns
+    this.breakables = [];
+    this.arena.breakablesGroup.children.forEach((child) => {
+      const gId = (child as any).gameId;
+      if (gId) {
+        this.breakables.push({
+          id: gId,
+          x: child.position.x,
+          z: child.position.z,
+          hp: 9999,
+          type: 'urn',
+          mesh: child as THREE.Mesh,
+        });
+      }
+    });
+
+    const trainer = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.4, 2.8),
+      new THREE.MeshBasicMaterial({ map: generateNpcTexture('trainer'), transparent: true, alphaTest: 0.05, side: THREE.DoubleSide })
+    );
+    trainer.rotation.x = -0.58;
+    trainer.position.set(8, 1.4, -4);
+    this.arena.actorsGroup.add(trainer);
+    this.trainerNpcMesh = trainer;
+
+    // Reset temporary relics and stat altar bonuses on return to lobby
+    this.relics = [];
+    this.temporaryAttackSpeedBonus = 0;
+    this.temporaryAttackSpeedTimer = 0;
+    this.temporaryDamageReduction = 0;
+    this.temporaryDamageReductionTimer = 0;
+    this.critSpeedStacks = 0;
+    this.critSpeedTimer = 0;
+    this.temporaryGuardShield = 0;
+    this.temporaryGuardShieldTimer = 0;
+    this.lowHpShieldUsedRoomKey = null;
+    this.statAltarBonuses = {
+      hp: 0,
+      shield: 0,
+      attack: 0,
+      attackSpeed: 0,
+      moveSpeed: 0,
+      crit: 0,
+    };
+    this.statUpgradeCounts = {
+      hp: 0,
+      shield: 0,
+      attack: 0,
+      attackSpeed: 0,
+      moveSpeed: 0,
+      crit: 0,
+    };
+    this.currentRoom = 'center';
+    this.currentWave = 1;
+    this.waveState = 'cleared';
+    this.equippedWeaponId = 'training_katana';
+    this.playerStats.equippedWeaponId = 'training_katana';
+
+    // Recalculate clean baseline stats
+    this.recalcHeroStats();
+    this.playerStats.hp = this.playerStats.maxHp;
+    this.playerStats.shield = this.playerStats.maxShield;
+    this.playerStats.comboCount = 0;
+    this.playerStats.kills = 0;
+    if (this.playerStats.gold < 120) {
+      this.playerStats.gold = 120;
+    }
+
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public clearDungeonEntities() {
+    for (const enemy of this.enemies) {
+      if (enemy.hpBarGroup) {
+        enemy.hpBarGroup.visible = false;
+        this.arena.actorsGroup.remove(enemy.hpBarGroup);
+      }
+      if (enemy.mesh) this.arena.actorsGroup.remove(enemy.mesh);
+      if (enemy.shadowMesh) this.arena.actorsGroup.remove(enemy.shadowMesh);
+    }
+    this.arena.actorsGroup.clear();
+    this.arena.vfxGroup.clear();
+    this.arena.breakablesGroup.clear();
+    this.arena.telegraphGroup.clear();
+    this.trainerNpcMesh = null;
+    this.enemies = [];
+    this.projectiles = [];
+    this.damageNumbers = [];
+    this.groundItems = [];
+    this.breakables = [];
+    this.lockedTarget = null;
+    this.currentBoss = null;
+    this.initHero();
+    this.initAimCursor();
+  }
+
+  public setDifficulty(mode: DifficultyMode) {
+    this.difficulty = mode;
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  // ----------------------------------------------------------------------
+  // ENTER DUNGEON (Supports Random Expedition or Direct Selection)
+  // ----------------------------------------------------------------------
+  public startRandomExpedition(difficulty?: DifficultyMode) {
+    if (difficulty) this.difficulty = difficulty;
+    this.startLevelRun(undefined, this.difficulty);
+  }
+
+  public enterDungeon(mapId?: DungeonMapId, difficulty?: DifficultyMode) {
+    if (difficulty) this.difficulty = difficulty;
+    this.startLevelRun(undefined, this.difficulty);
+  }
+
+  public startLevelRun(seed?: number, difficulty?: DifficultyMode) {
+    if (difficulty) this.difficulty = difficulty;
+    this.currentMode = 'dungeon';
+    this.isLevelRun = true;
+
+    // Reset temporary relics and stat altar bonuses on starting fresh run
+    this.relics = [];
+    this.temporaryAttackSpeedBonus = 0;
+    this.temporaryAttackSpeedTimer = 0;
+    this.temporaryDamageReduction = 0;
+    this.temporaryDamageReductionTimer = 0;
+    this.critSpeedStacks = 0;
+    this.critSpeedTimer = 0;
+    this.temporaryGuardShield = 0;
+    this.temporaryGuardShieldTimer = 0;
+    this.lowHpShieldUsedRoomKey = null;
+    this.statAltarBonuses = {
+      hp: 0,
+      shield: 0,
+      attack: 0,
+      attackSpeed: 0,
+      moveSpeed: 0,
+      crit: 0,
+    };
+    this.statUpgradeCounts = {
+      hp: 0,
+      shield: 0,
+      attack: 0,
+      attackSpeed: 0,
+      moveSpeed: 0,
+      crit: 0,
+    };
+    this.recalcHeroStats();
+    this.playerStats.hp = this.playerStats.maxHp;
+    this.playerStats.shield = this.playerStats.maxShield;
+
+    const run = levelSystem.startNewRun(seed);
+    const firstBiome = levelSystem.getCurrentBiome();
+    this.currentDungeonMap = firstBiome.id as any;
+
+    this.loadLevelRoom('start');
+    soundEngine.playRoomClear();
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  private getCurrentLevelChestState() {
+    if (!levelSystem.run) return null;
+    const stage = levelSystem.run.stage;
+    const key = stage.isSecretRoomActive ? 'secret' : `room-${stage.currentRoomIndex}`;
+    return (stage.chestStates[key] ??= { opened: false, rarity: null });
+  }
+
+  private spawnRoomRewardChest(defaultRarity?: 'white' | 'blue' | 'gold' | 'themed') {
+    const chestState = this.getCurrentLevelChestState();
+    if (!chestState || chestState.opened) return;
+    chestState.rarity ??= defaultRarity ?? levelSystem.rollChestRarity(false, this.playerStats.chestLuck);
+    this.arena.createChestProp(0, -1.5, chestState.rarity);
+  }
+
+  private chooseStatEquipmentForChest(rarity: 'white' | 'blue' | 'gold' | 'themed'): EquipmentItem {
+    const statGear = INITIAL_EQUIPMENT.filter((item) =>
+      [item.bonusHp, item.bonusShield, item.bonusAttack, item.bonusDefense, item.bonusCritChance, item.bonusMoveSpeed, item.bonusAttackSpeed]
+        .some((bonus) => typeof bonus === 'number' && bonus > 0)
+    );
+    const preferredRarities = rarity === 'white'
+      ? ['common']
+      : rarity === 'blue'
+      ? ['rare']
+      : ['legendary'];
+    const preferred = statGear.filter((item) => preferredRarities.includes(item.rarity));
+    const candidates = preferred.length > 0 ? preferred : statGear;
+    const run = levelSystem.run;
+    const chosen = run ? run.rng.choice(candidates) : candidates[Math.floor(Math.random() * candidates.length)];
+    const uniqueId = run ? run.rng.next().toString(36).slice(2) : Math.random().toString(36).slice(2);
+    return {
+      ...rollEquipmentVariant(chosen, () => run?.rng.next() ?? Math.random()),
+      id: `${chosen.id}_drop_${uniqueId}`,
+      templateId: chosen.id,
+      cost: 0,
+    };
+  }
+
+  public loadLevelRoom(roomType: StageRoomType) {
+    if (!levelSystem.run) {
+      levelSystem.startNewRun();
+    }
+    const run = levelSystem.run!;
+    const stage = run.stage;
+    const biome = levelSystem.getCurrentBiome();
+    this.lowHpShieldUsedRoomKey = null;
+    this.currentDungeonMap = 'test_dungeon';
+    this.currentRoomType = roomType as any;
+    const wasRoomCleared = stage.clearedRoomIndices.includes(stage.currentRoomIndex);
+
+    stage.isSecretRoomActive = false;
+    stage.hasSecretWallInCurrentRoom = false;
+    this.waveState = !wasRoomCleared && (roomType === 'combat' || roomType === 'elite' || roomType === 'boss')
+      ? 'fighting'
+      : 'cleared';
+    const shopOffers = roomType === 'shop' ? levelSystem.getShopOffersForRoom(stage.currentRoomIndex) : [];
+
+    this.clearDungeonEntities();
+    this.arena.removeHappyVendor();
+    this.arena.loadRoom(roomType as any, 'test_dungeon', this.getDoorLabels());
+    this.nearbyDungeonInteractable = null;
+    this.nearbyShopItemIndex = null;
+    if (roomType === 'shop' && !stage.happyProvokedRoomIndices.includes(stage.currentRoomIndex)) {
+      this.arena.createHappyVendor(shopOffers);
+    }
+
+    // Player position
+    const spawnByEntry: Record<RoomDirection, { x: number; z: number }> = {
+      north: { x: 0, z: -6.0 },
+      east: { x: 12.5, z: 0 },
+      south: { x: 0, z: 5.2 },
+      west: { x: -12.5, z: 0 },
+    };
+    const spawn = stage.entrySide ? spawnByEntry[stage.entrySide] : { x: 0, z: 5.2 };
+    this.playerX = spawn.x;
+    this.playerZ = spawn.z;
+    this.playerVx = 0;
+    this.playerVz = 0;
+    stage.entrySide = null;
+
+    // Room logic
+    if (roomType === 'start') {
+      this.waveState = 'cleared';
+      this.arena.setPortalActive(false);
+      this.initBreakables();
+    } else if (roomType === 'combat' || roomType === 'elite') {
+      if (!wasRoomCleared) {
+        this.waveState = 'fighting';
+        this.totalRoomWaves = levelSystem.getEnemyWaveCount(roomType);
+        this.currentRoomWave = 1;
+        this.spawnLevelCombatWave(1, roomType === 'elite');
+      } else {
+        this.spawnRoomRewardChest();
+      }
+      this.initBreakables();
+    } else if (roomType === 'shop') {
+      this.waveState = 'cleared';
+    } else if (roomType === 'chest') {
+      this.waveState = 'cleared';
+      this.spawnRoomRewardChest();
+    } else if (roomType === 'boss') {
+      if (!wasRoomCleared) {
+        this.waveState = 'fighting';
+        soundEngine.playBossGong();
+        this.arena.addCameraShake(0.8);
+        const bossHp = Math.round(550 * run.hpMultiplier);
+        this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, 0, -5.5);
+      } else {
+        this.spawnRoomRewardChest('gold');
+      }
+    } else if (roomType === 'exit') {
+      this.waveState = 'cleared';
+      this.arena.setPortalActive(true);
+    }
+
+    if (roomType !== 'exit') this.arena.setPortalActive(false);
+
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public spawnLevelCombatWave(waveNum: number, isElite: boolean) {
+    if (!levelSystem.run) return;
+    const run = levelSystem.run;
+    const biome = levelSystem.getCurrentBiome();
+    const stageId = run.stage.stageId;
+    const hpMult = run.hpMultiplier;
+
+    this.currentRoomWave = waveNum;
+    this.waveState = 'fighting';
+    this.arena.setPortalActive(false);
+
+    const count = levelSystem.getEnemyCountPerWave(stageId, this.difficulty);
+    const spawnPositions = [
+      { x: -7, z: -5 },
+      { x: 7, z: -5 },
+      { x: -5, z: 1 },
+      { x: 5, z: 1 },
+      { x: 0, z: -6 },
+      { x: -8, z: 2 },
+      { x: 8, z: 2 },
+    ];
+
+    for (let i = 0; i < count; i++) {
+      const pos = spawnPositions[i % spawnPositions.length];
+      const jitterX = pos.x + (Math.random() - 0.5) * 1.5;
+      const jitterZ = pos.z + (Math.random() - 0.5) * 1.5;
+      const isEliteEnemy = isElite && i === 0;
+      const mobType = isEliteEnemy ? biome.mobElite : i % 2 === 0 ? biome.mobA : biome.mobB;
+      if (isEliteEnemy) {
+        soundEngine.playBossGong();
+        this.arena.addCameraShake(0.35);
+      }
+      this.spawnLevelEnemy(mobType, jitterX, jitterZ, isEliteEnemy, hpMult);
+    }
+  }
+
+  public spawnLevelEnemy(type: string, x: number, z: number, isElite: boolean, hpMult: number) {
+    const id = Date.now() + Math.random();
+    const diffConfig = DIFFICULTY_CONFIGS[this.difficulty] || DIFFICULTY_CONFIGS.normal;
+
+    const baseHp = (110 + Math.floor(Math.random() * 25)) * (isElite ? 2.8 : 1.0) * hpMult;
+    const hp = Math.round(baseHp * diffConfig.enemyHpMultiplier);
+    const baseDmg = 14 * (isElite ? 1.5 : 1.0);
+    const damage = Math.round(baseDmg * diffConfig.enemyDmgMultiplier);
+    const baseSpeed = 4.0 * (isElite ? 1.15 : 1.0);
+    const speed = Number((baseSpeed * diffConfig.enemySpeedMultiplier).toFixed(2));
+    const size = isElite ? 3.2 : 2.4;
+
+    const geo = new THREE.PlaneGeometry(size, size);
+    const mat = new THREE.MeshBasicMaterial({
+      map: generateEnemyTexture(type, false, false, 0),
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -0.58;
+    mesh.position.set(x, size / 2, z);
+    this.arena.actorsGroup.add(mesh);
+
+    const shadowGeo = new THREE.PlaneGeometry(size * 0.7, size * 0.5);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: this.contactShadowTex,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(x, 0.02, z);
+    this.arena.actorsGroup.add(shadow);
+
+    const hpGroup = new THREE.Group();
+    hpGroup.position.set(x, size + 0.3, z);
+    hpGroup.rotation.x = -0.58;
+    const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(isElite ? 2.0 : 1.2, 0.18), new THREE.MeshBasicMaterial({ color: 0x18181b }));
+    const hpFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(isElite ? 2.0 : 1.2, 0.18),
+      new THREE.MeshBasicMaterial({ color: isElite ? 0xf59e0b : 0xef4444 })
+    );
+    hpGroup.add(hpBg);
+    hpGroup.add(hpFill);
+    this.arena.actorsGroup.add(hpGroup);
+
+    const actor: EnemyActor = {
+      id,
+      type,
+      x,
+      z,
+      vx: 0,
+      vz: 0,
+      maxHp: hp,
+      hp,
+      speed,
+      damage,
+      state: 'chase',
+      stateTimer: 0,
+      facing: 1,
+      mesh,
+      shadowMesh: shadow,
+      hpBarGroup: hpGroup,
+      hpBarFill: hpFill,
+      hpBarWidth: isElite ? 2.0 : 1.2,
+      attackCooldown: 1.0 + Math.random() * 1.5,
+      skillCooldown: 2.5 + Math.random() * 2.2,
+      targetX: x,
+      targetZ: z,
+      animFrame: 0,
+      animTimer: 0,
+      statuses: [],
+      isBoss: false,
+    };
+    this.enemies.push(actor);
+  }
+
+  public advanceLevelRoom(direction?: RoomDirection) {
+    if (!levelSystem.run) return;
+    if (!direction || this.waveState !== 'cleared') return;
+    const nextRoom = levelSystem.advanceToNextRoom(direction);
+    if (nextRoom) this.loadLevelRoom(nextRoom.nextRoomType);
+  }
+
+  public advanceLevelStage() {
+    if (!levelSystem.run) return;
+    const res = levelSystem.advanceStage();
+
+    if (res.runCompleted) {
+      if (this.onGameOver) this.onGameOver(true);
+      return;
+    }
+
+    soundEngine.playRoomClear();
+    this.loadLevelRoom('start');
+  }
+
+  public enterSecretRoom() {
+    // The randomized test dungeon has no legacy secret-room branch.
+  }
+
+  public openChestReward() {
+    if (!levelSystem.run) return;
+    const roomType = levelSystem.getCurrentRoomType();
+    if ((roomType === 'boss' || roomType === 'secret') && this.waveState === 'fighting') return;
+    const chestState = this.getCurrentLevelChestState();
+    if (!chestState || chestState.opened) return;
+    chestState.opened = true;
+
+    const rarity = chestState.rarity || 'gold';
+    levelSystem.recordChestOpened(rarity);
+    const goldAmount = this.getCoinAmount(rarity === 'gold' || rarity === 'themed' ? 100 : rarity === 'blue' ? 65 : 40);
+    const equip = this.chooseStatEquipmentForChest(rarity);
+    this.playerStats.gold += goldAmount;
+    this.buyEquipment(equip);
+
+    const reward = {
+      type: 'equipment' as const,
+      titleTh: equip.nameTh,
+      descTh: equip.descTh,
+      icon: equip.icon || '🛡️',
+      amount: goldAmount,
+      rawItem: equip,
+    };
+
+    this.lastOpenedChestReward = { rarity, reward };
+    this.arena.hideChestProps();
+    soundEngine.playCoin();
+    if (this.onOpenModal) {
+      this.onOpenModal('chest_reward');
+    }
+  }
+
+  public bossSummonMinions(boss: EnemyActor) {
+    if (!levelSystem.run) return;
+    const biome = levelSystem.getCurrentBiome();
+    soundEngine.playBossGong();
+    this.arena.addCameraShake(0.6);
+    // Summon 2-3 minions as requested in prompt: "ท่าเรียกลูกสมุน: เรียก 2-3 ตัวเมื่อเลือดเหลือ 50%"
+    const count = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < count; i++) {
+      const ox = i === 0 ? -5 : i === 1 ? 5 : 0;
+      const oz = i === 2 ? 3 : -2;
+      this.spawnLevelEnemy(
+        i % 2 === 0 ? biome.mobA : biome.mobB,
+        boss.x + ox,
+        boss.z + oz,
+        false,
+        levelSystem.run.hpMultiplier
+      );
+    }
+  }
+
+  public bossExecuteSmash(boss: EnemyActor) {
+    soundEngine.playTelegraph();
+    this.arena.showSmashTelegraph(boss.x, boss.z, 3.4, 0.6, boss.isHappyBoss ? 0xec4899 : 0xef4444);
+    boss.state = 'windup';
+    boss.bossAttackType = 'smash';
+    boss.bossActionName = boss.isHappyBoss ? 'ตบกลับสองเท่า' : 'ท่าฟาด';
+    boss.stateTimer = 0.6; // 0.6s telegraph
+  }
+
+  public bossExecuteDash(boss: EnemyActor) {
+    soundEngine.playTelegraph();
+    this.arena.showDashTelegraph(boss.x, boss.z, this.playerX, this.playerZ, 0.5);
+    boss.state = 'windup';
+    boss.bossAttackType = 'dash';
+    if (boss.isHappyBoss) boss.bossActionName = 'พุ่งรองเท้าแตะ';
+    boss.targetX = this.playerX;
+    boss.targetZ = this.playerZ;
+    boss.stateTimer = 0.5;
+  }
+
+  private bossExecuteHappyWave(boss: EnemyActor) {
+    boss.targetX = this.playerX;
+    boss.targetZ = this.playerZ;
+    boss.bossActionName = 'คลื่นบึ้งตึง';
+    boss.state = 'windup';
+    boss.bossAttackType = 'happy_wave';
+    boss.stateTimer = 0.8;
+    soundEngine.playTelegraph();
+    this.arena.showSmashTelegraph(boss.targetX, boss.targetZ, 4.1, 0.8, 0xec4899);
+  }
+
+  private bossExecuteHappyCoinRain(boss: EnemyActor) {
+    const centerX = this.playerX;
+    const centerZ = this.playerZ;
+    const offsets = [[0, 0], [-2.6, -1.4], [2.6, -1.4], [-1.5, 2.2], [1.5, 2.2]];
+    boss.happyTelegraphPoints = offsets.map(([ox, oz]) => ({
+      x: THREE.MathUtils.clamp(centerX + ox, -12, 12),
+      z: THREE.MathUtils.clamp(centerZ + oz, -5.5, 4.5),
+    }));
+    boss.targetX = centerX;
+    boss.targetZ = centerZ;
+    boss.bossActionName = 'ฝนเหรียญจิ๋ว';
+    boss.state = 'windup';
+    boss.bossAttackType = 'happy_coin_rain';
+    boss.stateTimer = 0.9;
+    soundEngine.playTelegraph();
+    for (const point of boss.happyTelegraphPoints) {
+      this.arena.showSmashTelegraph(point.x, point.z, 1.45, 0.9, 0xfbbf24);
+    }
+  }
+
+  private getHappyCounterDamage(boss: EnemyActor) {
+    return Math.max(1, Math.round((boss.lastHitDamage ?? 8) * 2));
+  }
+
+  private initBreakables() {
+    const positions = [
+      { x: -11, z: -8 },
+      { x: 11, z: -8 },
+      { x: -11, z: 8 },
+      { x: 11, z: 8 },
+      { x: -6, z: 7 },
+      { x: 6, z: 7 },
+    ];
+    positions.forEach((pos, i) => {
+      const mesh = this.arena.createBreakableUrn(pos.x, pos.z, i + 1);
+      this.breakables.push({
+        id: i + 1,
+        x: pos.x,
+        z: pos.z,
+        hp: 1,
+        type: 'urn',
+        mesh,
+      });
+    });
+  }
+
+  public spawnDungeonWave(waveNum: number) {
+    this.currentWave = waveNum;
+    this.waveState = 'fighting';
+    this.arena.setPortalActive(false);
+
+    const config = BIOME_ENEMIES[this.currentDungeonMap as LegacyDungeonMapId] || BIOME_ENEMIES.desert;
+
+    // Escalating 20-wave compositions
+    if (waveNum === 1) {
+      // Wave 1: 2 basic scouts
+      this.spawnEnemy(config.mobA, -5, -4);
+      this.spawnEnemy(config.mobA, 5, -4);
+    } else if (waveNum === 2) {
+      // Wave 2: 3 basic mobs
+      this.spawnEnemy(config.mobA, -6, -5);
+      this.spawnEnemy(config.mobA, 6, -5);
+      this.spawnEnemy(config.mobA, 0, -6);
+    } else if (waveNum === 3) {
+      // Wave 3: 2 Mob A + 1 Mob B
+      this.spawnEnemy(config.mobA, -6, -4);
+      this.spawnEnemy(config.mobA, 6, -4);
+      this.spawnEnemy(config.mobB, 0, -5);
+    } else if (waveNum === 4) {
+      // Wave 4: 2 Mob A + 2 Mob B
+      this.spawnEnemy(config.mobA, -7, -5);
+      this.spawnEnemy(config.mobA, 7, -5);
+      this.spawnEnemy(config.mobB, -4, 1);
+      this.spawnEnemy(config.mobB, 4, 1);
+    } else if (waveNum === 5) {
+      // Wave 5: MINI-BOSS (Area Champion) + 2 guards
+      soundEngine.playBossGong();
+      this.arena.addCameraShake(0.4);
+      this.spawnEnemy(config.mobB, 0, -5, true); // Mini-boss!
+      this.spawnEnemy(config.mobA, -6, -3);
+      this.spawnEnemy(config.mobA, 6, -3);
+    } else if (waveNum === 6) {
+      // Wave 6: 3 Mob B + 1 Mob A
+      this.spawnEnemy(config.mobB, -5, -4);
+      this.spawnEnemy(config.mobB, 5, -4);
+      this.spawnEnemy(config.mobB, 0, -6);
+      this.spawnEnemy(config.mobA, 0, 2);
+    } else if (waveNum === 7) {
+      // Wave 7: 4 fast rushing Mob B
+      this.spawnEnemy(config.mobB, -6, -5);
+      this.spawnEnemy(config.mobB, 6, -5);
+      this.spawnEnemy(config.mobB, -4, 1);
+      this.spawnEnemy(config.mobB, 4, 1);
+    } else if (waveNum === 8) {
+      // Wave 8: 3 Mob A + 2 Mob B
+      this.spawnEnemy(config.mobA, -7, -4);
+      this.spawnEnemy(config.mobA, 7, -4);
+      this.spawnEnemy(config.mobA, 0, -6);
+      this.spawnEnemy(config.mobB, -5, 1);
+      this.spawnEnemy(config.mobB, 5, 1);
+    } else if (waveNum === 9) {
+      // Wave 9: 4 Mob A + 2 Mob B
+      this.spawnEnemy(config.mobA, -7, -5);
+      this.spawnEnemy(config.mobA, 7, -5);
+      this.spawnEnemy(config.mobA, -3, -6);
+      this.spawnEnemy(config.mobA, 3, -6);
+      this.spawnEnemy(config.mobB, -5, 2);
+      this.spawnEnemy(config.mobB, 5, 2);
+    } else if (waveNum === 10) {
+      // Wave 10: MID-BOSS (Area Vice-Commander)
+      soundEngine.playBossGong();
+      this.arena.addCameraShake(0.5);
+      this.spawnBoss(config.mobB, 550, 24, `${config.bossName} Vice-Commander`, 0, -5);
+      this.spawnEnemy(config.mobA, -6, -3);
+      this.spawnEnemy(config.mobB, 6, -3);
+    } else if (waveNum === 11) {
+      // Wave 11: 4 Mob A + 2 Mob B
+      this.spawnEnemy(config.mobA, -6, -5);
+      this.spawnEnemy(config.mobA, 6, -5);
+      this.spawnEnemy(config.mobA, 0, -6);
+      this.spawnEnemy(config.mobA, 0, 2);
+      this.spawnEnemy(config.mobB, -4, 1);
+      this.spawnEnemy(config.mobB, 4, 1);
+    } else if (waveNum === 12) {
+      // Wave 12: 5 Mob B
+      this.spawnEnemy(config.mobB, -7, -4);
+      this.spawnEnemy(config.mobB, 7, -4);
+      this.spawnEnemy(config.mobB, -3, -6);
+      this.spawnEnemy(config.mobB, 3, -6);
+      this.spawnEnemy(config.mobB, 0, 2);
+    } else if (waveNum === 13) {
+      // Wave 13: 4 Mob A + 3 Mob B
+      this.spawnEnemy(config.mobA, -7, -5);
+      this.spawnEnemy(config.mobA, 7, -5);
+      this.spawnEnemy(config.mobA, -3, -6);
+      this.spawnEnemy(config.mobA, 3, -6);
+      this.spawnEnemy(config.mobB, -5, 1);
+      this.spawnEnemy(config.mobB, 5, 1);
+      this.spawnEnemy(config.mobB, 0, 3);
+    } else if (waveNum === 14) {
+      // Wave 14: 6 mixed enemies
+      this.spawnEnemy(config.mobA, -8, -5);
+      this.spawnEnemy(config.mobA, 8, -5);
+      this.spawnEnemy(config.mobA, 0, -6);
+      this.spawnEnemy(config.mobB, -6, 2);
+      this.spawnEnemy(config.mobB, 6, 2);
+      this.spawnEnemy(config.mobB, 0, 3);
+    } else if (waveNum === 15) {
+      // Wave 15: DUAL MINI-BOSSES!
+      soundEngine.playBossGong();
+      this.arena.addCameraShake(0.5);
+      this.spawnEnemy(config.mobA, -5, -4, true); // Mini-boss 1
+      this.spawnEnemy(config.mobB, 5, -4, true); // Mini-boss 2
+      this.spawnEnemy(config.mobB, 0, -6);
+      this.spawnEnemy(config.mobA, 0, 2);
+    } else if (waveNum === 16) {
+      // Wave 16: 5 Mob A + 2 Mob B
+      this.spawnEnemy(config.mobA, -7, -5);
+      this.spawnEnemy(config.mobA, 7, -5);
+      this.spawnEnemy(config.mobA, -3, -6);
+      this.spawnEnemy(config.mobA, 3, -6);
+      this.spawnEnemy(config.mobA, 0, 2);
+      this.spawnEnemy(config.mobB, -5, 1);
+      this.spawnEnemy(config.mobB, 5, 1);
+    } else if (waveNum === 17) {
+      // Wave 17: 6 aggressive Mob B
+      this.spawnEnemy(config.mobB, -8, -5);
+      this.spawnEnemy(config.mobB, 8, -5);
+      this.spawnEnemy(config.mobB, -4, -6);
+      this.spawnEnemy(config.mobB, 4, -6);
+      this.spawnEnemy(config.mobB, -5, 2);
+      this.spawnEnemy(config.mobB, 5, 2);
+    } else if (waveNum === 18) {
+      // Wave 18: 4 Mob A + 4 Mob B
+      this.spawnEnemy(config.mobA, -8, -5);
+      this.spawnEnemy(config.mobA, 8, -5);
+      this.spawnEnemy(config.mobA, -4, -6);
+      this.spawnEnemy(config.mobA, 4, -6);
+      this.spawnEnemy(config.mobB, -6, 2);
+      this.spawnEnemy(config.mobB, 6, 2);
+      this.spawnEnemy(config.mobB, -2, 3);
+      this.spawnEnemy(config.mobB, 2, 3);
+    } else if (waveNum === 19) {
+      // Wave 19: 7 mixed elite swarms
+      this.spawnEnemy(config.mobA, -8, -5);
+      this.spawnEnemy(config.mobA, 8, -5);
+      this.spawnEnemy(config.mobA, 0, -6);
+      this.spawnEnemy(config.mobB, -6, 1);
+      this.spawnEnemy(config.mobB, 6, 1);
+      this.spawnEnemy(config.mobB, -3, 3);
+      this.spawnEnemy(config.mobB, 3, 3);
+    } else {
+      // Wave 20: CLIMACTIC GRAND WIKI BOSS!
+      soundEngine.playBossGong();
+      this.arena.addCameraShake(0.8);
+      this.spawnBoss(config.boss, config.bossHp, config.bossDmg, config.bossName, 0, -6);
+      // Elite bodyguards
+      this.spawnEnemy(config.mobB, -7, -3);
+      this.spawnEnemy(config.mobB, 7, -3);
+      this.spawnEnemy(config.mobA, 0, 3);
+    }
+  }
+
+  private spawnEnemy(type: string, x: number, z: number, isMiniBoss: boolean = false) {
+    const id = Date.now() + Math.random();
+    const diffConfig = DIFFICULTY_CONFIGS[this.difficulty] || DIFFICULTY_CONFIGS.normal;
+
+    const baseHp = (110 + Math.floor(Math.random() * 30)) * (isMiniBoss ? 2.5 : 1.0);
+    const hp = Math.round(baseHp * diffConfig.enemyHpMultiplier);
+    const baseDmg = 14 * (isMiniBoss ? 1.5 : 1.0);
+    const damage = Math.round(baseDmg * diffConfig.enemyDmgMultiplier);
+    const baseSpeed = 4.0 * (isMiniBoss ? 1.1 : 1.0);
+    const speed = Number((baseSpeed * diffConfig.enemySpeedMultiplier).toFixed(2));
+    const size = isMiniBoss ? 3.0 : 2.4;
+
+    const geo = new THREE.PlaneGeometry(size, size);
+    const mat = new THREE.MeshBasicMaterial({
+      map: generateEnemyTexture(type, false, false, 0),
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -0.58;
+    mesh.position.set(x, size / 2, z);
+    this.arena.actorsGroup.add(mesh);
+
+    const shadowGeo = new THREE.PlaneGeometry(size * 0.7, size * 0.5);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: this.contactShadowTex,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(x, 0.02, z);
+    this.arena.actorsGroup.add(shadow);
+
+    const hpGroup = new THREE.Group();
+    hpGroup.position.set(x, size + 0.3, z);
+    hpGroup.rotation.x = -0.58;
+    const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(isMiniBoss ? 1.8 : 1.2, 0.18), new THREE.MeshBasicMaterial({ color: 0x18181b }));
+    const hpFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(isMiniBoss ? 1.8 : 1.2, 0.18),
+      new THREE.MeshBasicMaterial({ color: isMiniBoss ? 0xf59e0b : 0xef4444 })
+    );
+    hpGroup.add(hpBg);
+    hpGroup.add(hpFill);
+    this.arena.actorsGroup.add(hpGroup);
+
+    const actor: EnemyActor = {
+      id,
+      type,
+      x,
+      z,
+      vx: 0,
+      vz: 0,
+      maxHp: hp,
+      hp,
+      speed,
+      damage,
+      state: 'chase',
+      stateTimer: 0,
+      facing: 1,
+      mesh,
+      shadowMesh: shadow,
+      hpBarGroup: hpGroup,
+      hpBarFill: hpFill,
+      hpBarWidth: isMiniBoss ? 1.8 : 1.2,
+      attackCooldown: 1.0 + Math.random() * 1.5,
+      skillCooldown: 2.5 + Math.random() * 2.2,
+      targetX: x,
+      targetZ: z,
+      animFrame: 0,
+      animTimer: 0,
+      statuses: [],
+      isBoss: isMiniBoss,
+    };
+    this.enemies.push(actor);
+  }
+
+  private spawnBoss(bossType: string, hp: number, damage: number, name: string, x: number, z: number) {
+    const id = Date.now();
+    const diffConfig = DIFFICULTY_CONFIGS[this.difficulty] || DIFFICULTY_CONFIGS.normal;
+    const finalHp = Math.round(hp * diffConfig.enemyHpMultiplier);
+    const finalDmg = Math.round(damage * diffConfig.enemyDmgMultiplier);
+    const speed = Number((4.4 * diffConfig.enemySpeedMultiplier).toFixed(2));
+    const size = 3.6;
+
+    const geo = new THREE.PlaneGeometry(size, size);
+    const mat = new THREE.MeshBasicMaterial({
+      map: generateEnemyTexture(bossType, false, false, 0),
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -0.58;
+    mesh.position.set(x, size / 2, z);
+    this.arena.actorsGroup.add(mesh);
+
+    const shadowGeo = new THREE.PlaneGeometry(2.4, 1.6);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: this.contactShadowTex,
+      transparent: true,
+      opacity: 0.65,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(x, 0.02, z);
+    this.arena.actorsGroup.add(shadow);
+
+    const hpGroup = new THREE.Group();
+    const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.24), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+    const hpFill = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.24), new THREE.MeshBasicMaterial({ color: 0xa855f7 }));
+    hpGroup.add(hpBg);
+    hpGroup.add(hpFill);
+    hpGroup.position.set(x, size + 0.4, z);
+    hpGroup.rotation.x = -0.58;
+    this.arena.actorsGroup.add(hpGroup);
+
+    const boss: EnemyActor = {
+      id,
+      type: bossType,
+      x,
+      z,
+      vx: 0,
+      vz: 0,
+      maxHp: finalHp,
+      hp: finalHp,
+      speed,
+      damage: finalDmg,
+      state: 'chase',
+      stateTimer: 0,
+      facing: 1,
+      mesh,
+      shadowMesh: shadow,
+      hpBarGroup: hpGroup,
+      hpBarFill: hpFill,
+      hpBarWidth: 2.4,
+      attackCooldown: 1.0,
+      targetX: x,
+      targetZ: z,
+      animFrame: 0,
+      animTimer: 0,
+      statuses: [],
+      isBoss: true,
+      bossName: name,
+      hasSummonedMinions: false,
+      isPhase2: false,
+    };
+    this.enemies.push(boss);
+    this.currentBoss = boss;
+  }
+
+  // ----------------------------------------------------------------------
+  // PROCEDURAL MULTI-ROOM EXPLORATION & BRANCHING
+  // ----------------------------------------------------------------------
+  public generateNextDoors(depth: number) {
+    if (depth >= 6) {
+      this.doorOptions = {
+        north: 'boss',
+        west: 'equipment_shop',
+        east: 'equipment_shop',
+      };
+      return;
+    }
+
+    const availablePool: DungeonRoomType[] = [
+      'combat',
+      'combat',
+      'equipment_shop',
+      'equipment_shop',
+      'healing_pool',
+    ];
+
+    const shuffled = [...availablePool].sort(() => Math.random() - 0.5);
+    this.doorOptions = {
+      north: shuffled[0],
+      west: shuffled[1],
+      east: shuffled[2] === shuffled[1] ? 'healing_pool' : shuffled[2],
+    };
+  }
+
+  public getDoorLabels() {
+    if (this.isLevelRun && levelSystem.run) {
+      const stage = levelSystem.run.stage;
+      const node = stage.roomGraph[stage.currentRoomIndex];
+      const roomNames: Record<StageRoomType, string> = {
+        start: 'จุดเริ่ม',
+        combat: 'ห้องมอนสเตอร์',
+        elite: 'ห้องมอนสเตอร์ชั้นสูง',
+        shop: 'แฮปปี้',
+        chest: 'ห้องสมบัติ',
+        boss: 'ห้องบอส',
+        exit: 'ทางออก',
+        forge: 'ห้องเสริมสถานะ',
+        secret: 'ห้องลับ',
+      };
+      const roomColors: Record<StageRoomType, number> = {
+        start: 0x38bdf8,
+        combat: 0xef4444,
+        elite: 0xf97316,
+        shop: 0x10b981,
+        chest: 0xfacc15,
+        boss: 0xa855f7,
+        exit: 0x22c55e,
+        forge: 0x06b6d4,
+        secret: 0xc084fc,
+      };
+      const getRoute = (direction: RoomDirection, icon: string) => {
+        const targetIndex = node?.connections[direction];
+        if (targetIndex === undefined) return { label: `🧱 ${icon} ทางตัน`, color: 0x52525b, enabled: false };
+        const targetType = stage.rooms[targetIndex];
+        return {
+          label: `${icon} [E] ${roomNames[targetType]}`,
+          color: roomColors[targetType],
+          enabled: true,
+        };
+      };
+      return {
+        north: getRoute('north', '⬆️'),
+        west: getRoute('west', '⬅️'),
+        east: getRoute('east', '➡️'),
+        south: getRoute('south', '⬇️'),
+      };
+    }
+
+    const getMeta = (type: DungeonRoomType, dir: string) => {
+      switch (type) {
+        case 'combat':
+          return { label: `⚔️ ${dir} [E] ห้องมอนสเตอร์`, color: 0xef4444 };
+        case 'equipment_shop':
+          return { label: `🛡️ ${dir} [E] คลังอุปกรณ์และบัฟ`, color: 0x10b981 };
+        case 'healing_pool':
+          return { label: `🧪 ${dir} [E] บ่อน้ำโอสถ`, color: 0x06b6d4 };
+        case 'boss':
+          return { label: `👑 ${dir} [E] ศึกบอสประจำด่าน`, color: 0xa855f7 };
+        default:
+          return { label: `🚪 ${dir} [E] ทางผ่าน`, color: 0x38bdf8 };
+      }
+    };
+
+    return {
+      north: getMeta(this.doorOptions.north, '⬆️'),
+      west: getMeta(this.doorOptions.west, '⬅️'),
+      east: getMeta(this.doorOptions.east, '➡️'),
+      south: { label: '⬇️ [E] กลับห้องก่อนหน้า', color: 0x38bdf8, enabled: true },
+    };
+  }
+
+  public enterDungeonDoor(direction: 'north' | 'west' | 'east') {
+    const nextRoomType = this.doorOptions[direction];
+    this.dungeonRoomDepth++;
+    this.currentRoomType = nextRoomType;
+    this.generateNextDoors(this.dungeonRoomDepth);
+
+    // Position player coming through the opposite entrance
+    if (direction === 'north') {
+      this.playerX = 0;
+      this.playerZ = 5.2;
+    } else if (direction === 'west') {
+      this.playerX = 12.0;
+      this.playerZ = 0;
+    } else if (direction === 'east') {
+      this.playerX = -12.0;
+      this.playerZ = 0;
+    }
+
+    this.playerVx = 0;
+    this.playerVz = 0;
+    soundEngine.playDash();
+
+    this.clearDungeonEntities();
+    this.arena.loadRoom(this.currentRoomType, this.currentDungeonMap, this.getDoorLabels());
+    this.initBreakables();
+
+    if (this.currentRoomType === 'combat') {
+      this.waveState = 'fighting';
+      this.spawnDungeonWave(this.dungeonRoomDepth);
+    } else if (this.currentRoomType === 'boss') {
+      this.waveState = 'fighting';
+      this.spawnDungeonWave(20); // Boss wave!
+    } else {
+      this.waveState = 'cleared';
+    }
+
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public changeRoom(targetRoom: DungeonRoomId) {
+    if (this.currentRoom === targetRoom) return;
+    const prevRoom = this.currentRoom;
+    this.currentRoom = targetRoom;
+
+    // Clear entities in current room
+    this.clearDungeonEntities();
+
+    // Load new room geometry in arena
+    this.arena.loadRoom(targetRoom, this.currentDungeonMap, this.getDoorLabels());
+
+    // Position player at entrance
+    if (targetRoom === 'center') {
+      if (prevRoom === 'north') {
+        this.playerX = 0;
+        this.playerZ = -6.8;
+      } else if (prevRoom === 'west') {
+        this.playerX = -13.0;
+        this.playerZ = 0;
+      } else if (prevRoom === 'east') {
+        this.playerX = 13.0;
+        this.playerZ = 0;
+      } else {
+        this.playerX = 0;
+        this.playerZ = 4;
+      }
+    } else if (targetRoom === 'north') {
+      this.playerX = 0;
+      this.playerZ = 5.2;
+    } else if (targetRoom === 'west') {
+      this.playerX = 10.0;
+      this.playerZ = 0;
+    } else if (targetRoom === 'east') {
+      this.playerX = -10.0;
+      this.playerZ = 0;
+    }
+
+    this.playerVx = 0;
+    this.playerVz = 0;
+    soundEngine.playDash();
+
+    if (targetRoom === 'center' && this.waveState === 'fighting') {
+      this.spawnDungeonWave(this.currentWave);
+    }
+
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  public spawnGroundEquipmentItem(x: number, z: number, equipment: EquipmentItem) {
+    const item: GroundItem = {
+      id: Math.random(),
+      type: 'equipment',
+      x,
+      z,
+      equipment,
+      bobTimer: Math.random() * Math.PI,
+    };
+    this.groundItems.push(item);
+
+    const geo = new THREE.PlaneGeometry(1.0, 1.0);
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#10b981';
+    ctx.font = '72px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(equipment.icon || '🛡️', 64, 64);
+    const tex = new THREE.CanvasTexture(canvas);
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.7, z);
+    mesh.rotation.x = -0.58;
+    (mesh as any).itemData = item;
+    this.arena.vfxGroup.add(mesh);
+  }
+
+  public buyStatUpgrade(type: StatUpgradeType): boolean {
+    const opt = STAT_UPGRADES_CONFIG.find((o) => o.type === type);
+    if (!opt) return false;
+    if (this.playerStats.gold < opt.cost) return false;
+
+    this.playerStats.gold -= opt.cost;
+    this.statUpgradeCounts[type] = (this.statUpgradeCounts[type] || 0) + 1;
+
+    if (type === 'hp') {
+      this.statAltarBonuses.hp += 25;
+      this.playerStats.hp = Math.min(this.playerStats.maxHp + 25, this.playerStats.hp + 25);
+    } else if (type === 'shield') {
+      this.statAltarBonuses.shield += 15;
+      this.playerStats.shield = Math.min(this.playerStats.maxShield + 15, this.playerStats.shield + 15);
+    } else if (type === 'attack') {
+      this.statAltarBonuses.attack += 4;
+    } else if (type === 'attackSpeed') {
+      this.statAltarBonuses.attackSpeed += 0.12;
+    } else if (type === 'moveSpeed') {
+      this.statAltarBonuses.moveSpeed += 0.5;
+    } else if (type === 'crit') {
+      this.statAltarBonuses.crit += 0.06;
+    }
+
+    this.recalcHeroStats();
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
+  public deductGold(amount: number): boolean {
+    if (this.playerStats.gold < amount) return false;
+    this.playerStats.gold -= amount;
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
+  public useHealingPool(): boolean {
+    this.playerStats.hp = this.playerStats.maxHp;
+    this.playerStats.shield = this.playerStats.maxShield;
+    soundEngine.playLevelUp();
+    this.spawnDamageNumber(this.playerX, 2.0, this.playerZ, this.playerStats.maxHp, false);
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
+  // ----------------------------------------------------------------------
+  // INPUT & COMBAT HANDLERS
+  // ----------------------------------------------------------------------
+  public handleMouseMove(screenX: number, screenY: number, width: number, height: number) {
+    const ndcX = (screenX / width) * 2 - 1;
+    const ndcY = -(screenY / height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.arena.camera);
+    const intersectPoint = new THREE.Vector3();
+    this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+    if (intersectPoint) {
+      this.mouseWorldX = THREE.MathUtils.clamp(intersectPoint.x, this.arena.bounds.minX - 2, this.arena.bounds.maxX + 2);
+      this.mouseWorldZ = THREE.MathUtils.clamp(intersectPoint.z, this.arena.bounds.minZ - 1, this.arena.bounds.maxZ + 2);
+      this.aimCursorMesh.position.set(this.mouseWorldX, 0.03, this.mouseWorldZ);
+
+      const dx = this.mouseWorldX - this.playerX;
+      const dz = this.mouseWorldZ - this.playerZ;
+      this.playerAimAngle = Math.atan2(dz, dx);
+      if (dx > 0.1) this.playerFacing = 1;
+      else if (dx < -0.1) this.playerFacing = -1;
+    }
+  }
+
+  public handleAttack() {
+    if (this.isDashing) return;
+
+    if (this.comboStep === 0 || this.comboWindowTimer <= 0) {
+      this.comboStep = 1;
+    } else {
+      this.comboStep = (this.comboStep % 3) + 1;
+    }
+
+    const weapon = this.weapons.find((w) => w.id === this.equippedWeaponId) || INITIAL_WEAPONS[0];
+    const weaponType = weapon.type || 'katana';
+
+    // Cadence dynamically altered by weapon type and attackSpeed
+    let baseCadence = 0.65;
+    let baseAttackTimer = 0.22;
+    if (weaponType === 'greatsword') {
+      baseCadence = 0.85;
+      baseAttackTimer = 0.32;
+    } else if (weaponType === 'blade') {
+      baseCadence = 0.45;
+      baseAttackTimer = 0.16;
+    } else if (weaponType === 'polearm') {
+      baseCadence = 0.70;
+      baseAttackTimer = 0.24;
+    } else if (weaponType === 'staff') {
+      baseCadence = 0.60;
+      baseAttackTimer = 0.22;
+    }
+
+    this.comboWindowTimer = calculateAttackCadence(baseCadence, this.getEffectiveAttackSpeed());
+    this.isAttacking = true;
+    this.attackTimer = calculateAttackCadence(baseAttackTimer, this.getEffectiveAttackSpeed());
+    this.animState = `attack${this.comboStep}` as HeroAnimationState;
+    this.animFrame = 0;
+
+    const diffConfig = DIFFICULTY_CONFIGS[this.difficulty] || DIFFICULTY_CONFIGS.normal;
+    const hitResult = calculateDamage(
+      {
+        ...this.playerStats,
+      },
+      this.comboStep,
+      weapon.attackBonus,
+      0,
+      false,
+      diffConfig.playerDmgMultiplier
+    );
+
+    // WEAPON STYLE 1: GREATSWORD (Heavy 180-deg sweep, high knockback, ground shockwave finisher)
+    if (weaponType === 'greatsword') {
+      const lungeDist = this.comboStep === 3 ? 1.2 : 0.5;
+      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 6;
+      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 6;
+
+      soundEngine.playHit(this.comboStep === 3);
+      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.6;
+      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.6;
+      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
+
+      if (this.comboStep === 3) {
+        this.arena.addCameraShake(0.45);
+        this.arena.spawnGroundShockwaveVFX?.(hitX, hitZ);
+        soundEngine.playPunch(3);
+      }
+
+      this.checkMeleeHits(hitX, hitZ, 3.4, hitResult.damage + (this.comboStep === 3 ? 3 : 0), true);
+      this.checkBreakableHits(hitX, hitZ, 3.4);
+
+    // WEAPON STYLE 2: BLADE / DUAL DAGGERS (Ultra fast flurry & twin whirlwind)
+    } else if (weaponType === 'blade') {
+      const lungeDist = 0.7;
+      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 10;
+      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 10;
+
+      soundEngine.playKatanaSlash();
+      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.1;
+      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.1;
+      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle + (this.comboStep === 2 ? -0.4 : 0.4));
+
+      if (this.comboStep === 3) {
+        soundEngine.playWhirlwind();
+        this.arena.spawnWhirlwindVFX?.(this.playerX, this.playerZ);
+      }
+
+      this.checkMeleeHits(hitX, hitZ, this.comboStep === 3 ? 2.8 : 1.9, hitResult.damage, this.comboStep === 3);
+      this.checkBreakableHits(hitX, hitZ, 2.2);
+
+    // WEAPON STYLE 3: POLEARM / SPEAR (Long piercing linear thrust forward)
+    } else if (weaponType === 'polearm') {
+      const lungeDist = this.comboStep === 3 ? 1.8 : 0.9;
+      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 7;
+      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 7;
+
+      soundEngine.playDash();
+      const reachDist = 2.4;
+      const hitX = this.playerX + Math.cos(this.playerAimAngle) * reachDist;
+      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * reachDist;
+      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
+
+      // Piercing linear check along thrust vector
+      for (let step = 1; step <= 3; step++) {
+        const stepX = this.playerX + Math.cos(this.playerAimAngle) * (step * 1.4);
+        const stepZ = this.playerZ + Math.sin(this.playerAimAngle) * (step * 1.4);
+        this.checkMeleeHits(stepX, stepZ, 1.4, hitResult.damage, this.comboStep === 3);
+        this.checkBreakableHits(stepX, stepZ, 1.4);
+      }
+
+    // WEAPON STYLE 4: STAFF / WAND (Fires ranged magical arcane orb projectiles!)
+    } else if (weaponType === 'staff') {
+      soundEngine.playKiBlastLaunch();
+      const projSpeed = 22;
+      const proj: Projectile = {
+        id: Math.random(),
+        owner: 'player',
+        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
+        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
+        vx: Math.cos(this.playerAimAngle) * projSpeed,
+        vz: Math.sin(this.playerAimAngle) * projSpeed,
+        radius: 0.7,
+        damage: hitResult.damage,
+        crit: hitResult.isCrit,
+        penetrateCount: this.comboStep === 3 ? 3 : 1,
+        type: 'palace_orb',
+        life: 0.9,
+        maxLife: 0.9,
+        color: '#a855f7',
+        trailTimer: 0,
+      };
+      this.projectiles.push(proj);
+
+      if (this.comboStep === 3) {
+        [-0.25, 0.25].forEach((offset) => {
+          this.projectiles.push({
+            ...proj,
+            id: Math.random(),
+            vx: Math.cos(this.playerAimAngle + offset) * projSpeed,
+            vz: Math.sin(this.playerAimAngle + offset) * projSpeed,
+          });
+        });
+      }
+
+    // WEAPON STYLE 5: GUN / REVOLVER (Rapid bullet projectile)
+    } else if (weaponType === 'gun') {
+      soundEngine.playHit(false);
+      const bulletSpeed = 28;
+      const proj: Projectile = {
+        id: Math.random(),
+        owner: 'player',
+        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
+        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
+        vx: Math.cos(this.playerAimAngle) * bulletSpeed,
+        vz: Math.sin(this.playerAimAngle) * bulletSpeed,
+        radius: 0.5,
+        damage: hitResult.damage,
+        crit: hitResult.isCrit,
+        penetrateCount: this.comboStep === 3 ? 2 : 1,
+        type: 'bullet',
+        life: 0.8,
+        maxLife: 0.8,
+        color: '#facc15',
+        trailTimer: 0,
+      };
+      this.projectiles.push(proj);
+
+    // WEAPON STYLE 6: FIST / GAUNTLETS (Martial punch combo + Ki blast on combo 3)
+    } else if (weaponType === 'fist') {
+      const lungeDist = this.comboStep === 3 ? 1.5 : 0.8;
+      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 8;
+      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 8;
+
+      soundEngine.playPunch(this.comboStep);
+      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.2;
+      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.2;
+      this.checkMeleeHits(hitX, hitZ, 1.8, hitResult.damage, this.comboStep === 3);
+      this.checkBreakableHits(hitX, hitZ, 1.8);
+
+      if (this.comboStep === 3) {
+        soundEngine.playKiBlastLaunch();
+        this.projectiles.push({
+          id: Math.random(),
+          owner: 'player',
+          x: hitX,
+          z: hitZ,
+          vx: Math.cos(this.playerAimAngle) * 20,
+          vz: Math.sin(this.playerAimAngle) * 20,
+          radius: 0.8,
+          damage: Math.round(hitResult.damage * 1.2),
+          penetrateCount: 2,
+          type: 'ki_blast',
+          life: 0.8,
+          maxLife: 0.8,
+          color: '#38bdf8',
+          trailTimer: 0,
+        });
+      }
+
+    // WEAPON STYLE 7: KATANA (Default: sharp iaido crescent slices and lunge finisher)
+    } else {
+      const lungeDist = this.comboStep === 3 ? 2.0 : 0.8;
+      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 8;
+      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 8;
+
+      soundEngine.playKatanaSlash();
+      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.3;
+      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.3;
+      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
+
+      if (this.comboStep === 3) {
+        this.arena.spawnDimensionalSlashVFX?.(hitX, hitZ, this.playerAimAngle);
+        soundEngine.playSwordSheath();
+      }
+
+      const hitRadius = this.comboStep === 3 ? 2.6 : 1.9;
+      this.checkMeleeHits(hitX, hitZ, hitRadius, hitResult.damage, this.comboStep === 3);
+      this.checkBreakableHits(hitX, hitZ, hitRadius);
+    }
+  }
+
+  public handleDash() {
+    if (this.dashCooldown > 0 || this.isDashing) return;
+
+    this.isDashing = true;
+    this.dashTimer = 0.26;
+    this.dashCooldown = this.dashMaxCooldown;
+    this.isInvulnerable = true;
+    this.invulnerableTimer = 0.35;
+    this.animState = 'dash';
+
+    const dashSpeed = 19;
+    let angle = this.playerAimAngle;
+    if (Math.abs(this.playerVx) > 0.1 || Math.abs(this.playerVz) > 0.1) {
+      angle = Math.atan2(this.playerVz, this.playerVx);
+    }
+    this.playerVx = Math.cos(angle) * dashSpeed;
+    this.playerVz = Math.sin(angle) * dashSpeed;
+
+    soundEngine.playDash();
+    this.spawnGhostTrail();
+
+    // Relic synergy: Shadow Mantle shockwave on dodge
+    const relicPerks = aggregateRelicBonuses(this.relics.map((r) => r.id));
+    if (relicPerks.hasDodgeShockwave) {
+      soundEngine.playThunderBolt();
+      this.arena.addCameraShake(0.25);
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'dead') continue;
+        const d = Math.hypot(enemy.x - this.playerX, enemy.z - this.playerZ);
+        if (d <= 3.6) {
+          this.applyStatusEffect(enemy, 'stun', 1.2);
+          this.damageEnemy(enemy, Math.round(this.playerStats.attackPower * 0.8), false, true);
+        }
+      }
+    }
+  }
+
+  public handleSkill1() {
+    const s = this.skills[0];
+    if (!s || s.currentCooldown > 0 || this.isDashing) return;
+    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
+
+    if (this.activeHeroId === 'ginzo') {
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 0.45;
+      soundEngine.playDimensionalSlash();
+      this.spawnGhostTrail();
+
+      const startX = this.playerX;
+      const startZ = this.playerZ;
+      const dashDist = 5.2;
+      this.playerX = THREE.MathUtils.clamp(
+        this.playerX + Math.cos(this.playerAimAngle) * dashDist,
+        this.arena.bounds.minX + 1,
+        this.arena.bounds.maxX - 1
+      );
+      this.playerZ = THREE.MathUtils.clamp(
+        this.playerZ + Math.sin(this.playerAimAngle) * dashDist,
+        this.arena.bounds.minZ + 1,
+        this.arena.bounds.maxZ - 1
+      );
+
+      const midX = (startX + this.playerX) / 2;
+      const midZ = (startZ + this.playerZ) / 2;
+      this.arena.spawnDimensionalSlashVFX(midX, midZ, this.playerAimAngle);
+      this.arena.addCameraShake(0.35);
+
+      this.checkMeleeHits(midX, midZ, 3.2, this.playerStats.attackPower * 3.0, true);
+      this.checkBreakableHits(midX, midZ, 3.2);
+
+      setTimeout(() => {
+        soundEngine.playSwordSheath();
+        this.spawnSlashVfx(this.playerX, this.playerZ, this.playerAimAngle);
+      }, 180);
+    } else if (this.activeHeroId === 'quan') {
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 0.55;
+      this.animState = 'attack1';
+      this.arena.spawnMartialFlurryVFX(this.playerX, this.playerZ, this.playerAimAngle);
+
+      for (let i = 0; i < 6; i++) {
+        setTimeout(() => {
+          this.playerVx = Math.cos(this.playerAimAngle) * 5;
+          this.playerVz = Math.sin(this.playerAimAngle) * 5;
+          soundEngine.playFlurryHit(i);
+
+          const hx = this.playerX + Math.cos(this.playerAimAngle) * (1.2 + i * 0.15);
+          const hz = this.playerZ + Math.sin(this.playerAimAngle) * (1.2 + i * 0.15);
+          this.spawnSlashVfx(hx, hz, this.playerAimAngle + (Math.random() - 0.5) * 0.6);
+          this.checkMeleeHits(hx, hz, 2.2, this.playerStats.attackPower * 0.75, i === 5);
+          this.checkBreakableHits(hx, hz, 2.2);
+
+          if (i === 5) {
+            this.arena.addCameraShake(0.35);
+            soundEngine.playHit(true);
+          }
+        }, i * 65);
+      }
+    } else {
+      // Katherine: Glacial Nova (applies Freeze status)
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 0.5;
+      soundEngine.playFrostFreeze();
+      this.arena.spawnFrostNovaVFX(this.playerX, this.playerZ);
+      this.arena.addCameraShake(0.35);
+
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'dead') continue;
+        const dist = Math.hypot(enemy.x - this.playerX, enemy.z - this.playerZ);
+        if (dist <= 4.5) {
+          this.applyStatusEffect(enemy, 'freeze', 2.0);
+        }
+      }
+
+      this.checkMeleeHits(this.playerX, this.playerZ, 4.2, this.playerStats.attackPower * 2.8, true);
+      this.checkBreakableHits(this.playerX, this.playerZ, 4.2);
+    }
+  }
+
+  public handleSkill2() {
+    const s = this.skills[1];
+    if (!s || s.currentCooldown > 0 || this.isDashing) return;
+    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
+
+    if (this.activeHeroId === 'ginzo') {
+      soundEngine.playDash();
+      soundEngine.playHit(true);
+      this.arena.addCameraShake(0.3);
+
+      const angles = [this.playerAimAngle - 0.28, this.playerAimAngle, this.playerAimAngle + 0.28];
+      angles.forEach((ang) => {
+        const speed = 26;
+        const proj: Projectile = {
+          id: Date.now() + Math.random(),
+          owner: 'player',
+          x: this.playerX + Math.cos(ang) * 0.8,
+          z: this.playerZ + Math.sin(ang) * 0.8,
+          vx: Math.cos(ang) * speed,
+          vz: Math.sin(ang) * speed,
+          radius: 1.4,
+          damage: this.playerStats.attackPower * 2.4,
+          crit: undefined,
+          penetrateCount: 6,
+          type: 'katana_slash',
+          life: 1.2,
+          maxLife: 1.2,
+          color: '#ffffff',
+          trailTimer: 0,
+        };
+        this.projectiles.push(proj);
+        this.arena.spawnSkillProjectileVFX(proj.x, proj.z, ang, 15.5, 0x7dd3fc, 'blade');
+      });
+    } else if (this.activeHeroId === 'quan') {
+      soundEngine.playKiBlastLaunch();
+      this.arena.addCameraShake(0.35);
+      const speed = 25;
+      const proj: Projectile = {
+        id: Date.now() + Math.random(),
+        owner: 'player',
+        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
+        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
+        vx: Math.cos(this.playerAimAngle) * speed,
+        vz: Math.sin(this.playerAimAngle) * speed,
+        radius: 1.8,
+        damage: this.playerStats.attackPower * 3.6,
+        crit: undefined,
+        penetrateCount: 12,
+        type: 'ki_blast',
+        life: 1.3,
+        maxLife: 1.3,
+        color: '#38bdf8',
+        trailTimer: 0,
+      };
+      this.projectiles.push(proj);
+      this.arena.spawnSkillProjectileVFX(proj.x, proj.z, this.playerAimAngle, 16, 0x38bdf8, 'dragon');
+    } else {
+      soundEngine.playThunderBolt();
+      this.arena.addCameraShake(0.4);
+
+      const beamDist = 12.0;
+      const endX = this.playerX + Math.cos(this.playerAimAngle) * beamDist;
+      const endZ = this.playerZ + Math.sin(this.playerAimAngle) * beamDist;
+      this.arena.spawnThunderBoltVFX(this.playerX, this.playerZ, endX, endZ);
+
+      const steps = 6;
+      for (let i = 1; i <= steps; i++) {
+        const hx = THREE.MathUtils.lerp(this.playerX, endX, i / steps);
+        const hz = THREE.MathUtils.lerp(this.playerZ, endZ, i / steps);
+        this.checkMeleeHits(hx, hz, 1.8, this.playerStats.attackPower * 3.2, true);
+        this.checkBreakableHits(hx, hz, 1.8);
+      }
+    }
+  }
+
+  public handleSkill3() {
+    const s = this.skills[2];
+    if (!s || s.currentCooldown > 0 || this.isDashing) return;
+    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
+
+    if (this.activeHeroId === 'ginzo') {
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 1.3;
+      soundEngine.playDimensionalSlash();
+      this.arena.spawnSakuraStormVFX(this.playerX, this.playerZ);
+      this.arena.addCameraShake(0.6);
+
+      for (let i = 0; i < 6; i++) {
+        setTimeout(() => {
+          this.checkMeleeHits(this.playerX, this.playerZ, 5.2, this.playerStats.attackPower * 1.3, true);
+          this.checkBreakableHits(this.playerX, this.playerZ, 5.2);
+          if (i === 5) soundEngine.playSwordSheath();
+        }, i * 110);
+      }
+    } else if (this.activeHeroId === 'quan') {
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 1.2;
+      soundEngine.playWhirlwindSpin();
+      this.arena.spawnDragonAscensionVFX(this.playerX, this.playerZ);
+      this.arena.addCameraShake(0.5);
+
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          this.enemies.forEach((e) => {
+            if (e.state === 'dead') return;
+            const dist = Math.hypot(e.x - this.playerX, e.z - this.playerZ);
+            if (dist < 6.0) {
+              e.x += (this.playerX - e.x) * 0.25;
+              e.z += (this.playerZ - e.z) * 0.25;
+            }
+          });
+          this.checkMeleeHits(this.playerX, this.playerZ, 4.5, this.playerStats.attackPower * 1.6, true);
+          this.checkBreakableHits(this.playerX, this.playerZ, 4.5);
+        }, i * 140);
+      }
+    } else {
+      this.isInvulnerable = true;
+      this.invulnerableTimer = 0.9;
+      soundEngine.playDash();
+      const targetX = this.playerX + Math.cos(this.playerAimAngle) * 4.5;
+      const targetZ = this.playerZ + Math.sin(this.playerAimAngle) * 4.5;
+      this.arena.spawnMeteorVFX(targetX, targetZ, () => {
+        soundEngine.playMeteorExplosion();
+        this.arena.addCameraShake(0.75);
+        this.checkMeleeHits(targetX, targetZ, 5.5, this.playerStats.attackPower * 4.5, true);
+        this.checkBreakableHits(targetX, targetZ, 5.5);
+      });
+    }
+  }
+
+  public triggerInteraction() {
+    if (this.currentMode === 'lobby') {
+      if (this.nearbyInteractable && this.onOpenModal) {
+        soundEngine.playCoin();
+        this.onOpenModal(this.nearbyInteractable);
+      }
+    } else if (this.currentMode === 'dungeon') {
+      if (this.isLevelRun && levelSystem.run) {
+        if (this.nearbyDungeonInteractable === 'chest') {
+          this.openChestReward();
+          return;
+        } else if (this.nearbyDungeonInteractable === 'forge') {
+          this.onOpenModal?.('forge');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'happy_merchant') {
+          this.onOpenModal?.('happy_dialogue');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'shop_item' && this.nearbyShopItemIndex !== null) {
+          soundEngine.playCoin();
+          this.onOpenModal?.('shop_item_detail');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'portal') {
+          if (levelSystem.getCurrentRoomType() === 'exit' && this.waveState === 'cleared') {
+            this.advanceLevelStage();
+          }
+          return;
+        } else if (this.nearbyDungeonInteractable === 'door_north') {
+          this.advanceLevelRoom('north');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'door_east') {
+          this.advanceLevelRoom('east');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'door_south') {
+          this.advanceLevelRoom('south');
+          return;
+        } else if (this.nearbyDungeonInteractable === 'door_west') {
+          this.advanceLevelRoom('west');
+          return;
+        }
+      }
+
+      if (this.nearbyDungeonInteractable === 'stat_device') {
+        soundEngine.playCoin();
+        this.onOpenModal?.('stat_device');
+      } else if (this.nearbyDungeonInteractable === 'equipment_merchant') {
+        soundEngine.playCoin();
+        this.onOpenModal?.('equipment_shop');
+      } else if (this.nearbyDungeonInteractable === 'healing_pool') {
+        this.useHealingPool();
+      } else if (this.nearbyDungeonInteractable === 'door_north') {
+        this.changeRoom('north');
+      } else if (this.nearbyDungeonInteractable === 'door_west') {
+        this.changeRoom('west');
+      } else if (this.nearbyDungeonInteractable === 'door_east') {
+        this.changeRoom('east');
+      } else if (this.nearbyDungeonInteractable === 'door_south') {
+        this.changeRoom('center');
+      } else if (this.nearbyDungeonInteractable === 'door_center') {
+        this.changeRoom('center');
+      } else if (this.nearbyDungeonInteractable === 'portal') {
+        this.useDungeonPortal();
+      }
+    }
+  }
+
+  public startHappyMerchantBoss() {
+    const run = levelSystem.run;
+    if (!run || levelSystem.getCurrentRoomType() !== 'shop') return;
+    const stage = run.stage;
+    const roomIndex = stage.currentRoomIndex;
+    if (stage.happyProvokedRoomIndices.includes(roomIndex)) return;
+    stage.happyProvokedRoomIndices.push(roomIndex);
+    this.arena.removeHappyVendor();
+    this.nearbyDungeonInteractable = null;
+    this.nearbyShopItemIndex = null;
+    this.waveState = 'fighting';
+    this.arena.setPortalActive(false);
+    this.spawnHappyMerchantBoss();
+    soundEngine.playBossGong();
+    this.arena.addCameraShake(0.95);
+    this.onStateChange?.();
+  }
+
+  public buyHappyShopItem(index: number) {
+    const run = levelSystem.run;
+    if (!run || levelSystem.getCurrentRoomType() !== 'shop' || run.stage.happyProvokedRoomIndices.includes(run.stage.currentRoomIndex)) return false;
+    const offers = levelSystem.getShopOffersForRoom(run.stage.currentRoomIndex);
+    const offer = offers[index];
+    if (!offer || offer.purchased) return false;
+    const equippedItem: EquipmentItem = {
+      ...offer.itemData,
+      id: `${offer.itemData.id}_${offer.id}`,
+      templateId: offer.itemData.templateId ?? offer.itemData.id,
+      cost: offer.cost,
+    };
+    if (!this.buyEquipment(equippedItem)) return false;
+    offer.purchased = true;
+    this.arena.removeHappyShopItem(index);
+    this.nearbyShopItemIndex = null;
+    this.nearbyDungeonInteractable = null;
+    soundEngine.playBuy();
+    this.onStateChange?.();
+    return true;
+  }
+
+  private spawnHappyMerchantBoss() {
+    const x = 0;
+    const z = -2.8;
+    const size = 1.55;
+    const texture = generateHappyTexture();
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(size, size * 1.22),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: 0.04, side: THREE.DoubleSide })
+    );
+    mesh.rotation.x = -0.58;
+    mesh.position.set(x, size * 1.22 / 2, z);
+    this.arena.actorsGroup.add(mesh);
+
+    const shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.55, 0.92),
+      new THREE.MeshBasicMaterial({ map: this.contactShadowTex, transparent: true, opacity: 0.72, depthWrite: false })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(x, 0.025, z);
+    this.arena.actorsGroup.add(shadow);
+
+    const hpWidth = 3.6;
+    const hpBarGroup = new THREE.Group();
+    hpBarGroup.add(new THREE.Mesh(
+      new THREE.PlaneGeometry(hpWidth, 0.3),
+      new THREE.MeshBasicMaterial({ color: 0x24101e })
+    ));
+    const hpBarFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(hpWidth, 0.3),
+      new THREE.MeshBasicMaterial({ color: 0xec4899 })
+    );
+    hpBarGroup.add(hpBarFill);
+    hpBarGroup.position.set(x, size * 1.22 + 0.55, z);
+    hpBarGroup.rotation.x = -0.58;
+    this.arena.actorsGroup.add(hpBarGroup);
+
+    const boss: EnemyActor = {
+      id: Date.now(),
+      type: 'happy',
+      x,
+      z,
+      vx: 0,
+      vz: 0,
+      maxHp: 300_000,
+      hp: 300_000,
+      speed: 3.3,
+      damage: 16,
+      state: 'chase',
+      stateTimer: 0,
+      facing: 1,
+      mesh,
+      shadowMesh: shadow,
+      hpBarGroup,
+      hpBarFill,
+      hpBarWidth: hpWidth,
+      attackCooldown: 1.4,
+      targetX: x,
+      targetZ: z,
+      animFrame: 0,
+      animTimer: 0,
+      statuses: [],
+      isBoss: true,
+      isHappyBoss: true,
+      bossName: 'แฮปปี้',
+      hasSummonedMinions: false,
+      isPhase2: false,
+      lastHitDamage: 8,
+      happyAttackCount: 0,
+      bossActionName: 'รอจังหวะสวนกลับ',
+    };
+    this.enemies.push(boss);
+    this.currentBoss = boss;
+  }
+
+  private spawnSlashVfx(x: number, z: number, angle: number) {
+    const geo = new THREE.PlaneGeometry(2.4, 2.4);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.slashTex,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const slash = new THREE.Mesh(geo, mat);
+    slash.position.set(x, 1.2, z);
+    slash.rotation.y = -angle + Math.PI / 2;
+    this.arena.vfxGroup.add(slash);
+
+    let life = 0.16;
+    const fade = () => {
+      life -= 0.03;
+      if (life > 0) {
+        slash.scale.multiplyScalar(1.08);
+        mat.opacity = life / 0.16;
+        requestAnimationFrame(fade);
+      } else {
+        this.arena.vfxGroup.remove(slash);
+        geo.dispose();
+        mat.dispose();
+      }
+    };
+    requestAnimationFrame(fade);
+  }
+
+  private spawnGhostTrail() {
+    const geo = new THREE.PlaneGeometry(2.4, 2.8);
+    const mat = new THREE.MeshBasicMaterial({
+      map: (this.heroMesh.material as THREE.MeshBasicMaterial).map,
+      transparent: true,
+      opacity: 0.6,
+      color: 0x38bdf8,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const ghost = new THREE.Mesh(geo, mat);
+    ghost.position.copy(this.heroMesh.position);
+    ghost.scale.copy(this.heroMesh.scale);
+    this.arena.vfxGroup.add(ghost);
+    this.ghostTrails.push({ mesh: ghost, opacity: 0.6 });
+  }
+
+  // ----------------------------------------------------------------------
+  // DAMAGE, COMBAT DETECTION & STATUS EFFECTS
+  // ----------------------------------------------------------------------
+  public applyStatusEffect(enemy: EnemyActor, type: StatusType, duration: number, power: number = 20) {
+    // Check if status is already present
+    const existing = enemy.statuses.find((s) => s.type === type);
+    if (existing) {
+      existing.duration = Math.max(existing.duration, duration);
+    } else {
+      enemy.statuses.push(createStatusEffect(type, duration, power));
+    }
+  }
+
+  private checkMeleeHits(x: number, z: number, radius: number, rawDamage: number, isHeavy: boolean) {
+    let hitAny = false;
+    const relicPerks = aggregateRelicBonuses(this.relics.map((r) => r.id));
+
+    for (const enemy of this.enemies) {
+      if (enemy.state === 'dead') continue;
+      const dist = Math.hypot(enemy.x - x, enemy.z - z);
+      if (dist <= radius + 0.6) {
+        hitAny = true;
+        const isCrit = Math.random() < this.playerStats.critChance;
+        const totalDamage = isCrit ? rawDamage * this.playerStats.critMultiplier : rawDamage;
+
+        // Apply Status Effects from Relics
+        if (relicPerks.hasBurnOnHit) {
+          this.applyStatusEffect(enemy, 'burn', 3.0, 15);
+        }
+        if (relicPerks.hasFreezeOnHit && isCrit) {
+          this.applyStatusEffect(enemy, 'freeze', 2.0);
+        }
+        if (relicPerks.hasVampiricCrit && isCrit) {
+          this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + 8);
+          this.spawnDamageNumber(this.playerX, 1.4, this.playerZ, 8, false, false, true); // Green heal
+        }
+
+        this.damageEnemy(enemy, totalDamage, isCrit, isHeavy);
+      }
+    }
+
+    if (hitAny) {
+      soundEngine.playHit(isHeavy);
+      this.arena.addCameraShake(isHeavy ? 0.35 : 0.15);
+      if (isHeavy) this.hitstopTimer = 0.04;
+    }
+  }
+
+  private checkBreakableHits(x: number, z: number, radius: number) {
+    for (let i = this.breakables.length - 1; i >= 0; i--) {
+      const prop = this.breakables[i];
+      const dist = Math.hypot(prop.x - x, prop.z - z);
+      if (dist <= radius + 0.8) {
+        soundEngine.playHit(true);
+
+        if (prop.id === 9001 || prop.id === 9002) {
+          const isCrit = Math.random() < this.playerStats.critChance;
+          const dmg = Math.round(
+            isCrit ? this.playerStats.attackPower * this.playerStats.critMultiplier : this.playerStats.attackPower * (1.0 + Math.random() * 0.4)
+          );
+          this.spawnDamageNumber(prop.x, 1.5, prop.z, dmg, isCrit);
+          this.arena.addCameraShake(0.16);
+
+          if (prop.mesh) {
+            prop.mesh.rotation.z = (Math.random() - 0.5) * 0.3;
+            setTimeout(() => {
+              if (prop.mesh) prop.mesh.rotation.z = 0;
+            }, 100);
+          }
+          continue;
+        }
+
+        if (prop.mesh) {
+          this.arena.breakablesGroup.remove(prop.mesh);
+        }
+        if (Math.random() > 0.4) {
+          const goldAmount = this.isLevelRun && levelSystem.run
+            ? levelSystem.getGoldPerBreakable(levelSystem.run.stage.stageId)
+            : 20 + Math.floor(Math.random() * 20);
+          this.spawnGroundItem('gold', prop.x, prop.z, goldAmount);
+        } else {
+          this.spawnGroundItem('potion', prop.x, prop.z);
+        }
+        this.breakables.splice(i, 1);
+      }
+    }
+  }
+
+  public damageEnemy(enemy: EnemyActor, amount: number, isCrit: boolean, isHeavy: boolean) {
+    if (enemy.state === 'dead') return;
+    const finalDamage = Math.max(1, Math.round(amount * this.getConditionalDamageMultiplier()));
+    const dealtDamage = Math.min(enemy.hp, finalDamage);
+    if (enemy.isHappyBoss) enemy.lastHitDamage = Math.max(1, dealtDamage);
+    enemy.hp = Math.max(0, enemy.hp - finalDamage);
+    enemy.state = 'hurt';
+    enemy.stateTimer = 0.18;
+
+    const angle = Math.atan2(enemy.z - this.playerZ, enemy.x - this.playerX);
+    const force = isHeavy ? 12 : 5;
+    enemy.vx = Math.cos(angle) * force;
+    enemy.vz = Math.sin(angle) * force;
+
+    this.spawnDamageNumber(enemy.x, 1.2, enemy.z, dealtDamage, isCrit);
+
+    this.applyEquipmentStatusOnHit(enemy);
+    if (isCrit) this.handleEquipmentCritical();
+    if (this.playerStats.lifesteal > 0 && dealtDamage > 0) {
+      const healed = dealtDamage * this.playerStats.lifesteal;
+      const priorHp = this.playerStats.hp;
+      this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + healed);
+      if (this.playerStats.hp > priorHp) {
+        this.spawnDamageNumber(this.playerX, 1.35, this.playerZ, this.playerStats.hp - priorHp, false, false, true);
+      }
+    }
+
+    const hpRatio = enemy.hp / enemy.maxHp;
+    enemy.hpBarFill.scale.x = Math.max(0.001, hpRatio);
+    enemy.hpBarFill.position.x = -(1 - hpRatio) * ((enemy.hpBarWidth ?? 1.2) / 2);
+
+    if (enemy.hp <= 0) this.handleEnemyDeath(enemy);
+  }
+
+  private handleEnemyDeath(enemy: EnemyActor) {
+    if (enemy.state === 'dead') return;
+    enemy.state = 'dead';
+    enemy.hpBarGroup.visible = false;
+    this.arena.actorsGroup.remove(enemy.hpBarGroup);
+    this.playerStats.kills++;
+    this.playerStats.comboCount++;
+    this.playerStats.comboTimer = 3.5;
+    this.triggerEquipmentKillEffects();
+
+    if (!this.isLevelRun) {
+      const goldAmount = 25 + Math.floor(Math.random() * 25);
+      this.spawnGroundItem('gold', enemy.x, enemy.z, goldAmount);
+    }
+
+    setTimeout(() => {
+      this.arena.actorsGroup.remove(enemy.mesh);
+      this.arena.actorsGroup.remove(enemy.shadowMesh);
+      this.arena.actorsGroup.remove(enemy.hpBarGroup);
+      const idx = this.enemies.indexOf(enemy);
+      if (idx !== -1) this.enemies.splice(idx, 1);
+      this.checkWaveProgress();
+    }, 180);
+  }
+
+  public damagePlayer(amount: number) {
+    if (this.isInvulnerable) return;
+
+    if (Math.random() < this.playerStats.dodgeChance) {
+      this.arena.spawnSkillBurst(this.playerX, 0.8, this.playerZ, 0x93c5fd, 10, 1.8, 0.3);
+      this.arena.addCameraShake(0.04);
+      return;
+    }
+
+    // Apply Armor & Mitigation pure rules
+    const totalReduction = Math.min(0.75, this.playerStats.damageReduction + this.temporaryDamageReduction);
+    const reducedDamage = amount * (1 - totalReduction);
+    const permanentShieldBeforeHit = Math.max(0, this.playerStats.shield - this.temporaryGuardShield);
+    const mitigation = applyArmorMitigation(reducedDamage, this.playerStats.shield, this.playerStats.hp, this.playerStats.defense);
+    const temporaryShieldSpent = Math.max(0, mitigation.shieldDamage - permanentShieldBeforeHit);
+    this.temporaryGuardShield = Math.max(0, this.temporaryGuardShield - temporaryShieldSpent);
+    this.playerStats.shield = mitigation.remainingShield;
+    this.temporaryGuardShield = Math.min(this.temporaryGuardShield, this.playerStats.shield);
+    this.playerStats.hp = mitigation.remainingHp;
+    this.shieldRechargeDelay = 2.5; // Delay before shield starts regenerating
+
+    soundEngine.playPlayerHurt();
+    this.arena.addCameraShake(0.4);
+    this.isInvulnerable = true;
+    this.invulnerableTimer = 0.5;
+    this.animState = 'hurt';
+
+    this.spawnDamageNumber(this.playerX, 1.2, this.playerZ, mitigation.shieldDamage + mitigation.healthDamage, false, true);
+    this.triggerEquipmentHitEffects();
+    this.triggerLowHealthShield();
+
+    if (this.playerStats.hp <= 0) {
+      this.animState = 'dead';
+      if (this.onGameOver) this.onGameOver(false);
+    }
+  }
+
+  public spawnDamageNumber(
+    x: number,
+    y: number,
+    z: number,
+    amount: number,
+    isCrit: boolean,
+    isPlayer: boolean = false,
+    isHeal: boolean = false
+  ) {
+    const item: DamageNumberItem = {
+      id: Math.random(),
+      text: isHeal ? `+${Math.round(amount)} HP` : `${Math.round(amount)}`,
+      x: x + (Math.random() - 0.5) * 0.4,
+      y: y + 1.2,
+      z: z + (Math.random() - 0.5) * 0.4,
+      color: isHeal ? '#22c55e' : isPlayer ? '#ef4444' : isCrit ? '#facc15' : '#ffffff',
+      scale: isCrit ? 1.4 : 1.0,
+      life: 0.75,
+      maxLife: 0.75,
+      vx: (Math.random() - 0.5) * 1.8,
+      vy: 2.8,
+      vz: (Math.random() - 0.5) * 1.8,
+      isCrit,
+    };
+    this.damageNumbers.push(item);
+  }
+
+  public spawnGroundItem(type: 'gold' | 'potion' | 'relic', x: number, z: number, amount: number = 10, relic?: RelicItem) {
+    const item: GroundItem = {
+      id: Math.random(),
+      type,
+      x,
+      z,
+      amount,
+      relic,
+      bobTimer: Math.random() * Math.PI,
+    };
+    this.groundItems.push(item);
+
+    const tex = type === 'gold' ? this.coinTex : this.potionTex;
+    const geo = new THREE.PlaneGeometry(0.9, 0.9);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.6, z);
+    (mesh as any).itemData = item;
+    this.arena.vfxGroup.add(mesh);
+  }
+
+  private checkWaveProgress() {
+    if (this.enemies.length === 0 && this.waveState === 'fighting') {
+      if (this.isLevelRun && levelSystem.run) {
+        const run = levelSystem.run;
+        const currentRoomType = levelSystem.getCurrentRoomType();
+
+        // Check if there are more waves in this combat or elite room
+        if (
+          (currentRoomType === 'combat' || currentRoomType === 'elite') &&
+          this.currentRoomWave < this.totalRoomWaves
+        ) {
+          this.currentRoomWave++;
+          soundEngine.playRoomClear();
+          setTimeout(() => {
+            this.spawnLevelCombatWave(this.currentRoomWave, currentRoomType === 'elite');
+          }, 800);
+          return;
+        }
+
+        // Room is now fully cleared!
+        this.waveState = 'cleared';
+        if (!run.stage.clearedRoomIndices.includes(run.stage.currentRoomIndex)) {
+          run.stage.clearedRoomIndices.push(run.stage.currentRoomIndex);
+        }
+        soundEngine.playRoomClear();
+        this.arena.setPortalActive(currentRoomType === 'exit');
+
+        if (currentRoomType === 'combat' || currentRoomType === 'elite') {
+          this.spawnRoomRewardChest();
+        } else if (currentRoomType === 'boss') {
+          soundEngine.playBossGong();
+          this.spawnRoomRewardChest('gold');
+        } else if (currentRoomType === 'secret' && run.stage.hasSecretBoss) {
+          run.stage.secretBossDefeated = true;
+          soundEngine.playBossGong();
+          this.spawnRoomRewardChest('themed');
+        }
+        return;
+      }
+
+      this.waveState = 'cleared';
+      soundEngine.playRoomClear();
+      this.arena.setPortalActive(true);
+
+      const mapCfg = DUNGEON_MAPS.find((m) => m.id === this.currentDungeonMap);
+      const totalWaves = mapCfg ? mapCfg.waves : 3;
+
+      if (this.currentWave < totalWaves) {
+        // Offer Roguelike Relic Choice on clearing intermediate wave!
+        const unowned = ALL_RELICS.filter((r) => !this.relics.some((owned) => owned.id === r.id));
+        const pool = unowned.length >= 3 ? unowned : ALL_RELICS;
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        this.relicChoices = shuffled.slice(0, 3);
+        if (this.onOpenModal) {
+          setTimeout(() => {
+            this.onOpenModal?.('relic_choice');
+          }, 350);
+        }
+      } else {
+        // Boss wave cleared!
+        if (this.isRandomExpedition && this.expeditionIndex < this.expeditionSequence.length - 1) {
+          // Advance to next expedition biome!
+          this.expeditionIndex++;
+          const nextBiome = this.expeditionSequence[this.expeditionIndex];
+          setTimeout(() => {
+            this.enterDungeon(nextBiome);
+          }, 1400);
+        } else {
+          // Conquered all waves / expedition!
+          setTimeout(() => {
+            if (this.onGameOver) this.onGameOver(true);
+          }, 1200);
+        }
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // 60FPS SIMULATION TICK
+  // ----------------------------------------------------------------------
+  public update(dt: number, moveX: number, moveZ: number) {
+    if (this.hitstopTimer > 0) {
+      this.hitstopTimer -= dt;
+      return;
+    }
+
+    if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    if (this.comboWindowTimer > 0) {
+      this.comboWindowTimer -= dt;
+      if (this.comboWindowTimer <= 0) {
+        this.comboStep = 0;
+        if (!this.isAttacking && !this.isDashing) this.animState = 'idle';
+      }
+    }
+
+    for (const skill of this.skills) {
+      if (skill.currentCooldown > 0) {
+        skill.currentCooldown = Math.max(0, skill.currentCooldown - dt);
+      }
+    }
+
+    if (this.temporaryAttackSpeedTimer > 0) {
+      this.temporaryAttackSpeedTimer = Math.max(0, this.temporaryAttackSpeedTimer - dt);
+      if (this.temporaryAttackSpeedTimer === 0) this.temporaryAttackSpeedBonus = 0;
+    }
+    if (this.temporaryGuardShieldTimer > 0) {
+      this.temporaryGuardShieldTimer = Math.max(0, this.temporaryGuardShieldTimer - dt);
+      if (this.temporaryGuardShieldTimer === 0) {
+        this.playerStats.shield = Math.max(0, this.playerStats.shield - this.temporaryGuardShield);
+        this.temporaryGuardShield = 0;
+      }
+    }
+    if (this.temporaryDamageReductionTimer > 0) {
+      this.temporaryDamageReductionTimer = Math.max(0, this.temporaryDamageReductionTimer - dt);
+      if (this.temporaryDamageReductionTimer === 0) this.temporaryDamageReduction = 0;
+    }
+    if (this.critSpeedTimer > 0) {
+      this.critSpeedTimer = Math.max(0, this.critSpeedTimer - dt);
+      if (this.critSpeedTimer === 0) this.critSpeedStacks = 0;
+    }
+
+    if (this.playerStats.hpRegen > 0 && this.playerStats.hp < this.playerStats.maxHp) {
+      this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + this.playerStats.hpRegen * dt);
+    }
+    this.triggerLowHealthShield();
+
+    if (this.invulnerableTimer > 0) {
+      this.invulnerableTimer -= dt;
+      if (this.invulnerableTimer <= 0) this.isInvulnerable = false;
+    }
+
+    // Shield (Armor) recharge after delay
+    if (this.shieldRechargeDelay > 0) {
+      this.shieldRechargeDelay -= dt;
+    } else if (this.playerStats.shield < this.playerStats.maxShield) {
+      this.playerStats.shield = Math.min(this.playerStats.maxShield, this.playerStats.shield + 8 * dt);
+    }
+
+    // Player movement scaled by Movement Speed stat
+    if (this.isDashing) {
+      this.dashTimer -= dt;
+      if (this.dashTimer <= 0) {
+        this.isDashing = false;
+        this.animState = 'idle';
+      }
+    } else {
+      if (this.isAttacking) {
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) this.isAttacking = false;
+      }
+
+      const targetSpeed = this.playerStats.moveSpeed;
+      if (moveX !== 0 || moveZ !== 0) {
+        const len = Math.hypot(moveX, moveZ);
+        this.playerVx = (moveX / len) * targetSpeed;
+        this.playerVz = (moveZ / len) * targetSpeed;
+        if (!this.isAttacking) this.animState = 'run';
+      } else {
+        this.playerVx *= Math.exp(-14 * dt);
+        this.playerVz *= Math.exp(-14 * dt);
+        if (!this.isAttacking && Math.abs(this.playerVx) < 0.2 && Math.abs(this.playerVz) < 0.2) {
+          this.animState = 'idle';
+        }
+      }
+    }
+
+    this.playerX += this.playerVx * dt;
+    this.playerZ += this.playerVz * dt;
+    const wallInset = this.currentMode === 'dungeon' ? 1.0 : 0;
+    this.playerX = THREE.MathUtils.clamp(this.playerX, this.arena.bounds.minX + wallInset, this.arena.bounds.maxX - wallInset);
+    this.playerZ = THREE.MathUtils.clamp(this.playerZ, this.arena.bounds.minZ + wallInset, this.arena.bounds.maxZ - wallInset);
+
+    this.heroMesh.position.set(this.playerX, 1.4, this.playerZ);
+    this.heroMesh.rotation.x = -0.58;
+    this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
+    this.heroMesh.scale.x = Math.abs(this.heroMesh.scale.x) * this.playerFacing;
+
+    // Animation frame cycling
+    this.animTimer += dt;
+    if (this.animTimer > 0.12) {
+      this.animTimer = 0;
+      this.animFrame = (this.animFrame + 1) % 4;
+      this.updateHeroTexture();
+    }
+
+    // Ghost trails update
+    for (let i = this.ghostTrails.length - 1; i >= 0; i--) {
+      const g = this.ghostTrails[i];
+      g.opacity -= dt * 2.5;
+      if (g.opacity <= 0) {
+        this.arena.vfxGroup.remove(g.mesh);
+        this.ghostTrails.splice(i, 1);
+      } else {
+        (g.mesh.material as THREE.MeshBasicMaterial).opacity = g.opacity;
+      }
+    }
+
+    this.updateProjectiles(dt);
+    this.updateDamageNumbers(dt);
+
+    if (this.currentMode === 'lobby') {
+      this.checkLobbyInteractions();
+    } else {
+      this.updateEnemies(dt);
+      this.updateGroundItems(dt);
+      this.checkDungeonInteractions();
+      this.checkDungeonPortal();
+    }
+
+    if (this.onStateChange) this.onStateChange();
+  }
+
+  private checkLobbyInteractions() {
+    let nextInteract: 'trainer' | 'gate' | null = null;
+
+    const distTrainer = Math.hypot(this.playerX - 8, this.playerZ + 4);
+    if (distTrainer < 3.2) nextInteract = 'trainer';
+
+    const distGate = Math.hypot(this.playerX - 0, this.playerZ - (-7.2));
+    const inGateThreshold = Math.abs(this.playerX) <= 2.8 && this.playerZ <= -5.5;
+
+    if (distGate < 3.4 || inGateThreshold) nextInteract = 'gate';
+
+    this.nearbyInteractable = nextInteract;
+  }
+
+  private checkDungeonInteractions() {
+    let nextInteract: DungeonInteractableType | null = null;
+
+    if (this.isLevelRun && levelSystem.run) {
+      const stage = levelSystem.run.stage;
+      const roomType = levelSystem.getCurrentRoomType();
+
+      // Check Chest interaction
+      const chestState = this.getCurrentLevelChestState();
+      const chestRoomCleared = ['combat', 'elite', 'boss', 'secret'].includes(roomType) && this.waveState === 'cleared';
+      const chestIsAvailable = roomType === 'chest' || chestRoomCleared;
+      if (chestIsAvailable && chestState && !chestState.opened) {
+        const distChest = Math.hypot(this.playerX - 0, this.playerZ - (-1.5));
+        if (distChest < 3.2) {
+          this.nearbyDungeonInteractable = 'chest';
+          return;
+        }
+      }
+
+      // Check Forge interaction
+      if (roomType === 'forge') {
+        const distForge = Math.hypot(this.playerX - 0, this.playerZ - (-1.5));
+        if (distForge < 3.2) {
+          this.nearbyDungeonInteractable = 'forge';
+          return;
+        }
+      }
+
+      // Check Stage Shop interaction
+      if (roomType === 'shop') {
+        this.nearbyShopItemIndex = null;
+        const happyWasProvoked = stage.happyProvokedRoomIndices.includes(stage.currentRoomIndex);
+        if (!happyWasProvoked && this.waveState !== 'fighting') {
+          const distHappy = Math.hypot(this.playerX, this.playerZ - (-5.4));
+          if (distHappy < 2.7) {
+            this.nearbyDungeonInteractable = 'happy_merchant';
+            return;
+          }
+          const offers = levelSystem.getShopOffersForRoom(stage.currentRoomIndex);
+          const standXs = [-7, 0, 7];
+          let closestItemIndex: number | null = null;
+          let closestItemDistance = 2.0;
+          for (let index = 0; index < offers.length && index < standXs.length; index++) {
+            const offer = offers[index];
+            if (offer.purchased) continue;
+            const distance = Math.hypot(this.playerX - standXs[index], this.playerZ - (-0.2));
+            if (distance < closestItemDistance) {
+              closestItemIndex = index;
+              closestItemDistance = distance;
+            }
+          }
+          if (closestItemIndex !== null) {
+            this.nearbyShopItemIndex = closestItemIndex;
+            this.nearbyDungeonInteractable = 'shop_item';
+            return;
+          }
+        }
+      }
+
+      // The final room's gate is an E-only interaction that begins the next floor.
+      if (roomType === 'exit' && this.waveState === 'cleared' && this.arena.isPortalActive) {
+        const distGate = Math.hypot(this.playerX, this.playerZ - (-2.8));
+        if (distGate < 3.4) {
+          this.nearbyDungeonInteractable = 'portal';
+          return;
+        }
+      }
+
+      // Room routes are entered only by pressing E while standing beside a connected door.
+      if (this.waveState === 'cleared') {
+        const node = stage.roomGraph[stage.currentRoomIndex];
+        const doors: Array<{ direction: RoomDirection; interactable: DungeonInteractableType; x: number; z: number }> = [
+          { direction: 'north', interactable: 'door_north', x: 0, z: this.arena.bounds.minZ },
+          { direction: 'west', interactable: 'door_west', x: this.arena.bounds.minX, z: 0 },
+          { direction: 'east', interactable: 'door_east', x: this.arena.bounds.maxX, z: 0 },
+          { direction: 'south', interactable: 'door_south', x: 0, z: this.arena.bounds.maxZ },
+        ];
+        let closestDoor: { interactable: DungeonInteractableType; distance: number } | null = null;
+        for (const door of doors) {
+          if (node?.connections[door.direction] === undefined) continue;
+          const distance = Math.hypot(this.playerX - door.x, this.playerZ - door.z);
+          if (distance < 2.7 && (!closestDoor || distance < closestDoor.distance)) {
+            closestDoor = { interactable: door.interactable, distance };
+          }
+        }
+        if (closestDoor) {
+          this.nearbyDungeonInteractable = closestDoor.interactable;
+          return;
+        }
+      }
+
+      this.nearbyDungeonInteractable = null;
+      return;
+    }
+
+    if (this.currentRoom === 'center') {
+      // North door (to stat upgrade device room)
+      const distNorth = Math.hypot(this.playerX - 0, this.playerZ - (-8.8));
+      if (distNorth < 2.8 || (this.playerZ <= -8.2 && Math.abs(this.playerX) <= 3.2)) {
+        nextInteract = 'door_north';
+      }
+
+      // West door (to equipment merchant room)
+      const distWest = Math.hypot(this.playerX - (-15.5), this.playerZ - 0);
+      if (distWest < 2.8 || (this.playerX <= -14.6 && Math.abs(this.playerZ) <= 3.2)) {
+        nextInteract = 'door_west';
+      }
+
+      // East door (to healing pool & treasure room)
+      const distEast = Math.hypot(this.playerX - 15.5, this.playerZ - 0);
+      if (distEast < 2.8 || (this.playerX >= 14.6 && Math.abs(this.playerZ) <= 3.2)) {
+        nextInteract = 'door_east';
+      }
+    } else if (this.currentRoom === 'north') {
+      // Stat device pedestal at (0, -1.5)
+      const distDevice = Math.hypot(this.playerX - 0, this.playerZ - (-1.5));
+      if (distDevice < 3.2) {
+        nextInteract = 'stat_device';
+      }
+
+      // South door back to center at (0, 7.0)
+      const distSouth = Math.hypot(this.playerX - 0, this.playerZ - 6.6);
+      if (distSouth < 2.8 || (this.playerZ >= 6.0 && Math.abs(this.playerX) <= 3.0)) {
+        nextInteract = 'door_center';
+      }
+    } else if (this.currentRoom === 'west') {
+      // Equipment merchant pedestal at (0, -1.5)
+      const distMerchant = Math.hypot(this.playerX - 0, this.playerZ - (-1.5));
+      if (distMerchant < 3.2) {
+        nextInteract = 'equipment_merchant';
+      }
+
+      // East door back to center at (12.5, 0)
+      const distEast = Math.hypot(this.playerX - 11.8, this.playerZ - 0);
+      if (distEast < 2.8 || (this.playerX >= 11.0 && Math.abs(this.playerZ) <= 3.0)) {
+        nextInteract = 'door_center';
+      }
+    } else if (this.currentRoom === 'east') {
+      // Healing pool at (0, -1.5)
+      const distPool = Math.hypot(this.playerX - 0, this.playerZ - (-1.5));
+      if (distPool < 3.2) {
+        nextInteract = 'healing_pool';
+      }
+
+      // West door back to center at (-12.5, 0)
+      const distWest = Math.hypot(this.playerX - (-11.8), this.playerZ - 0);
+      if (distWest < 2.8 || (this.playerX <= -11.0 && Math.abs(this.playerZ) <= 3.0)) {
+        nextInteract = 'door_center';
+      }
+    }
+
+    this.nearbyDungeonInteractable = nextInteract;
+  }
+
+  private checkDungeonPortal() {
+    if (this.waveState === 'cleared' && this.arena.isPortalActive) {
+      const portalZ = this.isLevelRun ? -2.8 : -7.2;
+      const dist = Math.hypot(this.playerX, this.playerZ - portalZ);
+      if (dist < 3.4) this.nearbyDungeonInteractable = 'portal';
+    }
+  }
+
+  private useDungeonPortal() {
+    if (this.isLevelRun && levelSystem.run) {
+      if (levelSystem.getCurrentRoomType() === 'exit' && this.waveState === 'cleared') this.advanceLevelStage();
+      return;
+    }
+    if (this.waveState !== 'cleared' || !this.arena.isPortalActive) return;
+    const mapCfg = DUNGEON_MAPS.find((map) => map.id === this.currentDungeonMap);
+    const totalWaves = mapCfg ? mapCfg.waves : 3;
+    if (this.currentWave < totalWaves) {
+      this.playerX = 0;
+      this.playerZ = 5.5;
+      this.spawnDungeonWave(this.currentWave + 1);
+      soundEngine.playRoomClear();
+    } else if (this.onGameOver) {
+      this.onGameOver(true);
+    }
+  }
+
+  private getEnemySkillColor(type: string) {
+    if (/(ice|snow|frost)/i.test(type)) return 0x38bdf8;
+    if (/(fire|lava|forge|goblin)/i.test(type)) return 0xf97316;
+    if (/(ghost|shadow|crypt|blood|undead)/i.test(type)) return 0xa855f7;
+    if (/(sky|wind|archer|bird|wisp|angel)/i.test(type)) return 0x22d3ee;
+    return 0xef4444;
+  }
+
+  private beginEnemySkill(enemy: EnemyActor) {
+    const ranged = /(archer|mage|priest|wisp|ghost|genie|assassin|inquisitor|frost|shadow|angel|bird|shooter)/i.test(enemy.type);
+    enemy.skillKind = ranged ? 'bolt' : 'slam';
+    enemy.skillColor = this.getEnemySkillColor(enemy.type);
+    enemy.skillTargetX = this.playerX;
+    enemy.skillTargetZ = this.playerZ;
+    enemy.state = 'skill_windup';
+    enemy.stateTimer = 0.78;
+    enemy.bossActionName = ranged ? 'ร่ายกระสุนอาคม' : 'กระแทกพื้น';
+    if (ranged) {
+      this.arena.showDashTelegraph(enemy.x, enemy.z, enemy.skillTargetX, enemy.skillTargetZ, enemy.stateTimer, enemy.skillColor);
+    } else {
+      this.arena.showEnemySkillTelegraph(enemy.skillTargetX, enemy.skillTargetZ, 2.7, enemy.stateTimer, enemy.skillColor);
+    }
+    soundEngine.playTelegraph();
+  }
+
+  private resolveEnemySkill(enemy: EnemyActor) {
+    const targetX = enemy.skillTargetX ?? this.playerX;
+    const targetZ = enemy.skillTargetZ ?? this.playerZ;
+    const color = enemy.skillColor ?? 0xef4444;
+    let hitsPlayer = false;
+    if (enemy.skillKind === 'bolt') {
+      const dx = targetX - enemy.x;
+      const dz = targetZ - enemy.z;
+      const lengthSq = dx * dx + dz * dz;
+      const t = lengthSq > 0 ? THREE.MathUtils.clamp(((this.playerX - enemy.x) * dx + (this.playerZ - enemy.z) * dz) / lengthSq, 0, 1) : 0;
+      const nearestX = enemy.x + dx * t;
+      const nearestZ = enemy.z + dz * t;
+      hitsPlayer = Math.hypot(this.playerX - nearestX, this.playerZ - nearestZ) <= 1.35;
+      this.arena.spawnEnemySkillBurst(targetX, targetZ, color);
+    } else {
+      hitsPlayer = Math.hypot(this.playerX - targetX, this.playerZ - targetZ) <= 2.35;
+      this.arena.spawnEnemySkillBurst(targetX, targetZ, color);
+    }
+    if (hitsPlayer && !this.isDashing && !this.isInvulnerable) {
+      this.damagePlayer(Math.max(1, Math.round(enemy.damage * 1.15)));
+      this.arena.addCameraShake(0.22);
+    }
+    enemy.skillCooldown = 4.5 + Math.random() * 2.2;
+    enemy.state = 'attack';
+    enemy.stateTimer = 0.34;
+  }
+
+  private keepEnemyInsideArena(enemy: EnemyActor) {
+    const inset = enemy.isBoss ? 1.9 : 1.25;
+    const x = THREE.MathUtils.clamp(enemy.x, this.arena.bounds.minX + inset, this.arena.bounds.maxX - inset);
+    const z = THREE.MathUtils.clamp(enemy.z, this.arena.bounds.minZ + inset, this.arena.bounds.maxZ - inset);
+    if (x !== enemy.x) enemy.vx = 0;
+    if (z !== enemy.z) enemy.vz = 0;
+    enemy.x = x;
+    enemy.z = z;
+  }
+
+  private updateEnemies(dt: number) {
+    let closestEnemy: EnemyActor | null = null;
+    let closestDist = 12.0;
+
+    for (const enemy of this.enemies) {
+      if (enemy.state === 'dead') continue;
+
+      // Status effects tick
+      const statusResult = tickStatuses(enemy.statuses, dt);
+      enemy.statuses = statusResult.remainingStatuses;
+      if (!enemy.isBoss) enemy.skillCooldown = Math.max(0, (enemy.skillCooldown ?? 0) - dt);
+
+      if (statusResult.totalTickDamage > 0) {
+        enemy.hp = Math.max(0, enemy.hp - statusResult.totalTickDamage);
+        this.spawnDamageNumber(enemy.x, 1.2, enemy.z, statusResult.totalTickDamage, false);
+        const hpRatio = enemy.hp / enemy.maxHp;
+        enemy.hpBarFill.scale.x = Math.max(0.001, hpRatio);
+        enemy.hpBarFill.position.x = -(1 - hpRatio) * ((enemy.hpBarWidth ?? 1.2) / 2);
+        if (enemy.hp <= 0) {
+          this.handleEnemyDeath(enemy);
+          continue;
+        }
+      }
+
+      // Visual color tint based on status
+      const meshMat = enemy.mesh.material as THREE.MeshBasicMaterial;
+      if (enemy.statuses.some((s) => s.type === 'freeze')) {
+        meshMat.color.setHex(0x38bdf8); // Ice Cyan
+      } else if (enemy.statuses.some((s) => s.type === 'burn')) {
+        meshMat.color.setHex(0xf97316); // Flaming Orange
+      } else if (enemy.statuses.some((s) => s.type === 'poison')) {
+        meshMat.color.setHex(0x22c55e); // Toxic Green
+      } else if (enemy.statuses.some((s) => s.type === 'bleed')) {
+        meshMat.color.setHex(0xef4444); // Bleeding crimson
+      } else if (enemy.statuses.some((s) => s.type === 'shock')) {
+        meshMat.color.setHex(0xfde047); // Shock yellow
+      } else if (enemy.statuses.some((s) => s.type === 'stun')) {
+        meshMat.color.setHex(0xfacc15); // Stun Gold
+      } else if (enemy.state === 'skill_windup') {
+        meshMat.color.setHex(enemy.skillColor ?? 0xef4444);
+      } else {
+        meshMat.color.setHex(0xffffff);
+      }
+
+      enemy.x += enemy.vx * dt;
+      enemy.z += enemy.vz * dt;
+      enemy.vx *= Math.exp(-8 * dt);
+      enemy.vz *= Math.exp(-8 * dt);
+      this.keepEnemyInsideArena(enemy);
+
+      enemy.facing = this.playerX >= enemy.x ? 1 : -1;
+      enemy.mesh.scale.x = Math.abs(enemy.mesh.scale.x) * enemy.facing;
+
+      const dist = Math.hypot(this.playerX - enemy.x, this.playerZ - enemy.z);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestEnemy = enemy;
+      }
+
+      // AI Logic: skipped if immobilized by Freeze or Stun!
+      if (!statusResult.isImmobilized) {
+        const effectiveSpeed = enemy.speed * statusResult.speedMultiplier;
+
+        // BOSS MECHANICS: 50% HP Minions & 30% HP Phase 2
+        if (enemy.isBoss) {
+          // ท่าเรียกลูกสมุน: เรียก 2-3 ตัวเมื่อเลือดเหลือ 50%
+          if (enemy.hp <= enemy.maxHp * 0.5 && !enemy.hasSummonedMinions) {
+            enemy.hasSummonedMinions = true;
+            if (enemy.isHappyBoss) this.bossExecuteHappyCoinRain(enemy);
+            else this.bossSummonMinions(enemy);
+          }
+
+          // เฟส 2 (เลือด 30%): ความเร็วเพิ่ม 25% ใช้ท่า 1-2 ต่อกัน
+          if (enemy.hp <= enemy.maxHp * 0.3 && !enemy.isPhase2) {
+            enemy.isPhase2 = true;
+            enemy.speed = Number((enemy.speed * 1.25).toFixed(2));
+            soundEngine.playBossGong();
+            this.arena.addCameraShake(0.75);
+            this.spawnDamageNumber(enemy.x, 2.0, enemy.z, 0, false, false, false);
+          }
+        }
+
+        if (enemy.state === 'chase') {
+          const preferredDist = enemy.isBoss ? 2.8 : (enemy.type.includes('genie') || enemy.type.includes('wisp') ? 2.2 : 1.4);
+          if (!enemy.isBoss && enemy.skillCooldown === 0 && dist <= 9.5) {
+            this.beginEnemySkill(enemy);
+          } else {
+            if (dist > preferredDist) {
+              const angle = Math.atan2(this.playerZ - enemy.z, this.playerX - enemy.x);
+              enemy.x += Math.cos(angle) * effectiveSpeed * dt;
+              enemy.z += Math.sin(angle) * effectiveSpeed * dt;
+            }
+
+            enemy.attackCooldown -= dt;
+            if (enemy.attackCooldown <= 0) {
+              if (enemy.isBoss) {
+                if (enemy.isHappyBoss) {
+                  enemy.happyAttackCount = (enemy.happyAttackCount ?? 0) + 1;
+                  const attackIndex = (enemy.happyAttackCount - 1) % 4;
+                  if (attackIndex === 0) this.bossExecuteHappyWave(enemy);
+                  else if (attackIndex === 1) {
+                    enemy.bossActionName = 'พุ่งรองเท้าแตะ';
+                    this.bossExecuteDash(enemy);
+                  } else if (attackIndex === 2) this.bossExecuteHappyCoinRain(enemy);
+                  else {
+                    enemy.bossActionName = 'ตบกลับสองเท่า';
+                    this.bossExecuteSmash(enemy);
+                  }
+                  if (enemy.isPhase2) {
+                    enemy.attackCooldown = 0.75;
+                  }
+                  continue;
+                }
+                // Boss attack selection: Melee Smash vs Half-screen Dash
+                if (dist <= 4.0 || (enemy.isPhase2 && Math.random() < 0.5)) {
+                  this.bossExecuteSmash(enemy);
+                } else {
+                  this.bossExecuteDash(enemy);
+                }
+              } else if (dist <= 2.8) {
+                enemy.state = 'windup';
+                enemy.stateTimer = 0.45;
+                soundEngine.playTelegraph();
+              }
+            }
+          }
+        } else if (enemy.state === 'windup') {
+          enemy.stateTimer -= dt;
+          if (enemy.stateTimer <= 0) {
+            if (enemy.isBoss) {
+              if (enemy.bossAttackType === 'smash') {
+                // ท่าฟาด: เล็งระยะใกล้ มีสัญญาณเตือน 0.6 วินาที
+                enemy.state = 'attack';
+                enemy.stateTimer = 0.3;
+                soundEngine.playKiExplosion();
+                this.arena.addCameraShake(0.55);
+                if (dist <= 3.8 && !this.isDashing && !this.isInvulnerable) {
+                  this.damagePlayer(enemy.isHappyBoss ? this.getHappyCounterDamage(enemy) : Math.round(enemy.damage * 1.4));
+                }
+                // เฟส 2: ใช้ท่า 1-2 ต่อกัน (Melee Slam immediately chains into Dash!)
+                if (enemy.isPhase2) {
+                  setTimeout(() => {
+                    if (enemy.state !== 'dead') {
+                      this.bossExecuteDash(enemy);
+                    }
+                  }, 320);
+                }
+              } else if (enemy.bossAttackType === 'dash') {
+                // ท่าพุ่ง/ยิงไกล: ข้ามฉากครึ่งหนึ่ง ต้องกระโดด/แดชหลบ
+                enemy.state = 'attack';
+                enemy.stateTimer = 0.35;
+                soundEngine.playDash();
+                const dashAng = Math.atan2(enemy.targetZ - enemy.z, enemy.targetX - enemy.x);
+                enemy.vx = Math.cos(dashAng) * 22.0;
+                enemy.vz = Math.sin(dashAng) * 22.0;
+
+                // Deal damage if player is within charge radius and not dashing/invulnerable
+                if (dist <= 3.2 && !this.isDashing && !this.isInvulnerable) {
+                  this.damagePlayer(enemy.isHappyBoss ? this.getHappyCounterDamage(enemy) : enemy.damage);
+                }
+
+                // เฟส 2: ใช้ท่า 1-2 ต่อกัน (Dash chains into Melee Slam!)
+                if (enemy.isPhase2 && Math.random() > 0.4) {
+                  setTimeout(() => {
+                    if (enemy.state !== 'dead') {
+                      this.bossExecuteSmash(enemy);
+                    }
+                  }, 380);
+                }
+              } else if (enemy.bossAttackType === 'happy_wave') {
+                enemy.state = 'attack';
+                enemy.stateTimer = 0.35;
+                this.arena.addCameraShake(0.4);
+                this.arena.spawnHappyCoinBurst(enemy.targetX, enemy.targetZ);
+                const targetDist = Math.hypot(this.playerX - enemy.targetX, this.playerZ - enemy.targetZ);
+                if (targetDist <= 4.1 && !this.isDashing && !this.isInvulnerable) {
+                  this.damagePlayer(this.getHappyCounterDamage(enemy));
+                }
+                if (enemy.isPhase2) {
+                  setTimeout(() => {
+                    if (enemy.state !== 'dead') this.bossExecuteDash(enemy);
+                  }, 300);
+                }
+              } else if (enemy.bossAttackType === 'happy_coin_rain') {
+                enemy.state = 'attack';
+                enemy.stateTimer = 0.45;
+                let caught = false;
+                for (const point of enemy.happyTelegraphPoints ?? []) {
+                  this.arena.spawnHappyCoinBurst(point.x, point.z);
+                  if (!caught && Math.hypot(this.playerX - point.x, this.playerZ - point.z) <= 1.5) caught = true;
+                }
+                if (caught && !this.isDashing && !this.isInvulnerable) {
+                  this.damagePlayer(this.getHappyCounterDamage(enemy));
+                }
+                if (enemy.isPhase2) {
+                  setTimeout(() => {
+                    if (enemy.state !== 'dead') this.bossExecuteHappyWave(enemy);
+                  }, 300);
+                }
+              }
+            } else {
+              enemy.state = 'attack';
+              enemy.stateTimer = 0.25;
+              if (dist <= 2.4) this.damagePlayer(enemy.damage);
+            }
+          }
+        } else if (enemy.state === 'skill_windup') {
+          enemy.stateTimer -= dt;
+          if (enemy.stateTimer <= 0) this.resolveEnemySkill(enemy);
+        } else if (enemy.state === 'attack') {
+          enemy.stateTimer -= dt;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = 'chase';
+            enemy.attackCooldown = enemy.isBoss
+              ? (enemy.isPhase2 ? 0.9 + Math.random() * 0.6 : 1.5 + Math.random() * 0.8)
+              : 1.2 + Math.random();
+          }
+        } else if (enemy.state === 'hurt') {
+          enemy.stateTimer -= dt;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = 'chase';
+          }
+        }
+      }
+
+      this.keepEnemyInsideArena(enemy);
+      enemy.mesh.position.set(enemy.x, (enemy.mesh.geometry as THREE.PlaneGeometry).parameters.height / 2, enemy.z);
+      enemy.mesh.rotation.x = -0.58;
+      enemy.shadowMesh.position.set(enemy.x, 0.02, enemy.z);
+      enemy.hpBarGroup.position.set(enemy.x, (enemy.mesh.geometry as THREE.PlaneGeometry).parameters.height + 0.3, enemy.z);
+      enemy.hpBarGroup.rotation.x = -0.58;
+    }
+
+    this.lockedTarget = closestEnemy;
+  }
+
+  private updateProjectiles(dt: number) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.z += p.vz * dt;
+
+      if (p.owner === 'player') {
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dist = Math.hypot(enemy.x - p.x, enemy.z - p.z);
+          if (dist <= p.radius + 0.6) {
+            const isCrit = p.crit ?? Math.random() < this.playerStats.critChance;
+            const damage = p.crit === undefined && isCrit ? p.damage * this.playerStats.critMultiplier : p.damage;
+            this.damageEnemy(enemy, damage, isCrit, true);
+            p.penetrateCount--;
+            soundEngine.playKiExplosion();
+            this.arena.addCameraShake(0.3);
+            if (p.penetrateCount <= 0) {
+              p.life = 0;
+              break;
+            }
+          }
+        }
+      }
+      if (p.life <= 0) this.projectiles.splice(i, 1);
+    }
+  }
+
+  private updateDamageNumbers(dt: number) {
+    for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+      const d = this.damageNumbers[i];
+      d.life -= dt;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.z += d.vz * dt;
+      d.vy -= 4.0 * dt;
+      if (d.life <= 0) this.damageNumbers.splice(i, 1);
+    }
+  }
+
+  private updateGroundItems(dt: number) {
+    for (let i = this.groundItems.length - 1; i >= 0; i--) {
+      const item = this.groundItems[i];
+      item.bobTimer += dt * 3;
+      const dist = Math.hypot(this.playerX - item.x, this.playerZ - item.z);
+      if (dist <= 1.4) {
+        if (item.type === 'gold') {
+          this.playerStats.gold += this.getCoinAmount(item.amount || 20);
+          soundEngine.playCoin();
+        } else if (item.type === 'potion') {
+          this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + 40);
+          soundEngine.playPotion();
+        }
+        const meshIdx = this.arena.vfxGroup.children.findIndex((c) => (c as any).itemData === item);
+        if (meshIdx !== -1) {
+          this.arena.vfxGroup.remove(this.arena.vfxGroup.children[meshIdx]);
+        }
+        this.groundItems.splice(i, 1);
+      }
+    }
+  }
+}

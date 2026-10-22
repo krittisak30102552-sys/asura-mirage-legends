@@ -1,0 +1,43 @@
+{
+  "run": {
+    "stagesPerRun": 20,
+    "roomsPerStage": 6,
+    "hpMultiplierPerStage": 0.065
+  },
+  "theme": {
+    "id": "test_dungeon",
+    "name": "Test Dungeon",
+    "nameTh": "ดันเจี้ยนทดสอบ",
+    "descriptionTh": "ดันเจี้ยนหินใต้ดิน เส้นทางและห้องสุ่มใหม่ทุกครั้ง"
+  },
+  "roomWeights": [
+    { "type": "combat", "weight": 48 },
+    { "type": "elite", "weight": 12 },
+    { "type": "shop", "weight": 20 },
+    { "type": "chest", "weight": 14 },
+    { "type": "boss", "weight": 6 }
+  ],
+  "shop": {
+    "items": 3,
+    "rerollBaseCost": 20,
+    "rerollStep": 10
+  },
+  "chests": {
+    "white": 0.6,
+    "blue": 0.3,
+    "gold": 0.1,
+    "pityAfter": 3,
+    "pityBonus": 0.15
+  },
+  "economy": {
+    "coinsPerEnemy": { "min": 3, "max": 6 },
+    "coinsPerBreakable": { "min": 1, "max": 3 },
+    "enemyCountByDifficulty": {
+      "easy": { "min": 5, "max": 6 },
+      "normal": { "min": 6, "max": 7 },
+      "hard": { "min": 7, "max": 8 },
+      "impossible": { "min": 8, "max": 10 }
+    },
+    "enemyCountIncreaseEveryStages": 5
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Asura Mirage: Legends",
+  "description": "An action-packed 2.5D pixel-art roguelike dungeon crawler featuring dynamic combo combat, weapons, gear inventory, and elemental relics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
