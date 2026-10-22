@@ -78,6 +78,8 @@ export default function App() {
   const [isHappyDialogueOpen, setIsHappyDialogueOpen] = useState<boolean>(false);
   const [isForgeOpen, setIsForgeOpen] = useState<boolean>(false);
   const [isChestRewardOpen, setIsChestRewardOpen] = useState<boolean>(false);
+  const [bossIntroName, setBossIntroName] = useState<string | null>(null);
+  const bossIntroTimeoutRef = useRef<number | null>(null);
   const [pendingShopPurchase, setPendingShopPurchase] = useState<{ offer: ShopOfferItem; index: number } | null>(null);
   const [levelTick, setLevelTick] = useState<number>(0);
   const [relicChoices, setRelicChoices] = useState<RelicItem[]>([]);
@@ -129,6 +131,7 @@ export default function App() {
 
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [dashCooldown, setDashCooldown] = useState<number>(0);
+  const [mirageRendCooldown, setMirageRendCooldown] = useState<number>(0);
   const [comboStep, setComboStep] = useState<number>(0);
   const [currentWave, setCurrentWave] = useState<number>(1);
   const [currentDungeonMap, setCurrentDungeonMap] = useState<DungeonMapId>('desert');
@@ -255,6 +258,64 @@ export default function App() {
       }
     }
 
+    // Render the combat.ts Canvas2D effects in the same projected ground plane as the 3D arena.
+    const projectGround = (x: number, z: number) => {
+      _v.set(x, 0.04, z);
+      _v.project(arena.camera);
+      return { x: (_v.x * halfW) + halfW, y: (-_v.y * halfH) + halfH };
+    };
+    const center = projectGround(engine.playerX, engine.playerZ);
+    const xAxis = projectGround(engine.playerX + 1, engine.playerZ);
+    const zAxis = projectGround(engine.playerX, engine.playerZ + 1);
+    const a = (xAxis.x - center.x) / 32;
+    const b = (xAxis.y - center.y) / 32;
+    const c = (zAxis.x - center.x) / 32;
+    const d = (zAxis.y - center.y) / 32;
+    ctx.save();
+    ctx.setTransform(
+      a, b, c, d,
+      center.x - a * engine.playerX * 32 - c * engine.playerZ * 32,
+      center.y - b * engine.playerX * 32 - d * engine.playerZ * 32,
+    );
+    const shake = engine.playerCombat.fx.shakeOffset();
+    ctx.translate(shake.x, shake.y);
+    engine.playerCombat.fx.draw(ctx, (ghostCtx, x, y, facing, alpha) => {
+      ghostCtx.save();
+      ghostCtx.translate(x, y);
+      ghostCtx.scale(facing, 1);
+      ghostCtx.globalAlpha = alpha;
+      ghostCtx.shadowColor = '#7fe3ff';
+      ghostCtx.shadowBlur = 10;
+      ghostCtx.fillStyle = 'rgba(70, 196, 255, 0.5)';
+      ghostCtx.strokeStyle = 'rgba(220, 250, 255, 0.9)';
+      ghostCtx.lineWidth = 2;
+      ghostCtx.beginPath();
+      ghostCtx.ellipse(0, -21, 6, 7, 0, 0, Math.PI * 2);
+      ghostCtx.fill();
+      ghostCtx.stroke();
+      ghostCtx.beginPath();
+      ghostCtx.moveTo(-7, -13);
+      ghostCtx.lineTo(-10, 3);
+      ghostCtx.lineTo(-5, 4);
+      ghostCtx.lineTo(0, -2);
+      ghostCtx.lineTo(5, 4);
+      ghostCtx.lineTo(10, 3);
+      ghostCtx.lineTo(7, -13);
+      ghostCtx.closePath();
+      ghostCtx.fill();
+      ghostCtx.stroke();
+      ghostCtx.beginPath();
+      ghostCtx.moveTo(-5, 3);
+      ghostCtx.lineTo(-8, 13);
+      ghostCtx.moveTo(5, 3);
+      ghostCtx.lineTo(8, 13);
+      ghostCtx.moveTo(6, -10);
+      ghostCtx.lineTo(19, -20);
+      ghostCtx.stroke();
+      ghostCtx.restore();
+    });
+    ctx.restore();
+
     // 3. Floating Overhead NPC / Door Speech Bubble (Right over NPC's head)
     let promptTarget: { x: number; y: number; z: number; title: string; action: string; color: string } | null = null;
 
@@ -375,6 +436,7 @@ export default function App() {
     setActiveHeroId(engine.activeHeroId);
     setPlayerStats({ ...engine.playerStats });
     setSkills([...engine.skills]);
+    setMirageRendCooldown(engine.mirageRendCooldown);
     setCurrentDungeonMap(engine.currentDungeonMap);
 
     // Engine callbacks
@@ -388,6 +450,7 @@ export default function App() {
         setPlayerStats({ ...engine.playerStats });
         setSkills([...engine.skills]);
         setDashCooldown(engine.dashCooldown);
+        setMirageRendCooldown(engine.mirageRendCooldown);
         setComboStep(engine.comboStep);
         setCurrentWave(engine.currentWave);
         setCurrentDungeonMap(engine.currentDungeonMap);
@@ -415,6 +478,15 @@ export default function App() {
     engine.onGameOver = (won: boolean) => {
       setGameMode(won ? 'victory' : 'gameover');
       gameModeRef.current = won ? 'victory' : 'gameover';
+    };
+
+    engine.onBossIntro = (name: string) => {
+      if (bossIntroTimeoutRef.current !== null) window.clearTimeout(bossIntroTimeoutRef.current);
+      setBossIntroName(name);
+      bossIntroTimeoutRef.current = window.setTimeout(() => {
+        setBossIntroName(null);
+        bossIntroTimeoutRef.current = null;
+      }, 2600);
     };
 
     engine.onOpenModal = (modal) => {
@@ -543,6 +615,7 @@ export default function App() {
         if (e.code === 'Digit1' || e.code === 'KeyQ') engine.handleSkill1();
         if (e.code === 'Digit2' || e.code === 'KeyF' || e.code === 'KeyZ') engine.handleSkill2();
         if (e.code === 'Digit3' || e.code === 'KeyR' || e.code === 'KeyX') engine.handleSkill3();
+        if (e.code === 'KeyC') engine.handleMirageRend();
         if (e.code === 'Space') engine.handleDash();
       }
     };
@@ -609,6 +682,7 @@ export default function App() {
       window.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.removeEventListener('blur', handleBlur);
+      if (bossIntroTimeoutRef.current !== null) window.clearTimeout(bossIntroTimeoutRef.current);
       arena.dispose();
     };
   }, []);
@@ -787,6 +861,20 @@ export default function App() {
         className="absolute inset-0 z-[5] pointer-events-none w-full h-full"
       />
 
+      {gameMode === 'playing' && bossIntroName && (
+        <div className="pointer-events-none absolute inset-0 z-[20] flex items-center justify-center overflow-hidden" aria-live="polite">
+          <div className="absolute inset-0 bg-[#05070b]/25" />
+          <div className="absolute inset-x-0 top-0 h-[7vh] border-b border-cyan-100/30 bg-gradient-to-b from-black/95 to-black/55 shadow-[0_8px_30px_rgba(0,0,0,.5)]" />
+          <div className="absolute inset-x-0 bottom-0 h-[7vh] border-t border-red-100/20 bg-gradient-to-t from-black/95 to-black/55 shadow-[0_-8px_30px_rgba(0,0,0,.5)]" />
+          <div className="relative px-6 text-center drop-shadow-[0_4px_12px_rgba(0,0,0,.95)]">
+            <div className="mb-2 font-pixel text-[10px] tracking-[0.45em] text-cyan-100 animate-pulse">ดันเจี้ยนชั้น {levelSystem.run?.stage.stageNumber ?? 1}</div>
+            <div className="mx-auto mb-3 h-px w-40 bg-gradient-to-r from-transparent via-red-300 to-transparent" />
+            <h2 className="font-pixel text-xl text-[#f3e8e5] sm:text-3xl">{bossIntroName}</h2>
+            <p className="mt-2 font-pixel text-[9px] tracking-[0.22em] text-red-200 sm:text-xs">ผู้พิทักษ์ตื่นขึ้นแล้ว</p>
+          </div>
+        </div>
+      )}
+
       {/* TITLE SCREEN */}
       {gameMode === 'title' && (
         <TitleScreen
@@ -806,6 +894,7 @@ export default function App() {
           skills={skills}
           relics={relics}
           dashCooldown={dashCooldown}
+          mirageRendCooldown={mirageRendCooldown}
           dashMaxCooldown={1.0}
           comboStep={comboStep}
           currentWave={currentWave}
@@ -842,6 +931,7 @@ export default function App() {
           onSkill1={() => engineRef.current?.handleSkill1()}
           onSkill2={() => engineRef.current?.handleSkill2()}
           onSkill3={() => engineRef.current?.handleSkill3()}
+          onMirageRend={() => engineRef.current?.handleMirageRend()}
           onInteract={() => engineRef.current?.triggerInteraction()}
           onRunCommand={handleRunCommand}
           oneHitMode={oneHitMode}

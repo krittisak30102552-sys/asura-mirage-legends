@@ -42,7 +42,6 @@ import {
   BiomeDetails,
   ShopOfferItem,
   RoomDirection,
-  ROOM_DIRECTIONS,
 } from './levelSystem';
 import {
   HERO_CONFIGS,
@@ -68,14 +67,14 @@ import {
   generateContactShadowTexture,
 } from '../graphics/pixelSprites';
 import {
-  calculateDamage,
   applyArmorMitigation,
-  calculateAttackCadence,
   createStatusEffect,
   tickStatuses,
   aggregateRelicBonuses,
   DIFFICULTY_CONFIGS,
 } from './combatRules';
+import { PlayerCombat } from './combat';
+import type { CombatEvent, Target as CombatTarget } from './combat';
 
 export interface EnemyActor {
   id: number;
@@ -236,6 +235,9 @@ export class CombatEngine {
   public comboWindowTimer: number = 0;
   public isAttacking: boolean = false;
   public attackTimer: number = 0;
+  public playerCombat!: PlayerCombat;
+  public mirageRendCooldown: number = 0;
+  private combatTargets = new WeakMap<object, CombatTarget>();
 
   // Dash & Dodge
   public isDashing: boolean = false;
@@ -285,6 +287,8 @@ export class CombatEngine {
   public maxWaves: number = 20;
   public waveState: 'spawning' | 'fighting' | 'cleared' = 'spawning';
   public currentBoss: EnemyActor | null = null;
+  private bossIntroTimer = 0;
+  private bossIntroDuration = 2.6;
 
   // Three.js Meshes
   private heroMesh!: THREE.Mesh;
@@ -306,6 +310,7 @@ export class CombatEngine {
   // Callbacks
   public onStateChange?: () => void;
   public onGameOver?: (won: boolean) => void;
+  public onBossIntro?: (name: string) => void;
   public onOpenModal?: (
     modal:
       | 'blacksmith'
@@ -327,6 +332,30 @@ export class CombatEngine {
     this.recalcHeroStats();
     this.initHero();
     this.initAimCursor();
+    const thisEngine = this;
+    this.playerCombat = new PlayerCombat({
+      get pos() { return { x: thisEngine.playerX * 32, y: thisEngine.playerZ * 32 }; },
+      get facing() { return thisEngine.playerFacing < 0 ? -1 : 1; },
+      get aim() { return { x: Math.cos(thisEngine.playerAimAngle), y: Math.sin(thisEngine.playerAimAngle) }; },
+      get stats() {
+        const weapon = thisEngine.weapons.find((item) => item.id === thisEngine.equippedWeaponId);
+        const difficulty = DIFFICULTY_CONFIGS[thisEngine.difficulty] || DIFFICULTY_CONFIGS.normal;
+        return {
+          damage: (thisEngine.playerStats.attackPower + (weapon?.attackBonus ?? 0)) * difficulty.playerDmgMultiplier,
+          attackSpeed: Math.max(0.1, thisEngine.getEffectiveAttackSpeed()),
+          critChance: THREE.MathUtils.clamp(thisEngine.playerStats.critChance, 0, 0.75),
+          critDamage: thisEngine.playerStats.critMultiplier,
+          lifestealPct: 0,
+          cooldownReduction: THREE.MathUtils.clamp(thisEngine.playerStats.cooldownReduction, 0, 0.75),
+        };
+      },
+      heal: () => undefined,
+      moveBy: (dx, dy) => {
+        const inset = thisEngine.currentMode === 'dungeon' ? 1 : 0;
+        thisEngine.playerX = THREE.MathUtils.clamp(thisEngine.playerX + dx / 32, thisEngine.arena.bounds.minX + inset, thisEngine.arena.bounds.maxX - inset);
+        thisEngine.playerZ = THREE.MathUtils.clamp(thisEngine.playerZ + dy / 32, thisEngine.arena.bounds.minZ + inset, thisEngine.arena.bounds.maxZ - inset);
+      },
+    }, (event) => this.handlePlayerCombatEvent(event));
     this.enterLobby();
   }
 
@@ -1036,6 +1065,7 @@ export class CombatEngine {
     const run = levelSystem.run!;
     const stage = run.stage;
     const biome = levelSystem.getCurrentBiome();
+    this.bossIntroTimer = 0;
     this.lowHpShieldUsedRoomKey = null;
     this.currentDungeonMap = 'test_dungeon';
     this.currentRoomType = roomType as any;
@@ -1094,10 +1124,16 @@ export class CombatEngine {
     } else if (roomType === 'boss') {
       if (!wasRoomCleared) {
         this.waveState = 'fighting';
-        soundEngine.playBossGong();
-        this.arena.addCameraShake(0.8);
+        this.bossIntroTimer = this.bossIntroDuration;
         const bossHp = Math.round(550 * run.hpMultiplier);
-        this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, 0, -5.5);
+        this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, -4.8, -2.5);
+        if (this.currentBoss) {
+          this.currentBoss.mesh.scale.setScalar(0.03);
+          const bossMaterial = this.currentBoss.mesh.material;
+          if (bossMaterial instanceof THREE.MeshBasicMaterial) bossMaterial.opacity = 0.02;
+          this.currentBoss.hpBarGroup.visible = false;
+        }
+        this.onBossIntro?.(biome.bossNameTh);
       } else {
         this.spawnRoomRewardChest('gold');
       }
@@ -1257,6 +1293,10 @@ export class CombatEngine {
     const chestState = this.getCurrentLevelChestState();
     if (!chestState || chestState.opened) return;
     chestState.opened = true;
+    const stage = levelSystem.run.stage;
+    if (roomType === 'boss' && stage.currentRoomIndex === stage.roomGraph.length - 1) {
+      this.arena.setPortalActive(true);
+    }
 
     const rarity = chestState.rarity || 'gold';
     levelSystem.recordChestOpened(rarity);
@@ -1976,223 +2016,90 @@ export class CombatEngine {
   }
 
   public handleAttack() {
-    if (this.isDashing) return;
+    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.playerCombat.movementLocked) return;
+    this.playerCombat.pressM1();
+  }
 
-    if (this.comboStep === 0 || this.comboWindowTimer <= 0) {
-      this.comboStep = 1;
-    } else {
-      this.comboStep = (this.comboStep % 3) + 1;
-    }
+  public handleMirageRend(): boolean {
+    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing) return false;
+    return this.playerCombat.castSkill();
+  }
 
-    const weapon = this.weapons.find((w) => w.id === this.equippedWeaponId) || INITIAL_WEAPONS[0];
-    const weaponType = weapon.type || 'katana';
-
-    // Cadence dynamically altered by weapon type and attackSpeed
-    let baseCadence = 0.65;
-    let baseAttackTimer = 0.22;
-    if (weaponType === 'greatsword') {
-      baseCadence = 0.85;
-      baseAttackTimer = 0.32;
-    } else if (weaponType === 'blade') {
-      baseCadence = 0.45;
-      baseAttackTimer = 0.16;
-    } else if (weaponType === 'polearm') {
-      baseCadence = 0.70;
-      baseAttackTimer = 0.24;
-    } else if (weaponType === 'staff') {
-      baseCadence = 0.60;
-      baseAttackTimer = 0.22;
-    }
-
-    this.comboWindowTimer = calculateAttackCadence(baseCadence, this.getEffectiveAttackSpeed());
-    this.isAttacking = true;
-    this.attackTimer = calculateAttackCadence(baseAttackTimer, this.getEffectiveAttackSpeed());
-    this.animState = `attack${this.comboStep}` as HeroAnimationState;
-    this.animFrame = 0;
-
-    const diffConfig = DIFFICULTY_CONFIGS[this.difficulty] || DIFFICULTY_CONFIGS.normal;
-    const hitResult = calculateDamage(
-      {
-        ...this.playerStats,
-      },
-      this.comboStep,
-      weapon.attackBonus,
-      0,
-      false,
-      diffConfig.playerDmgMultiplier
-    );
-
-    // WEAPON STYLE 1: GREATSWORD (Heavy 180-deg sweep, high knockback, ground shockwave finisher)
-    if (weaponType === 'greatsword') {
-      const lungeDist = this.comboStep === 3 ? 1.2 : 0.5;
-      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 6;
-      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 6;
-
-      soundEngine.playHit(this.comboStep === 3);
-      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.6;
-      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.6;
-      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
-
-      if (this.comboStep === 3) {
-        this.arena.addCameraShake(0.45);
-        this.arena.spawnGroundShockwaveVFX?.(hitX, hitZ);
-        soundEngine.playPunch(3);
-      }
-
-      this.checkMeleeHits(hitX, hitZ, 3.4, hitResult.damage + (this.comboStep === 3 ? 3 : 0), true);
-      this.checkBreakableHits(hitX, hitZ, 3.4);
-
-    // WEAPON STYLE 2: BLADE / DUAL DAGGERS (Ultra fast flurry & twin whirlwind)
-    } else if (weaponType === 'blade') {
-      const lungeDist = 0.7;
-      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 10;
-      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 10;
-
+  private handlePlayerCombatEvent(event: CombatEvent) {
+    if (event.type === 'swing') {
+      this.comboStep = event.step + 1;
+      this.isAttacking = true;
+      this.animState = `attack${this.comboStep}` as HeroAnimationState;
+      this.animFrame = 0;
+      const x = this.playerX + Math.cos(this.playerAimAngle) * 1.1;
+      const z = this.playerZ + Math.sin(this.playerAimAngle) * 1.1;
       soundEngine.playKatanaSlash();
-      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.1;
-      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.1;
-      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle + (this.comboStep === 2 ? -0.4 : 0.4));
-
+      this.spawnSlashVfx(x, z, this.playerAimAngle);
       if (this.comboStep === 3) {
-        soundEngine.playWhirlwind();
-        this.arena.spawnWhirlwindVFX?.(this.playerX, this.playerZ);
+        this.arena.spawnDimensionalSlashVFX?.(x, z, this.playerAimAngle);
+        this.arena.addCameraShake(0.28);
       }
-
-      this.checkMeleeHits(hitX, hitZ, this.comboStep === 3 ? 2.8 : 1.9, hitResult.damage, this.comboStep === 3);
-      this.checkBreakableHits(hitX, hitZ, 2.2);
-
-    // WEAPON STYLE 3: POLEARM / SPEAR (Long piercing linear thrust forward)
-    } else if (weaponType === 'polearm') {
-      const lungeDist = this.comboStep === 3 ? 1.8 : 0.9;
-      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 7;
-      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 7;
-
+    } else if (event.type === 'skill_cast') {
+      this.isAttacking = false;
+      this.animState = 'dash';
       soundEngine.playDash();
-      const reachDist = 2.4;
-      const hitX = this.playerX + Math.cos(this.playerAimAngle) * reachDist;
-      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * reachDist;
-      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
-
-      // Piercing linear check along thrust vector
-      for (let step = 1; step <= 3; step++) {
-        const stepX = this.playerX + Math.cos(this.playerAimAngle) * (step * 1.4);
-        const stepZ = this.playerZ + Math.sin(this.playerAimAngle) * (step * 1.4);
-        this.checkMeleeHits(stepX, stepZ, 1.4, hitResult.damage, this.comboStep === 3);
-        this.checkBreakableHits(stepX, stepZ, 1.4);
-      }
-
-    // WEAPON STYLE 4: STAFF / WAND (Fires ranged magical arcane orb projectiles!)
-    } else if (weaponType === 'staff') {
-      soundEngine.playKiBlastLaunch();
-      const projSpeed = 22;
-      const proj: Projectile = {
-        id: Math.random(),
-        owner: 'player',
-        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
-        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
-        vx: Math.cos(this.playerAimAngle) * projSpeed,
-        vz: Math.sin(this.playerAimAngle) * projSpeed,
-        radius: 0.7,
-        damage: hitResult.damage,
-        crit: hitResult.isCrit,
-        penetrateCount: this.comboStep === 3 ? 3 : 1,
-        type: 'palace_orb',
-        life: 0.9,
-        maxLife: 0.9,
-        color: '#a855f7',
-        trailTimer: 0,
-      };
-      this.projectiles.push(proj);
-
-      if (this.comboStep === 3) {
-        [-0.25, 0.25].forEach((offset) => {
-          this.projectiles.push({
-            ...proj,
-            id: Math.random(),
-            vx: Math.cos(this.playerAimAngle + offset) * projSpeed,
-            vz: Math.sin(this.playerAimAngle + offset) * projSpeed,
-          });
-        });
-      }
-
-    // WEAPON STYLE 5: GUN / REVOLVER (Rapid bullet projectile)
-    } else if (weaponType === 'gun') {
-      soundEngine.playHit(false);
-      const bulletSpeed = 28;
-      const proj: Projectile = {
-        id: Math.random(),
-        owner: 'player',
-        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
-        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
-        vx: Math.cos(this.playerAimAngle) * bulletSpeed,
-        vz: Math.sin(this.playerAimAngle) * bulletSpeed,
-        radius: 0.5,
-        damage: hitResult.damage,
-        crit: hitResult.isCrit,
-        penetrateCount: this.comboStep === 3 ? 2 : 1,
-        type: 'bullet',
-        life: 0.8,
-        maxLife: 0.8,
-        color: '#facc15',
-        trailTimer: 0,
-      };
-      this.projectiles.push(proj);
-
-    // WEAPON STYLE 6: FIST / GAUNTLETS (Martial punch combo + Ki blast on combo 3)
-    } else if (weaponType === 'fist') {
-      const lungeDist = this.comboStep === 3 ? 1.5 : 0.8;
-      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 8;
-      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 8;
-
-      soundEngine.playPunch(this.comboStep);
-      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.2;
-      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.2;
-      this.checkMeleeHits(hitX, hitZ, 1.8, hitResult.damage, this.comboStep === 3);
-      this.checkBreakableHits(hitX, hitZ, 1.8);
-
-      if (this.comboStep === 3) {
-        soundEngine.playKiBlastLaunch();
-        this.projectiles.push({
-          id: Math.random(),
-          owner: 'player',
-          x: hitX,
-          z: hitZ,
-          vx: Math.cos(this.playerAimAngle) * 20,
-          vz: Math.sin(this.playerAimAngle) * 20,
-          radius: 0.8,
-          damage: Math.round(hitResult.damage * 1.2),
-          penetrateCount: 2,
-          type: 'ki_blast',
-          life: 0.8,
-          maxLife: 0.8,
-          color: '#38bdf8',
-          trailTimer: 0,
-        });
-      }
-
-    // WEAPON STYLE 7: KATANA (Default: sharp iaido crescent slices and lunge finisher)
-    } else {
-      const lungeDist = this.comboStep === 3 ? 2.0 : 0.8;
-      this.playerVx = Math.cos(this.playerAimAngle) * lungeDist * 8;
-      this.playerVz = Math.sin(this.playerAimAngle) * lungeDist * 8;
-
-      soundEngine.playKatanaSlash();
-      const hitX = this.playerX + Math.cos(this.playerAimAngle) * 1.3;
-      const hitZ = this.playerZ + Math.sin(this.playerAimAngle) * 1.3;
-      this.spawnSlashVfx(hitX, hitZ, this.playerAimAngle);
-
-      if (this.comboStep === 3) {
-        this.arena.spawnDimensionalSlashVFX?.(hitX, hitZ, this.playerAimAngle);
-        soundEngine.playSwordSheath();
-      }
-
-      const hitRadius = this.comboStep === 3 ? 2.6 : 1.9;
-      this.checkMeleeHits(hitX, hitZ, hitRadius, hitResult.damage, this.comboStep === 3);
-      this.checkBreakableHits(hitX, hitZ, hitRadius);
+      this.arena.addCameraShake(0.16);
+      this.arena.spawnSkillBurst(this.playerX, 0.55, this.playerZ, 0x7fe3ff, 10, 1.8, 0.32);
+    } else if (event.type === 'hit') {
+      if (event.crit) this.arena.addCameraShake(0.2);
+    } else if (event.type === 'echo') {
+      this.arena.spawnSkillBurst(event.target.pos.x / 32, 0.6, event.target.pos.y / 32, 0x7fe3ff, 16, 2.4, 0.45);
+      soundEngine.playKiExplosion();
     }
   }
 
+  private getCombatTargets(): CombatTarget[] {
+    const targets = this.enemies.map((enemy) => {
+      let target = this.combatTargets.get(enemy);
+      if (!target) {
+        target = {
+          pos: { x: 0, y: 0 },
+          radius: enemy.isBoss ? 42 : 24,
+          alive: false,
+          hit: (damage, knockback, isCrit) => {
+            if (enemy.state === 'dead') return;
+            const heavy = Math.hypot(knockback.x, knockback.y) >= 200;
+            this.damageEnemy(enemy, damage, isCrit, heavy);
+            const angle = Math.atan2(knockback.y, knockback.x);
+            const force = Math.max(5, Math.hypot(knockback.x, knockback.y) / 24);
+            enemy.vx = Math.cos(angle) * force;
+            enemy.vz = Math.sin(angle) * force;
+          },
+        };
+        this.combatTargets.set(enemy, target);
+      }
+      target.pos.x = enemy.x * 32;
+      target.pos.y = enemy.z * 32;
+      target.alive = enemy.state !== 'dead';
+      target.radius = enemy.isBoss ? 42 : 24;
+      return target;
+    });
+    for (const prop of this.breakables) {
+      let target = this.combatTargets.get(prop);
+      if (!target) {
+        target = {
+          pos: { x: 0, y: 0 },
+          radius: 20,
+          alive: true,
+          hit: () => this.checkBreakableHits(prop.x, prop.z, 0),
+        };
+        this.combatTargets.set(prop, target);
+      }
+      target.pos.x = prop.x * 32;
+      target.pos.y = prop.z * 32;
+      target.alive = this.breakables.includes(prop);
+      targets.push(target);
+    }
+    return targets;
+  }
+
   public handleDash() {
+    if (this.bossIntroTimer > 0 || this.playerCombat.movementLocked) return;
     if (this.dashCooldown > 0 || this.isDashing) return;
 
     this.isDashing = true;
@@ -2231,6 +2138,7 @@ export class CombatEngine {
   }
 
   public handleSkill1() {
+    if (this.bossIntroTimer > 0) return;
     const s = this.skills[0];
     if (!s || s.currentCooldown > 0 || this.isDashing) return;
     s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
@@ -2313,6 +2221,7 @@ export class CombatEngine {
   }
 
   public handleSkill2() {
+    if (this.bossIntroTimer > 0) return;
     const s = this.skills[1];
     if (!s || s.currentCooldown > 0 || this.isDashing) return;
     s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
@@ -2388,6 +2297,7 @@ export class CombatEngine {
   }
 
   public handleSkill3() {
+    if (this.bossIntroTimer > 0) return;
     const s = this.skills[2];
     if (!s || s.currentCooldown > 0 || this.isDashing) return;
     s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
@@ -2443,6 +2353,7 @@ export class CombatEngine {
   }
 
   public triggerInteraction() {
+    if (this.bossIntroTimer > 0) return;
     if (this.currentMode === 'lobby') {
       if (this.nearbyInteractable && this.onOpenModal) {
         soundEngine.playCoin();
@@ -2464,7 +2375,12 @@ export class CombatEngine {
           this.onOpenModal?.('shop_item_detail');
           return;
         } else if (this.nearbyDungeonInteractable === 'portal') {
-          if (levelSystem.getCurrentRoomType() === 'exit' && this.waveState === 'cleared') {
+          const stage = levelSystem.run.stage;
+          const currentRoom = levelSystem.getCurrentRoomType();
+          const atFinalBoss = currentRoom === 'boss' &&
+            stage.currentRoomIndex === stage.roomGraph.length - 1 &&
+            Boolean(stage.chestStates['room-' + stage.currentRoomIndex]?.opened);
+          if ((currentRoom === 'exit' || atFinalBoss) && this.waveState === 'cleared') {
             this.advanceLevelStage();
           }
           return;
@@ -2798,6 +2714,8 @@ export class CombatEngine {
   private handleEnemyDeath(enemy: EnemyActor) {
     if (enemy.state === 'dead') return;
     enemy.state = 'dead';
+    const combatTarget = this.combatTargets.get(enemy);
+    if (combatTarget) combatTarget.alive = false;
     enemy.hpBarGroup.visible = false;
     this.arena.actorsGroup.remove(enemy.hpBarGroup);
     this.playerStats.kills++;
@@ -2992,20 +2910,33 @@ export class CombatEngine {
   // 60FPS SIMULATION TICK
   // ----------------------------------------------------------------------
   public update(dt: number, moveX: number, moveZ: number) {
+    if (this.bossIntroTimer > 0) {
+      this.bossIntroTimer = Math.max(0, this.bossIntroTimer - dt);
+      const boss = this.currentBoss;
+      if (boss && boss.state !== 'dead') {
+        const progress = 1 - this.bossIntroTimer / this.bossIntroDuration;
+        const eased = progress * progress * (3 - 2 * progress);
+        boss.mesh.scale.setScalar(Math.max(0.03, eased));
+        const bossMaterial = boss.mesh.material;
+        if (bossMaterial instanceof THREE.MeshBasicMaterial) bossMaterial.opacity = Math.min(1, 0.02 + eased * 0.98);
+        boss.mesh.position.y = 1.8 + (1 - eased) * 1.25;
+        const shadowMaterial = boss.shadowMesh.material;
+        if (shadowMaterial instanceof THREE.MeshBasicMaterial) shadowMaterial.opacity = eased * 0.65;
+        boss.hpBarGroup.visible = this.bossIntroTimer === 0;
+      }
+      if (this.bossIntroTimer === 0 && boss && boss.state !== 'dead') {
+        soundEngine.playBossGong();
+        this.arena.addCameraShake(0.5);
+        this.arena.spawnSkillBurst(boss.x, 0.8, boss.z, 0x6ee7e8, 22, 5.8, 0.72);
+      }
+      return;
+    }
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= dt;
       return;
     }
 
     if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
-    if (this.comboWindowTimer > 0) {
-      this.comboWindowTimer -= dt;
-      if (this.comboWindowTimer <= 0) {
-        this.comboStep = 0;
-        if (!this.isAttacking && !this.isDashing) this.animState = 'idle';
-      }
-    }
-
     for (const skill of this.skills) {
       if (skill.currentCooldown > 0) {
         skill.currentCooldown = Math.max(0, skill.currentCooldown - dt);
@@ -3052,19 +2983,24 @@ export class CombatEngine {
       this.playerStats.shield = Math.min(this.playerStats.maxShield, this.playerStats.shield + 8 * dt);
     }
 
+    this.playerCombat.update(dt, this.getCombatTargets());
+    this.comboStep = this.playerCombat.comboStep;
+    this.comboWindowTimer = this.playerCombat.comboWindowLeft;
+    this.isAttacking = this.playerCombat.isAttacking;
+    this.mirageRendCooldown = this.playerCombat.skillCooldownLeft;
+
     // Player movement scaled by Movement Speed stat
-    if (this.isDashing) {
+    if (this.playerCombat.movementLocked) {
+      this.playerVx = 0;
+      this.playerVz = 0;
+      this.animState = 'dash';
+    } else if (this.isDashing) {
       this.dashTimer -= dt;
       if (this.dashTimer <= 0) {
         this.isDashing = false;
         this.animState = 'idle';
       }
     } else {
-      if (this.isAttacking) {
-        this.attackTimer -= dt;
-        if (this.attackTimer <= 0) this.isAttacking = false;
-      }
-
       const targetSpeed = this.playerStats.moveSpeed;
       if (moveX !== 0 || moveZ !== 0) {
         const len = Math.hypot(moveX, moveZ);
@@ -3210,8 +3146,11 @@ export class CombatEngine {
       }
 
       // The final room's gate is an E-only interaction that begins the next floor.
-      if (roomType === 'exit' && this.waveState === 'cleared' && this.arena.isPortalActive) {
-        const distGate = Math.hypot(this.playerX, this.playerZ - (-2.8));
+      const atFinalBoss = roomType === 'boss' && stage.currentRoomIndex === stage.roomGraph.length - 1;
+      const finalBossChestOpened = Boolean(stage.chestStates['room-' + stage.currentRoomIndex]?.opened);
+      if ((roomType === 'exit' || (atFinalBoss && finalBossChestOpened)) && this.waveState === 'cleared' && this.arena.isPortalActive) {
+        const portalZ = atFinalBoss ? 7.5 : -2.8;
+        const distGate = Math.hypot(this.playerX, this.playerZ - portalZ);
         if (distGate < 3.4) {
           this.nearbyDungeonInteractable = 'portal';
           return;
@@ -3306,7 +3245,10 @@ export class CombatEngine {
 
   private checkDungeonPortal() {
     if (this.waveState === 'cleared' && this.arena.isPortalActive) {
-      const portalZ = this.isLevelRun ? -2.8 : -7.2;
+      const isFinalBoss = this.isLevelRun && levelSystem.run &&
+        levelSystem.getCurrentRoomType() === 'boss' &&
+        levelSystem.run.stage.currentRoomIndex === levelSystem.run.stage.roomGraph.length - 1;
+      const portalZ = isFinalBoss ? 7.5 : this.isLevelRun ? -2.8 : -7.2;
       const dist = Math.hypot(this.playerX, this.playerZ - portalZ);
       if (dist < 3.4) this.nearbyDungeonInteractable = 'portal';
     }
@@ -3314,7 +3256,12 @@ export class CombatEngine {
 
   private useDungeonPortal() {
     if (this.isLevelRun && levelSystem.run) {
-      if (levelSystem.getCurrentRoomType() === 'exit' && this.waveState === 'cleared') this.advanceLevelStage();
+      const stage = levelSystem.run.stage;
+      const currentRoom = levelSystem.getCurrentRoomType();
+      const finalBoss = currentRoom === 'boss' &&
+        stage.currentRoomIndex === stage.roomGraph.length - 1 &&
+        Boolean(stage.chestStates['room-' + stage.currentRoomIndex]?.opened);
+      if ((currentRoom === 'exit' || finalBoss) && this.waveState === 'cleared') this.advanceLevelStage();
       return;
     }
     if (this.waveState !== 'cleared' || !this.arena.isPortalActive) return;

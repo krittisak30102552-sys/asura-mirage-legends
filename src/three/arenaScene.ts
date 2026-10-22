@@ -66,6 +66,7 @@ export class ArenaScene {
   public isPortalActive: boolean = false;
   private happyVendorGroup: THREE.Group | null = null;
   private happyShopItemGroups: Array<THREE.Group | null> = [];
+  private bossAltarGroup: THREE.Group | null = null;
 
   // Ambient particles
   private petalParticles!: THREE.Points;
@@ -355,6 +356,8 @@ export class ArenaScene {
     this.currentRoom = room;
     this.staticDecorGroup.clear();
     this.portalMesh = null;
+    this.isPortalActive = false;
+    this.bossAltarGroup = null;
     this.pointLights.forEach((l) => this.scene.remove(l));
     this.pointLights = [];
 
@@ -609,8 +612,10 @@ export class ArenaScene {
       // Elite Room
       this.createFloatingBadge('💀 ห้องศัตรูระดับสูง (ELITE COMBAT)', '#ef4444', 0, 4.4, -7.5);
     } else if (room === 'boss') {
-      // Grand Boss Room Altar
+      this.createBossArenaAltar(-4.8, -2.5);
+      this.buildDungeonPortalGate(0, 7.5);
       this.createFloatingBadge('👑 ศึกประจัญบอสใหญ่ (BOSS ARENA)', '#a855f7', 0, 4.4, -7.5);
+      this.createFloatingBadge('🌀 [E] ประตูสู่ด่านถัดไป', '#38d9e8', 0, 5.7, 7.4);
     } else if (room === 'exit') {
       // Exit Room
       this.buildDungeonPortalGate(0, -2.8);
@@ -639,6 +644,129 @@ export class ArenaScene {
     addConnectedDoor('west', this.bounds.minX, 0, Math.PI / 2, 0xf59e0b);
     addConnectedDoor('east', this.bounds.maxX, 0, -Math.PI / 2, 0x10b981);
     addConnectedDoor('south', 0, this.bounds.maxZ, Math.PI, 0x38bdf8);
+  }
+
+  private createBossArenaAltar(x: number, z: number) {
+    const altar = new THREE.Group();
+    altar.position.set(x, 0, z);
+
+    const darkStone = new THREE.MeshStandardMaterial({ color: 0x262d39, roughness: 0.88, metalness: 0.18 });
+    const edgeStone = new THREE.MeshStandardMaterial({ color: 0x414957, roughness: 0.8, metalness: 0.24 });
+    const redRune = new THREE.MeshBasicMaterial({ color: 0x9e202d, transparent: true, opacity: 0.9 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.55, 4.8), darkStone);
+    base.position.y = 0.28;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    altar.add(base);
+
+    const top = new THREE.Mesh(new THREE.BoxGeometry(4.65, 0.22, 4.25), edgeStone);
+    top.position.y = 0.66;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    altar.add(top);
+
+    const innerPlate = new THREE.Mesh(new THREE.BoxGeometry(3.65, 0.06, 3.35), darkStone);
+    innerPlate.position.y = 0.8;
+    altar.add(innerPlate);
+
+    const sealCanvas = document.createElement('canvas');
+    sealCanvas.width = 128;
+    sealCanvas.height = 128;
+    const ctx = sealCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.strokeStyle = '#9c2431';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(64, 67, 48, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#d13a42';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(64, 100); ctx.lineTo(64, 83); ctx.lineTo(49, 72);
+    ctx.lineTo(79, 72); ctx.lineTo(56, 60); ctx.lineTo(73, 49);
+    ctx.lineTo(64, 34); ctx.lineTo(64, 28);
+    ctx.stroke();
+    ctx.fillStyle = '#f2eee5';
+    ctx.fillRect(49, 43, 30, 29);
+    ctx.fillRect(44, 49, 5, 16);
+    ctx.fillRect(79, 49, 5, 16);
+    ctx.fillRect(53, 72, 22, 8);
+    ctx.fillRect(42, 35, 8, 8);
+    ctx.fillRect(35, 27, 7, 8);
+    ctx.fillRect(78, 35, 8, 8);
+    ctx.fillRect(86, 27, 7, 8);
+    ctx.fillStyle = '#171820';
+    ctx.fillRect(54, 52, 7, 9);
+    ctx.fillRect(68, 52, 7, 9);
+    ctx.fillRect(61, 66, 7, 5);
+    ctx.fillStyle = '#f2eee5';
+    ctx.fillRect(55, 74, 4, 7);
+    ctx.fillRect(63, 74, 4, 7);
+    ctx.fillRect(71, 74, 4, 7);
+
+    const sealTexture = new THREE.CanvasTexture(sealCanvas);
+    sealTexture.colorSpace = THREE.SRGBColorSpace;
+    sealTexture.magFilter = THREE.NearestFilter;
+    sealTexture.minFilter = THREE.NearestFilter;
+    const seal = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.35, 3.35),
+      new THREE.MeshBasicMaterial({ map: sealTexture, transparent: true, depthWrite: false })
+    );
+    seal.rotation.x = -Math.PI / 2;
+    seal.position.y = 0.84;
+    altar.add(seal);
+
+    const rings: THREE.Mesh[] = [];
+    for (let index = 0; index < 2; index++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(index === 0 ? 2.05 : 1.55, 0.045, 6, 40),
+        new THREE.MeshBasicMaterial({ color: index === 0 ? 0x64dce2 : 0xb43542, transparent: true, opacity: 0.65 })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.88 + index * 0.015;
+      altar.add(ring);
+      rings.push(ring);
+    }
+
+    const beamGroup = new THREE.Group();
+    const outerBeam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.88, 10.5, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x36d6dc, transparent: true, opacity: 0.17, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    outerBeam.position.y = 5.6;
+    beamGroup.add(outerBeam);
+    const innerBeam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.42, 10.2, 10, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xa5fff1, transparent: true, opacity: 0.22, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    innerBeam.position.y = 5.55;
+    beamGroup.add(innerBeam);
+    altar.add(beamGroup);
+
+    const shards: THREE.Mesh[] = [];
+    for (let index = 0; index < 4; index++) {
+      const shard = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.26, 0),
+        new THREE.MeshStandardMaterial({ color: 0x84e9e6, emissive: 0x138f9a, emissiveIntensity: 1.2, roughness: 0.25, metalness: 0.55 })
+      );
+      const angle = (index / 4) * Math.PI * 2;
+      shard.position.set(Math.cos(angle) * 2.35, 1.25 + (index % 2) * 0.25, Math.sin(angle) * 1.95);
+      shard.userData.baseY = shard.position.y;
+      shard.userData.phase = index * 1.7;
+      altar.add(shard);
+      shards.push(shard);
+    }
+
+    const light = new THREE.PointLight(0x67e8eb, 2.4, 12, 1.6);
+    light.position.set(0, 4.8, 0);
+    altar.add(light);
+    this.pointLights.push(light);
+    altar.userData.rings = rings;
+    altar.userData.shards = shards;
+    altar.userData.beams = [outerBeam, innerBeam];
+    altar.userData.light = light;
+    this.bossAltarGroup = altar;
+    this.staticDecorGroup.add(altar);
   }
 
   private buildRoomBoundaryWalls(doorLabels?: RoomDoorLabels) {
@@ -3315,6 +3443,22 @@ export class ArenaScene {
 
     // Lantern Flickering
     const time = performance.now() * 0.005;
+    if (this.bossAltarGroup) {
+      const altarData = this.bossAltarGroup.userData;
+      const pulse = 0.5 + (Math.sin(time * 1.2) + 1) * 0.25;
+      (altarData.rings as THREE.Mesh[]).forEach((ring, index) => {
+        ring.rotation.z += dt * (index === 0 ? 0.12 : -0.16);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.38 + pulse * 0.36;
+      });
+      (altarData.shards as THREE.Mesh[]).forEach((shard) => {
+        shard.position.y = shard.userData.baseY + Math.sin(time * 1.5 + shard.userData.phase) * 0.12;
+        shard.rotation.y += dt * 0.8;
+      });
+      (altarData.beams as THREE.Mesh[]).forEach((beam, index) => {
+        (beam.material as THREE.MeshBasicMaterial).opacity = (index === 0 ? 0.12 : 0.17) + pulse * 0.1;
+      });
+      (altarData.light as THREE.PointLight).intensity = 1.8 + pulse * 1.4;
+    }
     this.pointLights.forEach((light, i) => {
       const baseIntensity = light.userData.baseIntensity ?? 1.8;
       light.intensity = baseIntensity * (0.88 + Math.sin(time + i * 2.1) * 0.12);

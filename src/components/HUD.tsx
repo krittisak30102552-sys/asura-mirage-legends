@@ -25,8 +25,8 @@ interface StageMapInfo {
 }
 
 const MAP_SLOTS = [
-  { x: 50, y: 9 }, { x: 22, y: 35 }, { x: 78, y: 35 },
-  { x: 22, y: 64 }, { x: 78, y: 64 }, { x: 50, y: 91 },
+  { x: 50, y: 8 }, { x: 50, y: 25 }, { x: 50, y: 42 },
+  { x: 50, y: 59 }, { x: 50, y: 76 }, { x: 50, y: 93 },
 ];
 
 const ROOM_DOT: Record<StageRoomType, { icon: string; color: string }> = {
@@ -58,7 +58,7 @@ const DungeonMiniMap: React.FC<{ map: StageMapInfo }> = ({ map }) => {
         <span>ดันเจี้ยน {map.stageNumber}</span>
         <span>{map.currentRoomIndex + 1}-6</span>
       </div>
-      <div className="relative h-[78px]">
+      <div className="relative h-[118px]">
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {edges.map(({ from, to }) => {
             const a = pointFor(from);
@@ -96,6 +96,7 @@ interface HUDProps {
   relics: RelicItem[];
   dashCooldown: number;
   dashMaxCooldown: number;
+  mirageRendCooldown?: number;
   comboStep: number;
   currentWave: number;
   maxWaves: number;
@@ -124,6 +125,7 @@ interface HUDProps {
   onSkill1?: () => void;
   onSkill2?: () => void;
   onSkill3?: () => void;
+  onMirageRend?: () => void;
   onInteract?: () => void;
   onRunCommand?: (command: string) => boolean;
   oneHitMode?: boolean;
@@ -140,6 +142,7 @@ export const HUD: React.FC<HUDProps> = ({
   relics,
   dashCooldown,
   dashMaxCooldown,
+  mirageRendCooldown = 0,
   comboStep,
   currentWave,
   maxWaves,
@@ -167,6 +170,7 @@ export const HUD: React.FC<HUDProps> = ({
   onSkill1,
   onSkill2,
   onSkill3,
+  onMirageRend,
   onInteract,
   onRunCommand,
   oneHitMode = false,
@@ -806,6 +810,29 @@ export const HUD: React.FC<HUDProps> = ({
                 </button>
               );
             })}
+            {mode === 'dungeon' && (
+              <button
+                type="button"
+                onClick={onMirageRend}
+                disabled={mirageRendCooldown > 0}
+                className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60"
+                title={`Mirage Rend · พุ่งฟันและทิ้งรอยสะท้อน (${mirageRendCooldown > 0 ? `${mirageRendCooldown.toFixed(1)}s` : 'กด C'})`}
+              >
+                <div className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden ${referenceDungeonHud ? 'rounded-full border-2 border-cyan-100 bg-black/50 shadow-[0_0_12px_rgba(127,227,255,.35)]' : 'rounded-lg bg-zinc-900 border-2 border-cyan-700 hover:border-cyan-300'}`}>
+                  <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>🌀</span>
+                  {!referenceDungeonHud && <span className="text-[6px] sm:text-[8px] font-pixel text-cyan-100 mt-0.5 text-center leading-none">REND</span>}
+                  {mirageRendCooldown > 0 && (
+                    <div className="absolute inset-0 bg-zinc-950/85 flex items-center justify-center text-[9px] sm:text-xs font-pixel text-cyan-200 font-bold">
+                      {mirageRendCooldown.toFixed(1)}s
+                    </div>
+                  )}
+                  {!referenceDungeonHud && <div className="absolute -top-1.5 -right-1.5 bg-cyan-400 text-zinc-950 font-pixel text-[7px] sm:text-[9px] w-4 sm:w-5 h-4 sm:h-5 flex items-center justify-center rounded font-bold shadow">C</div>}
+                </div>
+                <span className={`font-pixel font-bold ${referenceDungeonHud ? 'mt-1 border border-zinc-200 bg-zinc-950 px-1.5 py-0.5 text-[8px] text-white' : 'text-[8px] sm:text-[10px] font-rajdhani text-cyan-200 mt-0.5 max-w-[50px] sm:max-w-[65px] truncate text-center'}`}>
+                  {referenceDungeonHud ? 'C' : 'มิราจ'}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

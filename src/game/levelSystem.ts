@@ -185,9 +185,10 @@ export class LevelSystem {
   }
 
   private rollRoomType(rng: SeededRNG): StageRoomType {
-    const total = LEVELS_CONFIG.roomWeights.reduce((sum, room) => sum + room.weight, 0);
+    const roomChoices = LEVELS_CONFIG.roomWeights.filter((room) => room.type !== 'boss');
+    const total = roomChoices.reduce((sum, room) => sum + room.weight, 0);
     let roll = rng.next() * total;
-    for (const room of LEVELS_CONFIG.roomWeights) {
+    for (const room of roomChoices) {
       roll -= room.weight;
       if (roll < 0) return room.type;
     }
@@ -195,14 +196,14 @@ export class LevelSystem {
   }
 
   private generateRoomGraph(rooms: StageRoomType[], rng: SeededRNG): StageRoomNode[] {
-    const mapSlots = [0, ...rng.shuffle([1, 2, 3, 4]), 5];
+    const mapSlots = [0, 1, 2, 3, 4, 5];
     const slotPositions = [
-      { x: 150, y: 12 },
-      { x: 70, y: 38 },
-      { x: 230, y: 38 },
-      { x: 70, y: 66 },
-      { x: 230, y: 66 },
-      { x: 150, y: 94 },
+      { x: 150, y: 8 },
+      { x: 150, y: 25 },
+      { x: 150, y: 42 },
+      { x: 150, y: 59 },
+      { x: 150, y: 76 },
+      { x: 150, y: 93 },
     ];
     const nodes: StageRoomNode[] = rooms.map((type, id) => {
       const mapPosition = mapSlots[id];
@@ -218,18 +219,13 @@ export class LevelSystem {
     });
 
     const connect = (a: number, b: number) => {
-      const availableA = ROOM_DIRECTIONS.filter((direction) => nodes[a].connections[direction] === undefined);
-      const availableB = ROOM_DIRECTIONS.filter((direction) => nodes[b].connections[direction] === undefined);
-      if (availableA.length === 0 || availableB.length === 0) return;
-      const directionA = rng.choice(availableA);
-      const directionB = rng.choice(availableB);
-      nodes[a].connections[directionA] = b;
-      nodes[b].connections[directionB] = a;
+      nodes[a].connections.south = b;
+      nodes[b].connections.north = a;
     };
 
     // Give every room one guaranteed route from the start to the exit, with a
     // newly shuffled order on each stage. Then add a few optional branches.
-    const spine = [0, ...rng.shuffle([1, 2, 3, 4]), 5];
+    const spine = [0, 1, 2, 3, 4, 5];
     for (let index = 0; index < spine.length - 1; index++) connect(spine[index], spine[index + 1]);
 
     const existingEdges = new Set<string>();
@@ -242,7 +238,7 @@ export class LevelSystem {
         if (!existingEdges.has(`${a}:${b}`)) optionalEdges.push([a, b]);
       }
     }
-    const targetExtraEdges = rng.range(1, 3);
+    const targetExtraEdges = 0;
     let addedEdges = 0;
     for (const [a, b] of rng.shuffle(optionalEdges)) {
       if (addedEdges >= targetExtraEdges) break;
@@ -254,7 +250,7 @@ export class LevelSystem {
     // Rotate every door socket together so the same seed always recreates the
     // same orientation while room layouts still feel different from stage to stage.
     const directionOrder = ROOM_DIRECTIONS;
-    const rotationSteps = rng.range(0, 3);
+    const rotationSteps = 0;
     for (const node of nodes) {
       const rotated: StageRoomNode['connections'] = {};
       for (const [direction, target] of Object.entries(node.connections) as [RoomDirection, number][]) {
@@ -267,13 +263,13 @@ export class LevelSystem {
   }
 
   private generateStage(stageNumber: number, rng: SeededRNG): StageData {
-    const rooms: StageRoomType[] = ['start', 'combat', 'combat', 'combat', 'combat', 'exit'];
+    const rooms: StageRoomType[] = ['start', 'combat', 'combat', 'combat', 'combat', 'boss'];
     for (let index = 1; index <= 4; index++) rooms[index] = this.rollRoomType(rng);
-    if (!rooms.slice(1, 5).some((type) => type === 'combat' || type === 'elite' || type === 'boss')) {
+    if (!rooms.slice(1, 5).some((type) => type === 'combat' || type === 'elite')) {
       rooms[rng.range(1, 4)] = 'combat';
     }
     const roomGraph = this.generateRoomGraph(rooms, rng);
-    const mapRotation = (rng.range(0, 3) * 90) as StageData['mapRotation'];
+    const mapRotation = 0 as StageData['mapRotation'];
     const shopOffersByRoom: Record<number, ShopOfferItem[]> = {};
     rooms.forEach((type, index) => {
       if (type === 'shop') shopOffersByRoom[index] = this.generateShopOffers(rng);
