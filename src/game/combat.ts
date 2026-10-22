@@ -1,4 +1,4 @@
-// combat.ts — M1 combo 3 ท่า + คูลดาวน์ + สกิลใหม่ "Mirage Rend" + เอฟเฟกต์ (Canvas2D)
+// M1 combo 3 ท่า + เอฟเฟกต์การโจมตี (Canvas2D)
 // ไม่พึ่งไลบรารี ใช้ต่อกับเกมเดิมผ่าน interface Owner / Target ด้านล่าง
 
 export interface Vec2 { x: number; y: number }
@@ -9,7 +9,6 @@ export interface Stats {
   critChance: number;        // 0..1
   critDamage: number;        // 1.5 = คริโดน +50%
   lifestealPct: number;      // 0..1
-  cooldownReduction: number; // 0..0.75
 }
 
 export interface Target {
@@ -31,9 +30,7 @@ export interface Owner {
 export type CombatEvent =
   | { type: 'swing'; step: number }
   | { type: 'hit'; damage: number; crit: boolean; target: Target }
-  | { type: 'combo_end' }
-  | { type: 'skill_cast' }
-  | { type: 'echo'; target: Target };
+  | { type: 'combo_end' };
 
 export type GhostRenderer = (ctx: CanvasRenderingContext2D, x: number, y: number, facing: 1 | -1, alpha: number) => void;
 
@@ -55,16 +52,6 @@ const COMBO_WINDOW = 0.45;   // เวลาที่ต่อคอมโบไ
 const FINISH_COOLDOWN = 0.35; // คูลดาวน์ M1 หลังท่าจบ (ก่อนเริ่มคอมโบใหม่)
 const INPUT_BUFFER = 0.25;   // กดล่วงหน้าได้
 const CANCEL_AT = 0.6;       // กดซ้อนได้เมื่อ recovery ผ่านไป 60%
-
-const SKILL_CD = 6;          // วินาที (ก่อนลดคูลดาวน์)
-const DASH_DUR = 0.16;
-const DASH_DIST = 150;
-const DASH_HIT_RADIUS = 48;
-const DASH_DMG = 0.9;
-const MARK_TIME = 0.7;       // หลังพุ่ง ศัตรูที่ถูกมาร์กจะระเบิดเสียงสะท้อน
-const ECHO_DMG = 1.2;
-const REFUND_PER_ECHO = 0.5; // ระเบิดโดนศัตรูแล้วคืนคูลดาวน์
-const REFUND_CAP = 1.5;
 
 // ---------- ตัวช่วย ----------
 const TAU = Math.PI * 2;
@@ -197,8 +184,6 @@ export function drawCooldownRing(ctx: CanvasRenderingContext2D, x: number, y: nu
 
 // ---------- ระบบต่อสู้หลัก ----------
 type M1State = 'idle' | 'windup' | 'active' | 'recovery';
-type SkillState = 'ready' | 'dash';
-
 export class PlayerCombat {
   readonly fx = new CombatFx();
 
@@ -211,14 +196,6 @@ export class PlayerCombat {
   private hitSet = new Set<Target>();
   private flip: 1 | -1 = 1;
 
-  private skill: SkillState = 'ready';
-  private skillCd = 0;
-  private skillCdMax = SKILL_CD;
-  private st = 0;
-  private skillHit = new Set<Target>();
-  private marks = new Map<Target, number>();
-  private refundLeft = 0;
-
   private hitstop = 0;
 
   constructor(private owner: Owner, private onEvent?: (e: CombatEvent) => void) {}
@@ -226,30 +203,9 @@ export class PlayerCombat {
   // ----- ให้เกมเรียก -----
   pressM1() { this.bufferT = INPUT_BUFFER; }
 
-  castSkill(): boolean {
-    if (this.skillCd > 0 || this.skill !== 'ready') return false;
-    const o = this.owner;
-    this.m1 = 'idle'; this.t = 0; this.bufferT = 0; this.step = 0; this.comboT = 0; // สกิลยกเลิกท่า M1 ได้
-    this.skill = 'dash'; this.st = 0;
-    this.skillHit.clear();
-    this.refundLeft = REFUND_CAP;
-    this.skillCdMax = SKILL_CD * (1 - o.stats.cooldownReduction);
-    this.skillCd = this.skillCdMax;
-    this.fx.ghost(o.pos.x, o.pos.y, o.facing, MARK_TIME);
-    this.fx.slash(o.pos.x, o.pos.y, Math.atan2(o.aim.y, o.aim.x), deg(34), DASH_DIST, '127,227,255', 0.22, 1);
-    this.emit({ type: 'skill_cast' });
-    return true;
-  }
-
-  /** เกมควรล็อกการเดินปกติตอนนี้เป็น true */
-  get movementLocked(): boolean { return this.skill === 'dash'; }
   get isAttacking(): boolean { return this.m1 !== 'idle'; }
   get comboStep(): number { return this.m1 !== 'idle' ? this.step + 1 : this.comboT > 0 ? this.step : 0; }
   get comboWindowLeft(): number { return this.comboT; }
-  /** 0 = พร้อมใช้, 1 = เพิ่งกด */
-  get skillRatio(): number { return this.skillCd <= 0 ? 0 : this.skillCd / this.skillCdMax; }
-  get skillCooldownLeft(): number { return this.skillCd; }
-
   update(dt: number, targets: Target[]) {
     this.fx.update(dt);
     if (this.hitstop > 0) { this.hitstop -= dt; return; } // หยุดเฟรมสั้นๆ ให้หนักมือ
@@ -257,10 +213,6 @@ export class PlayerCombat {
     this.m1Cd = Math.max(0, this.m1Cd - dt);
     this.comboT = Math.max(0, this.comboT - dt);
     this.bufferT = Math.max(0, this.bufferT - dt);
-    this.skillCd = Math.max(0, this.skillCd - dt);
-
-    this.updateMarks(dt);
-    this.updateSkill(dt, targets);
     this.updateM1(dt, targets);
   }
 
@@ -291,7 +243,7 @@ export class PlayerCombat {
     const sdt = dt * spd;
     switch (this.m1) {
       case 'idle':
-        if (this.bufferT > 0 && this.m1Cd <= 0 && this.skill === 'ready') this.startSwing();
+        if (this.bufferT > 0 && this.m1Cd <= 0) this.startSwing();
         break;
       case 'windup':
         this.t += sdt;
@@ -332,45 +284,6 @@ export class PlayerCombat {
       this.hitSet.add(tg);
       this.applyHit(tg, def.dmg, def.knock, def.hitstop, this.step === COMBO.length - 1);
     }
-  }
-
-  // ----- สกิล Mirage Rend -----
-  private updateSkill(dt: number, targets: Target[]) {
-    if (this.skill !== 'dash') return;
-    const o = this.owner;
-    const stepDt = Math.min(dt, Math.max(0, DASH_DUR - this.st));
-    this.st += dt;
-    const aim = o.aim;
-    o.moveBy(aim.x * DASH_DIST * (stepDt / DASH_DUR), aim.y * DASH_DIST * (stepDt / DASH_DUR));
-    this.fx.burst(o.pos.x, o.pos.y, 1, '127,227,255');
-    for (const tg of targets) {
-      if (!tg.alive || this.skillHit.has(tg)) continue;
-      if (Math.hypot(tg.pos.x - o.pos.x, tg.pos.y - o.pos.y) > DASH_HIT_RADIUS + tg.radius) continue;
-      this.skillHit.add(tg);
-      this.applyHit(tg, DASH_DMG, 140, 0.05, false);
-      this.marks.set(tg, MARK_TIME); // ติดมาร์ก: อีกสักครู่จะมีเสียงสะท้อนตามมา
-      this.fx.ring(tg.pos.x, tg.pos.y, 30, '127,227,255');
-    }
-    if (this.st >= DASH_DUR) this.skill = 'ready';
-  }
-
-  private updateMarks(dt: number) {
-    for (const [tg, left] of this.marks) {
-      if (!tg.alive) { this.marks.delete(tg); continue; }
-      const nl = left - dt;
-      if (nl <= 0) { this.marks.delete(tg); this.echo(tg); }
-      else this.marks.set(tg, nl);
-    }
-  }
-
-  private echo(tg: Target) {
-    this.applyHit(tg, ECHO_DMG, 160, 0.06, true);
-    this.fx.burst(tg.pos.x, tg.pos.y, 20, '127,227,255');
-    this.fx.ring(tg.pos.x, tg.pos.y, 70, '255,255,255');
-    const r = Math.min(REFUND_PER_ECHO, this.refundLeft);
-    this.refundLeft -= r;
-    this.skillCd = Math.max(0, this.skillCd - r);
-    this.emit({ type: 'echo', target: tg });
   }
 
   // ----- ดาเมจรวม -----

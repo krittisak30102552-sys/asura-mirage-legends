@@ -5,11 +5,11 @@
  * - Active Relic Inventory bar with icons and perks
  * - Giant Boss Health Bar when fighting 10 Wiki Bosses
  * - Real-time Combo Counter & Multiplier
- * - 3 Character Skill slots + Dash + Normal Attack
+ * - Normal Attack Combo and Dash / Dodge controls
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PlayerStats, SkillInfo, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
+import { PlayerStats, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
 import { HERO_CONFIGS } from '../data/gameData';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
 import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
@@ -35,6 +35,7 @@ const ROOM_DOT: Record<StageRoomType, { icon: string; color: string }> = {
   elite: { icon: '!', color: '#fb7185' },
   shop: { icon: '¢', color: '#fbbf24' },
   chest: { icon: '◆', color: '#fcd34d' },
+  altar: { icon: '✦', color: '#67e8f9' },
   boss: { icon: '♛', color: '#f87171' },
   exit: { icon: '↗', color: '#6ee7b7' },
   forge: { icon: '⚒', color: '#fb923c' },
@@ -92,11 +93,9 @@ interface HUDProps {
   mode: 'lobby' | 'dungeon';
   stats: PlayerStats;
   activeHeroId: HeroId;
-  skills: SkillInfo[];
   relics: RelicItem[];
   dashCooldown: number;
   dashMaxCooldown: number;
-  mirageRendCooldown?: number;
   comboStep: number;
   currentWave: number;
   maxWaves: number;
@@ -122,10 +121,6 @@ interface HUDProps {
   // Combat Action handlers for touch & click
   onAttack?: () => void;
   onDash?: () => void;
-  onSkill1?: () => void;
-  onSkill2?: () => void;
-  onSkill3?: () => void;
-  onMirageRend?: () => void;
   onInteract?: () => void;
   onRunCommand?: (command: string) => boolean;
   oneHitMode?: boolean;
@@ -138,11 +133,9 @@ export const HUD: React.FC<HUDProps> = ({
   mode,
   stats,
   activeHeroId,
-  skills,
   relics,
   dashCooldown,
   dashMaxCooldown,
-  mirageRendCooldown = 0,
   comboStep,
   currentWave,
   maxWaves,
@@ -167,10 +160,6 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenInventory,
   onAttack,
   onDash,
-  onSkill1,
-  onSkill2,
-  onSkill3,
-  onMirageRend,
   onInteract,
   onRunCommand,
   oneHitMode = false,
@@ -701,7 +690,7 @@ export const HUD: React.FC<HUDProps> = ({
           )}
         </div>
 
-        {/* BOTTOM CENTER: Combat Skills Dock (Interactive on click & touch!) */}
+        {/* BOTTOM CENTER: Combat Controls Dock */}
         <div className={`flex min-w-0 flex-1 items-center pointer-events-auto ${referenceDungeonHud ? 'justify-end' : 'justify-end sm:justify-center'}`}>
           <div className={`flex items-center gap-1 sm:gap-3 ${referenceDungeonHud ? 'bg-transparent border-0 px-1 py-1 shadow-none' : 'bg-zinc-950/95 border-2 border-amber-600/70 px-1.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl shadow-2xl shadow-black backdrop-blur-xs'}`}>
             {/* Normal Attack (LMB / Tap) */}
@@ -763,76 +752,6 @@ export const HUD: React.FC<HUDProps> = ({
               </span>
             </button>
 
-            <div className={`w-[1px] h-9 sm:h-12 bg-zinc-700/60 mx-0.5 ${referenceDungeonHud && !forceTouchControls ? 'hidden' : ''}`} />
-
-            {/* Skills 1, 2, 3 */}
-            {skills.map((skill, index) => {
-              const handleSkillClick = () => {
-                if (index === 0) onSkill1?.();
-                else if (index === 1) onSkill2?.();
-                else if (index === 2) onSkill3?.();
-              };
-
-              return (
-                <button
-                  type="button"
-                  key={skill.id}
-                  onClick={handleSkillClick}
-                  disabled={skill.currentCooldown > 0}
-                  className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60"
-                  title={`${skill.nameTh} (กด ${referenceDungeonHud ? ['Q', 'Z', 'X'][index] : skill.key})`}
-                >
-                  <div
-                    className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden transition-all ${referenceDungeonHud ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]' : 'rounded-lg bg-zinc-900 border-2'} ${
-                      skill.currentCooldown > 0
-                        ? 'border-zinc-800 opacity-80'
-                        : 'border-zinc-600 hover:border-amber-400'
-                    }`}
-                  >
-                    <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>{skill.icon}</span>
-                    {!referenceDungeonHud && <span className="text-[6px] sm:text-[8px] font-pixel text-zinc-200 mt-0.5 text-center leading-none">
-                      {index === 0 ? 'SK 1' : index === 1 ? 'SK 2' : 'SK 3'}
-                    </span>}
-                    {skill.currentCooldown > 0 && (
-                      <div className="absolute inset-0 bg-zinc-950/85 flex flex-col items-center justify-center">
-                        <span className="text-[10px] sm:text-xs font-pixel text-amber-400 font-bold">
-                          {skill.currentCooldown.toFixed(1)}s
-                        </span>
-                      </div>
-                    )}
-                    {!referenceDungeonHud && <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[9px] w-4 sm:w-5 h-4 sm:h-5 flex items-center justify-center rounded font-bold shadow">
-                      {skill.key}
-                    </div>}
-                  </div>
-                  <span className={`font-pixel font-bold ${referenceDungeonHud ? 'mt-1 border border-zinc-200 bg-zinc-950 px-1.5 py-0.5 text-[8px] text-white' : 'text-[8px] sm:text-[10px] font-rajdhani text-amber-300 mt-0.5 max-w-[50px] sm:max-w-[65px] truncate text-center'}`}>
-                    {referenceDungeonHud ? ['Q', 'Z', 'X'][index] : skill.nameTh.split(' ')[0]}
-                  </span>
-                </button>
-              );
-            })}
-            {mode === 'dungeon' && (
-              <button
-                type="button"
-                onClick={onMirageRend}
-                disabled={mirageRendCooldown > 0}
-                className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60"
-                title={`Mirage Rend · พุ่งฟันและทิ้งรอยสะท้อน (${mirageRendCooldown > 0 ? `${mirageRendCooldown.toFixed(1)}s` : 'กด C'})`}
-              >
-                <div className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden ${referenceDungeonHud ? 'rounded-full border-2 border-cyan-100 bg-black/50 shadow-[0_0_12px_rgba(127,227,255,.35)]' : 'rounded-lg bg-zinc-900 border-2 border-cyan-700 hover:border-cyan-300'}`}>
-                  <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>🌀</span>
-                  {!referenceDungeonHud && <span className="text-[6px] sm:text-[8px] font-pixel text-cyan-100 mt-0.5 text-center leading-none">REND</span>}
-                  {mirageRendCooldown > 0 && (
-                    <div className="absolute inset-0 bg-zinc-950/85 flex items-center justify-center text-[9px] sm:text-xs font-pixel text-cyan-200 font-bold">
-                      {mirageRendCooldown.toFixed(1)}s
-                    </div>
-                  )}
-                  {!referenceDungeonHud && <div className="absolute -top-1.5 -right-1.5 bg-cyan-400 text-zinc-950 font-pixel text-[7px] sm:text-[9px] w-4 sm:w-5 h-4 sm:h-5 flex items-center justify-center rounded font-bold shadow">C</div>}
-                </div>
-                <span className={`font-pixel font-bold ${referenceDungeonHud ? 'mt-1 border border-zinc-200 bg-zinc-950 px-1.5 py-0.5 text-[8px] text-white' : 'text-[8px] sm:text-[10px] font-rajdhani text-cyan-200 mt-0.5 max-w-[50px] sm:max-w-[65px] truncate text-center'}`}>
-                  {referenceDungeonHud ? 'C' : 'มิราจ'}
-                </span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -849,12 +768,19 @@ export const HUD: React.FC<HUDProps> = ({
           >
             {nearbyDungeonInteractable === 'happy_merchant'
               ? '💬 คุย [E]'
+              : nearbyDungeonInteractable === 'boss_altar'
+              ? '🗿 ปลุกบอส [E]'
               : nearbyDungeonInteractable === 'shop_item'
               ? '🔎 ดูของ [E]'
               : nearbyDungeonInteractable?.startsWith('door_')
               ? '🚪 เข้า [E]'
               : '✨ ใช้ [E]'}
           </button>
+        )}
+        {!forceTouchControls && nearbyDungeonInteractable === 'boss_altar' && (
+          <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-cyan-300/70 bg-zinc-950/90 px-4 py-2 font-pixel text-sm text-cyan-100 shadow-[0_0_22px_rgba(103,232,249,.32)]">
+            กด E เพื่อปลุกบอส
+          </div>
         )}
       </div>
     </div>

@@ -81,8 +81,8 @@ export function generateHeroTexture(
     leanX = 18;
     bobY = 8;
     auraGlow = true;
-  } else if (state.startsWith('attack') || state.startsWith('skill')) {
-    const isHeavy = state === 'attack3' || state.startsWith('skill');
+  } else if (state.startsWith('attack')) {
+    const isHeavy = state === 'attack3';
     leanX = isHeavy ? 14 : 8;
     bobY = 4;
     weaponAngle = isHeavy ? 1.2 : 0.6;
@@ -133,7 +133,7 @@ export function generateHeroTexture(
     ctx.ellipse(cx, 290, 48, 14, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Aura in combat/skills
+    // Combat aura
     if (auraGlow) {
       const aura = ctx.createRadialGradient(cx + leanX, cy, 30, cx + leanX, cy, 95);
       aura.addColorStop(0, 'rgba(239, 68, 68, 0.25)');

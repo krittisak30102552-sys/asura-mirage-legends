@@ -13,7 +13,6 @@
 import * as THREE from 'three';
 import {
   PlayerStats,
-  SkillInfo,
   RelicItem,
   DamageNumberItem,
   Projectile,
@@ -236,7 +235,6 @@ export class CombatEngine {
   public isAttacking: boolean = false;
   public attackTimer: number = 0;
   public playerCombat!: PlayerCombat;
-  public mirageRendCooldown: number = 0;
   private combatTargets = new WeakMap<object, CombatTarget>();
 
   // Dash & Dodge
@@ -259,9 +257,6 @@ export class CombatEngine {
   private lowHpShieldUsedRoomKey: string | null = null;
   private coffinReviveUsedSceneKey: string | null = null;
   private fullHpDamageLockoutTimer = 0;
-
-  // Active Skills
-  public skills: SkillInfo[] = [];
 
   // Entities & Relics
   public enemies: EnemyActor[] = [];
@@ -287,6 +282,9 @@ export class CombatEngine {
   public maxWaves: number = 20;
   public waveState: 'spawning' | 'fighting' | 'cleared' = 'spawning';
   public currentBoss: EnemyActor | null = null;
+  private bossSummonedForRoom = false;
+  private pendingBossStageTransition = false;
+  private bossStageTransitionTimer = 0;
   private bossIntroTimer = 0;
   private bossIntroDuration = 2.6;
 
@@ -346,7 +344,6 @@ export class CombatEngine {
           critChance: THREE.MathUtils.clamp(thisEngine.playerStats.critChance, 0, 0.75),
           critDamage: thisEngine.playerStats.critMultiplier,
           lifestealPct: 0,
-          cooldownReduction: THREE.MathUtils.clamp(thisEngine.playerStats.cooldownReduction, 0, 0.75),
         };
       },
       heal: () => undefined,
@@ -457,117 +454,6 @@ export class CombatEngine {
     this.playerStats.hp = Math.min(this.playerStats.hp, this.playerStats.maxHp);
     this.playerStats.shield = Math.min(this.playerStats.shield, this.playerStats.maxShield + 60);
 
-    // Build skill set based on character
-    if (this.activeHeroId === 'ginzo') {
-      this.skills = [
-        {
-          id: 'skill1',
-          key: '1',
-          name: 'Hiken: Yatagarasu',
-          nameTh: 'ดาบลับ: อีกาตรีเนตร (Yatagarasu)',
-          desc: 'Swift forward katana draw cutting through all enemies in an instant.',
-          descTh: 'ชักดาบพุ่งฟันผ่านศัตรูอย่างรวดเร็ว สร้างความเสียหายคริติคอลสูง',
-          cooldown: 4.5,
-          currentCooldown: 0,
-          icon: '🦅',
-        },
-        {
-          id: 'skill2',
-          key: '2',
-          name: 'Blade Beam: Murasame',
-          nameTh: 'คลื่นดาบพิฆาตมุราซาเมะ',
-          desc: 'Unleashes a supersonic crescent blade shockwave piercing targets.',
-          descTh: 'ตวัดดาบปล่อยคลื่นสูญญากาศสีฟ้าคมกริบ ทะลวงศัตรูเป็นเส้นตรง',
-          cooldown: 6.5,
-          currentCooldown: 0,
-          icon: '⚡',
-        },
-        {
-          id: 'skill3',
-          key: '3',
-          name: 'Cherry Blossom Flurry',
-          nameTh: 'พายุกลีบซากุระร้อยคม (Sakura Storm)',
-          desc: 'Enters a blade trance slicing 8 times in rapid succession with invulnerability.',
-          descTh: 'ระบำดาบตัดเฉือน 8 ครั้งต่อเนื่องในพริบตา พร้อมสถานะอมตะชั่วขณะ',
-          cooldown: 12.0,
-          currentCooldown: 0,
-          icon: '🌸',
-        },
-      ];
-    } else if (this.activeHeroId === 'quan') {
-      this.skills = [
-        {
-          id: 'skill1',
-          key: '1',
-          name: 'Shadow Flurry',
-          nameTh: 'หมัดเงาพยัคฆ์ต่อเนื่อง',
-          desc: 'Rapid-fire punches knocking enemies back.',
-          descTh: 'ระดมต่อย 6 หมัดต่อเนื่องอย่างรวดเร็ว',
-          cooldown: 5.5,
-          currentCooldown: 0,
-          icon: '👊',
-        },
-        {
-          id: 'skill2',
-          key: '2',
-          name: 'Ki Tiger Blast',
-          nameTh: 'คลื่นพยัคฆ์คำรามมังกรฟ้า',
-          desc: 'High-speed piercing ki sphere.',
-          descTh: 'ปล่อยลูกแก้วลมปราณระเบิดกว้าง',
-          cooldown: 7.5,
-          currentCooldown: 0,
-          icon: '🐯',
-        },
-        {
-          id: 'skill3',
-          key: '3',
-          name: 'Dragon Whirlwind',
-          nameTh: 'เตะพายุมังกรทะยานฟ้า',
-          desc: 'Cyclone kick pulling enemies in.',
-          descTh: 'หมุนตัวเตะพายุ 360 องศา พร้อมดูดศัตรูเข้าศูนย์กลาง',
-          cooldown: 13.0,
-          currentCooldown: 0,
-          icon: '🐉',
-        },
-      ];
-    } else {
-      // Katherine
-      this.skills = [
-        {
-          id: 'skill1',
-          key: '1',
-          name: 'Glacial Nova',
-          nameTh: 'ระเบิดเหมันต์แช่แข็ง (Glacial Nova)',
-          desc: 'Freezes all surrounding enemies with sharp ice crystals.',
-          descTh: 'ปล่อยคลื่นไอเย็นเยือกแข็งศัตรูรอบตัว พร้อมทำดาเมจรุนแรงและติดสถานะ Freeze',
-          cooldown: 5.0,
-          currentCooldown: 0,
-          icon: '❄️',
-        },
-        {
-          id: 'skill2',
-          key: '2',
-          name: 'Thunderbolt Surge',
-          nameTh: 'สายฟ้าอัสนีบาต (Thunderbolt)',
-          desc: 'Calls down piercing lightning bolts across the battlefield.',
-          descTh: 'ฟาดสายฟ้าทะลวงศัตรูเป็นเส้นตรง พร้อมสตันเป้าหมาย',
-          cooldown: 7.0,
-          currentCooldown: 0,
-          icon: '⚡',
-        },
-        {
-          id: 'skill3',
-          key: '3',
-          name: 'Meteor Calamity',
-          nameTh: 'อุกกาบาตเพลิงอเวจี (Meteor)',
-          desc: 'Rains devastating fire meteors scorching the arena.',
-          descTh: 'อัญเชิญฝนดาวตกเพลิงระเบิดกวาดล้างทั้งห้อง ติดสถานะ Burn',
-          cooldown: 12.0,
-          currentCooldown: 0,
-          icon: '🔥',
-        },
-      ];
-    }
   }
 
   private getEquippedPerks(type?: EquipmentPerkType): EquipmentPerk[] {
@@ -578,10 +464,6 @@ export class CombatEngine {
 
   private getEffectiveAttackSpeed(): number {
     return this.playerStats.attackSpeed * (1 + this.temporaryAttackSpeedBonus + this.critSpeedStacks * 0.02);
-  }
-
-  private getEffectiveSkillCooldown(cooldown: number): number {
-    return cooldown * (1 - this.playerStats.cooldownReduction);
   }
 
   private getConditionalDamageMultiplier(): number {
@@ -1064,8 +946,9 @@ export class CombatEngine {
     }
     const run = levelSystem.run!;
     const stage = run.stage;
-    const biome = levelSystem.getCurrentBiome();
     this.bossIntroTimer = 0;
+    this.bossStageTransitionTimer = 0;
+    this.bossSummonedForRoom = false;
     this.lowHpShieldUsedRoomKey = null;
     this.currentDungeonMap = 'test_dungeon';
     this.currentRoomType = roomType as any;
@@ -1124,16 +1007,11 @@ export class CombatEngine {
     } else if (roomType === 'boss') {
       if (!wasRoomCleared) {
         this.waveState = 'fighting';
-        this.bossIntroTimer = this.bossIntroDuration;
-        const bossHp = Math.round(550 * run.hpMultiplier);
-        this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, -4.8, -2.5);
-        if (this.currentBoss) {
-          this.currentBoss.mesh.scale.setScalar(0.03);
-          const bossMaterial = this.currentBoss.mesh.material;
-          if (bossMaterial instanceof THREE.MeshBasicMaterial) bossMaterial.opacity = 0.02;
-          this.currentBoss.hpBarGroup.visible = false;
+        this.currentRoomWave = 0;
+        if (this.pendingBossStageTransition) {
+          this.pendingBossStageTransition = false;
+          this.spawnLevelBossAtCurrentAltar();
         }
-        this.onBossIntro?.(biome.bossNameTh);
       } else {
         this.spawnRoomRewardChest('gold');
       }
@@ -1265,6 +1143,7 @@ export class CombatEngine {
   public advanceLevelRoom(direction?: RoomDirection) {
     if (!levelSystem.run) return;
     if (!direction || this.waveState !== 'cleared') return;
+    if (levelSystem.getCurrentRoomType() === 'altar' && !this.bossSummonedForRoom) return;
     const nextRoom = levelSystem.advanceToNextRoom(direction);
     if (nextRoom) this.loadLevelRoom(nextRoom.nextRoomType);
   }
@@ -1769,6 +1648,7 @@ export class CombatEngine {
         elite: 'ห้องมอนสเตอร์ชั้นสูง',
         shop: 'แฮปปี้',
         chest: 'ห้องสมบัติ',
+        altar: 'แท่นอัญเชิญบอส',
         boss: 'ห้องบอส',
         exit: 'ทางออก',
         forge: 'ห้องเสริมสถานะ',
@@ -1780,6 +1660,7 @@ export class CombatEngine {
         elite: 0xf97316,
         shop: 0x10b981,
         chest: 0xfacc15,
+        altar: 0x67e8e8,
         boss: 0xa855f7,
         exit: 0x22c55e,
         forge: 0x06b6d4,
@@ -2016,13 +1897,8 @@ export class CombatEngine {
   }
 
   public handleAttack() {
-    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.playerCombat.movementLocked) return;
+    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing) return;
     this.playerCombat.pressM1();
-  }
-
-  public handleMirageRend(): boolean {
-    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing) return false;
-    return this.playerCombat.castSkill();
   }
 
   private handlePlayerCombatEvent(event: CombatEvent) {
@@ -2039,17 +1915,8 @@ export class CombatEngine {
         this.arena.spawnDimensionalSlashVFX?.(x, z, this.playerAimAngle);
         this.arena.addCameraShake(0.28);
       }
-    } else if (event.type === 'skill_cast') {
-      this.isAttacking = false;
-      this.animState = 'dash';
-      soundEngine.playDash();
-      this.arena.addCameraShake(0.16);
-      this.arena.spawnSkillBurst(this.playerX, 0.55, this.playerZ, 0x7fe3ff, 10, 1.8, 0.32);
     } else if (event.type === 'hit') {
       if (event.crit) this.arena.addCameraShake(0.2);
-    } else if (event.type === 'echo') {
-      this.arena.spawnSkillBurst(event.target.pos.x / 32, 0.6, event.target.pos.y / 32, 0x7fe3ff, 16, 2.4, 0.45);
-      soundEngine.playKiExplosion();
     }
   }
 
@@ -2099,7 +1966,7 @@ export class CombatEngine {
   }
 
   public handleDash() {
-    if (this.bossIntroTimer > 0 || this.playerCombat.movementLocked) return;
+    if (this.bossIntroTimer > 0) return;
     if (this.dashCooldown > 0 || this.isDashing) return;
 
     this.isDashing = true;
@@ -2137,221 +2004,6 @@ export class CombatEngine {
     }
   }
 
-  public handleSkill1() {
-    if (this.bossIntroTimer > 0) return;
-    const s = this.skills[0];
-    if (!s || s.currentCooldown > 0 || this.isDashing) return;
-    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
-
-    if (this.activeHeroId === 'ginzo') {
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 0.45;
-      soundEngine.playDimensionalSlash();
-      this.spawnGhostTrail();
-
-      const startX = this.playerX;
-      const startZ = this.playerZ;
-      const dashDist = 5.2;
-      this.playerX = THREE.MathUtils.clamp(
-        this.playerX + Math.cos(this.playerAimAngle) * dashDist,
-        this.arena.bounds.minX + 1,
-        this.arena.bounds.maxX - 1
-      );
-      this.playerZ = THREE.MathUtils.clamp(
-        this.playerZ + Math.sin(this.playerAimAngle) * dashDist,
-        this.arena.bounds.minZ + 1,
-        this.arena.bounds.maxZ - 1
-      );
-
-      const midX = (startX + this.playerX) / 2;
-      const midZ = (startZ + this.playerZ) / 2;
-      this.arena.spawnDimensionalSlashVFX(midX, midZ, this.playerAimAngle);
-      this.arena.addCameraShake(0.35);
-
-      this.checkMeleeHits(midX, midZ, 3.2, this.playerStats.attackPower * 3.0, true);
-      this.checkBreakableHits(midX, midZ, 3.2);
-
-      setTimeout(() => {
-        soundEngine.playSwordSheath();
-        this.spawnSlashVfx(this.playerX, this.playerZ, this.playerAimAngle);
-      }, 180);
-    } else if (this.activeHeroId === 'quan') {
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 0.55;
-      this.animState = 'attack1';
-      this.arena.spawnMartialFlurryVFX(this.playerX, this.playerZ, this.playerAimAngle);
-
-      for (let i = 0; i < 6; i++) {
-        setTimeout(() => {
-          this.playerVx = Math.cos(this.playerAimAngle) * 5;
-          this.playerVz = Math.sin(this.playerAimAngle) * 5;
-          soundEngine.playFlurryHit(i);
-
-          const hx = this.playerX + Math.cos(this.playerAimAngle) * (1.2 + i * 0.15);
-          const hz = this.playerZ + Math.sin(this.playerAimAngle) * (1.2 + i * 0.15);
-          this.spawnSlashVfx(hx, hz, this.playerAimAngle + (Math.random() - 0.5) * 0.6);
-          this.checkMeleeHits(hx, hz, 2.2, this.playerStats.attackPower * 0.75, i === 5);
-          this.checkBreakableHits(hx, hz, 2.2);
-
-          if (i === 5) {
-            this.arena.addCameraShake(0.35);
-            soundEngine.playHit(true);
-          }
-        }, i * 65);
-      }
-    } else {
-      // Katherine: Glacial Nova (applies Freeze status)
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 0.5;
-      soundEngine.playFrostFreeze();
-      this.arena.spawnFrostNovaVFX(this.playerX, this.playerZ);
-      this.arena.addCameraShake(0.35);
-
-      for (const enemy of this.enemies) {
-        if (enemy.state === 'dead') continue;
-        const dist = Math.hypot(enemy.x - this.playerX, enemy.z - this.playerZ);
-        if (dist <= 4.5) {
-          this.applyStatusEffect(enemy, 'freeze', 2.0);
-        }
-      }
-
-      this.checkMeleeHits(this.playerX, this.playerZ, 4.2, this.playerStats.attackPower * 2.8, true);
-      this.checkBreakableHits(this.playerX, this.playerZ, 4.2);
-    }
-  }
-
-  public handleSkill2() {
-    if (this.bossIntroTimer > 0) return;
-    const s = this.skills[1];
-    if (!s || s.currentCooldown > 0 || this.isDashing) return;
-    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
-
-    if (this.activeHeroId === 'ginzo') {
-      soundEngine.playDash();
-      soundEngine.playHit(true);
-      this.arena.addCameraShake(0.3);
-
-      const angles = [this.playerAimAngle - 0.28, this.playerAimAngle, this.playerAimAngle + 0.28];
-      angles.forEach((ang) => {
-        const speed = 26;
-        const proj: Projectile = {
-          id: Date.now() + Math.random(),
-          owner: 'player',
-          x: this.playerX + Math.cos(ang) * 0.8,
-          z: this.playerZ + Math.sin(ang) * 0.8,
-          vx: Math.cos(ang) * speed,
-          vz: Math.sin(ang) * speed,
-          radius: 1.4,
-          damage: this.playerStats.attackPower * 2.4,
-          crit: undefined,
-          penetrateCount: 6,
-          type: 'katana_slash',
-          life: 1.2,
-          maxLife: 1.2,
-          color: '#ffffff',
-          trailTimer: 0,
-        };
-        this.projectiles.push(proj);
-        this.arena.spawnSkillProjectileVFX(proj.x, proj.z, ang, 15.5, 0x7dd3fc, 'blade');
-      });
-    } else if (this.activeHeroId === 'quan') {
-      soundEngine.playKiBlastLaunch();
-      this.arena.addCameraShake(0.35);
-      const speed = 25;
-      const proj: Projectile = {
-        id: Date.now() + Math.random(),
-        owner: 'player',
-        x: this.playerX + Math.cos(this.playerAimAngle) * 0.8,
-        z: this.playerZ + Math.sin(this.playerAimAngle) * 0.8,
-        vx: Math.cos(this.playerAimAngle) * speed,
-        vz: Math.sin(this.playerAimAngle) * speed,
-        radius: 1.8,
-        damage: this.playerStats.attackPower * 3.6,
-        crit: undefined,
-        penetrateCount: 12,
-        type: 'ki_blast',
-        life: 1.3,
-        maxLife: 1.3,
-        color: '#38bdf8',
-        trailTimer: 0,
-      };
-      this.projectiles.push(proj);
-      this.arena.spawnSkillProjectileVFX(proj.x, proj.z, this.playerAimAngle, 16, 0x38bdf8, 'dragon');
-    } else {
-      soundEngine.playThunderBolt();
-      this.arena.addCameraShake(0.4);
-
-      const beamDist = 12.0;
-      const endX = this.playerX + Math.cos(this.playerAimAngle) * beamDist;
-      const endZ = this.playerZ + Math.sin(this.playerAimAngle) * beamDist;
-      this.arena.spawnThunderBoltVFX(this.playerX, this.playerZ, endX, endZ);
-
-      const steps = 6;
-      for (let i = 1; i <= steps; i++) {
-        const hx = THREE.MathUtils.lerp(this.playerX, endX, i / steps);
-        const hz = THREE.MathUtils.lerp(this.playerZ, endZ, i / steps);
-        this.checkMeleeHits(hx, hz, 1.8, this.playerStats.attackPower * 3.2, true);
-        this.checkBreakableHits(hx, hz, 1.8);
-      }
-    }
-  }
-
-  public handleSkill3() {
-    if (this.bossIntroTimer > 0) return;
-    const s = this.skills[2];
-    if (!s || s.currentCooldown > 0 || this.isDashing) return;
-    s.currentCooldown = this.getEffectiveSkillCooldown(s.cooldown);
-
-    if (this.activeHeroId === 'ginzo') {
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 1.3;
-      soundEngine.playDimensionalSlash();
-      this.arena.spawnSakuraStormVFX(this.playerX, this.playerZ);
-      this.arena.addCameraShake(0.6);
-
-      for (let i = 0; i < 6; i++) {
-        setTimeout(() => {
-          this.checkMeleeHits(this.playerX, this.playerZ, 5.2, this.playerStats.attackPower * 1.3, true);
-          this.checkBreakableHits(this.playerX, this.playerZ, 5.2);
-          if (i === 5) soundEngine.playSwordSheath();
-        }, i * 110);
-      }
-    } else if (this.activeHeroId === 'quan') {
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 1.2;
-      soundEngine.playWhirlwindSpin();
-      this.arena.spawnDragonAscensionVFX(this.playerX, this.playerZ);
-      this.arena.addCameraShake(0.5);
-
-      for (let i = 0; i < 4; i++) {
-        setTimeout(() => {
-          this.enemies.forEach((e) => {
-            if (e.state === 'dead') return;
-            const dist = Math.hypot(e.x - this.playerX, e.z - this.playerZ);
-            if (dist < 6.0) {
-              e.x += (this.playerX - e.x) * 0.25;
-              e.z += (this.playerZ - e.z) * 0.25;
-            }
-          });
-          this.checkMeleeHits(this.playerX, this.playerZ, 4.5, this.playerStats.attackPower * 1.6, true);
-          this.checkBreakableHits(this.playerX, this.playerZ, 4.5);
-        }, i * 140);
-      }
-    } else {
-      this.isInvulnerable = true;
-      this.invulnerableTimer = 0.9;
-      soundEngine.playDash();
-      const targetX = this.playerX + Math.cos(this.playerAimAngle) * 4.5;
-      const targetZ = this.playerZ + Math.sin(this.playerAimAngle) * 4.5;
-      this.arena.spawnMeteorVFX(targetX, targetZ, () => {
-        soundEngine.playMeteorExplosion();
-        this.arena.addCameraShake(0.75);
-        this.checkMeleeHits(targetX, targetZ, 5.5, this.playerStats.attackPower * 4.5, true);
-        this.checkBreakableHits(targetX, targetZ, 5.5);
-      });
-    }
-  }
-
   public triggerInteraction() {
     if (this.bossIntroTimer > 0) return;
     if (this.currentMode === 'lobby') {
@@ -2361,7 +2013,10 @@ export class CombatEngine {
       }
     } else if (this.currentMode === 'dungeon') {
       if (this.isLevelRun && levelSystem.run) {
-        if (this.nearbyDungeonInteractable === 'chest') {
+        if (this.nearbyDungeonInteractable === 'boss_altar') {
+          this.summonLevelBossAtAltar();
+          return;
+        } else if (this.nearbyDungeonInteractable === 'chest') {
           this.openChestReward();
           return;
         } else if (this.nearbyDungeonInteractable === 'forge') {
@@ -2421,6 +2076,55 @@ export class CombatEngine {
         this.useDungeonPortal();
       }
     }
+  }
+
+  private summonLevelBossAtAltar() {
+    const run = levelSystem.run;
+    const roomType = levelSystem.getCurrentRoomType();
+    if (!this.isLevelRun || !run || this.bossSummonedForRoom || this.waveState === 'fighting' && roomType !== 'boss') return;
+
+    if (roomType === 'altar') {
+      this.bossSummonedForRoom = true;
+      this.nearbyDungeonInteractable = null;
+      if (!run.stage.clearedRoomIndices.includes(run.stage.currentRoomIndex)) {
+        run.stage.clearedRoomIndices.push(run.stage.currentRoomIndex);
+      }
+      this.pendingBossStageTransition = true;
+      this.bossStageTransitionTimer = 0.85;
+      this.arena.setPortalActive(false);
+      this.arena.spawnSkillBurst(-4.8, 0.9, -2.5, 0x6ee7e8, 28, 6.4, 0.8);
+      this.arena.addCameraShake(0.55);
+      soundEngine.playBossGong();
+      this.onStateChange?.();
+      return;
+    }
+
+    if (roomType !== 'boss' || this.waveState === 'cleared') return;
+    this.spawnLevelBossAtCurrentAltar();
+  }
+
+  private spawnLevelBossAtCurrentAltar() {
+    const run = levelSystem.run;
+    if (!run) return;
+    const biome = levelSystem.getCurrentBiome();
+    this.bossSummonedForRoom = true;
+    this.nearbyDungeonInteractable = null;
+    this.waveState = 'fighting';
+    this.currentRoomWave = 1;
+    this.bossIntroTimer = this.bossIntroDuration;
+    this.arena.setPortalActive(false);
+
+    const bossHp = Math.round(550 * run.hpMultiplier);
+    this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, -4.8, -2.5);
+    if (this.currentBoss) {
+      this.currentBoss.mesh.scale.setScalar(0.03);
+      const bossMaterial = this.currentBoss.mesh.material;
+      if (bossMaterial instanceof THREE.MeshBasicMaterial) bossMaterial.opacity = 0.02;
+      this.currentBoss.hpBarGroup.visible = false;
+    }
+
+    this.onBossIntro?.(biome.bossNameTh);
+    this.onStateChange?.();
   }
 
   public startHappyMerchantBoss() {
@@ -2834,6 +2538,7 @@ export class CombatEngine {
       if (this.isLevelRun && levelSystem.run) {
         const run = levelSystem.run;
         const currentRoomType = levelSystem.getCurrentRoomType();
+        if (currentRoomType === 'boss' && !this.bossSummonedForRoom) return;
 
         // Check if there are more waves in this combat or elite room
         if (
@@ -2910,6 +2615,12 @@ export class CombatEngine {
   // 60FPS SIMULATION TICK
   // ----------------------------------------------------------------------
   public update(dt: number, moveX: number, moveZ: number) {
+    if (this.bossStageTransitionTimer > 0) {
+      this.bossStageTransitionTimer = Math.max(0, this.bossStageTransitionTimer - dt);
+      if (this.bossStageTransitionTimer === 0) this.advanceLevelRoom('south');
+      return;
+    }
+
     if (this.bossIntroTimer > 0) {
       this.bossIntroTimer = Math.max(0, this.bossIntroTimer - dt);
       const boss = this.currentBoss;
@@ -2937,12 +2648,6 @@ export class CombatEngine {
     }
 
     if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
-    for (const skill of this.skills) {
-      if (skill.currentCooldown > 0) {
-        skill.currentCooldown = Math.max(0, skill.currentCooldown - dt);
-      }
-    }
-
     if (this.temporaryAttackSpeedTimer > 0) {
       this.temporaryAttackSpeedTimer = Math.max(0, this.temporaryAttackSpeedTimer - dt);
       if (this.temporaryAttackSpeedTimer === 0) this.temporaryAttackSpeedBonus = 0;
@@ -2987,14 +2692,9 @@ export class CombatEngine {
     this.comboStep = this.playerCombat.comboStep;
     this.comboWindowTimer = this.playerCombat.comboWindowLeft;
     this.isAttacking = this.playerCombat.isAttacking;
-    this.mirageRendCooldown = this.playerCombat.skillCooldownLeft;
 
     // Player movement scaled by Movement Speed stat
-    if (this.playerCombat.movementLocked) {
-      this.playerVx = 0;
-      this.playerVz = 0;
-      this.animState = 'dash';
-    } else if (this.isDashing) {
+    if (this.isDashing) {
       this.dashTimer -= dt;
       if (this.dashTimer <= 0) {
         this.isDashing = false;
@@ -3093,6 +2793,15 @@ export class CombatEngine {
       const stage = levelSystem.run.stage;
       const roomType = levelSystem.getCurrentRoomType();
 
+      if ((roomType === 'altar' && !this.bossSummonedForRoom && this.waveState === 'cleared') ||
+          (roomType === 'boss' && !this.bossSummonedForRoom && this.waveState === 'fighting')) {
+        const altarDistance = Math.hypot(this.playerX - (-4.8), this.playerZ - (-2.5));
+        if (altarDistance < 3.6) {
+          this.nearbyDungeonInteractable = 'boss_altar';
+          return;
+        }
+      }
+
       // Check Chest interaction
       const chestState = this.getCurrentLevelChestState();
       const chestRoomCleared = ['combat', 'elite', 'boss', 'secret'].includes(roomType) && this.waveState === 'cleared';
@@ -3158,7 +2867,7 @@ export class CombatEngine {
       }
 
       // Room routes are entered only by pressing E while standing beside a connected door.
-      if (this.waveState === 'cleared') {
+      if (this.waveState === 'cleared' && !(roomType === 'altar' && !this.bossSummonedForRoom)) {
         const node = stage.roomGraph[stage.currentRoomIndex];
         const doors: Array<{ direction: RoomDirection; interactable: DungeonInteractableType; x: number; z: number }> = [
           { direction: 'north', interactable: 'door_north', x: 0, z: this.arena.bounds.minZ },

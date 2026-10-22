@@ -611,6 +611,9 @@ export class ArenaScene {
     } else if (room === 'elite') {
       // Elite Room
       this.createFloatingBadge('💀 ห้องศัตรูระดับสูง (ELITE COMBAT)', '#ef4444', 0, 4.4, -7.5);
+    } else if (room === 'altar') {
+      this.createBossArenaAltar(-4.8, -2.5);
+      this.createFloatingBadge('🗿 [E] อัญเชิญบอส', '#67e8f9', -4.8, 4.4, -2.5);
     } else if (room === 'boss') {
       this.createBossArenaAltar(-4.8, -2.5);
       this.buildDungeonPortalGate(0, 7.5);

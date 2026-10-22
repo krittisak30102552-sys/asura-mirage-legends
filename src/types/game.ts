@@ -174,9 +174,6 @@ export type HeroAnimationState =
   | 'attack1'
   | 'attack2'
   | 'attack3'
-  | 'skill1'
-  | 'skill2'
-  | 'skill3'
   | 'dash'
   | 'hurt'
   | 'dead';
@@ -253,18 +250,6 @@ export interface PlayerStats {
   equippedWeaponId: string;
   equippedItems: EquipmentItem[];
   inventory: EquipmentItem[];
-}
-
-export interface SkillInfo {
-  id: 'skill1' | 'skill2' | 'skill3';
-  key: string;
-  name: string;
-  nameTh: string;
-  desc: string;
-  descTh: string;
-  cooldown: number;
-  currentCooldown: number;
-  icon: string;
 }
 
 export interface RelicItem {
@@ -352,6 +337,7 @@ export type DungeonInteractableType =
   | 'secret_wall'
   | 'chest'
   | 'forge'
+  | 'boss_altar'
   | 'portal';
 
 export interface NpcActor {

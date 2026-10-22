@@ -3,7 +3,7 @@ import { DifficultyMode, EquipmentItem } from '../types/game';
 import { INITIAL_EQUIPMENT } from '../data/gameData';
 import { EQUIPMENT_RARITY_META, hasEquipmentBonuses, rollEquipmentVariant } from './equipmentStats';
 
-export type StageRoomType = 'start' | 'combat' | 'elite' | 'shop' | 'chest' | 'boss' | 'exit' | 'forge' | 'secret';
+export type StageRoomType = 'start' | 'combat' | 'elite' | 'shop' | 'chest' | 'altar' | 'boss' | 'exit' | 'forge' | 'secret';
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
 export const ROOM_DIRECTIONS: RoomDirection[] = ['north', 'east', 'south', 'west'];
 
@@ -263,10 +263,10 @@ export class LevelSystem {
   }
 
   private generateStage(stageNumber: number, rng: SeededRNG): StageData {
-    const rooms: StageRoomType[] = ['start', 'combat', 'combat', 'combat', 'combat', 'boss'];
-    for (let index = 1; index <= 4; index++) rooms[index] = this.rollRoomType(rng);
+    const rooms: StageRoomType[] = ['start', 'combat', 'combat', 'combat', 'altar', 'boss'];
+    for (let index = 1; index <= 3; index++) rooms[index] = this.rollRoomType(rng);
     if (!rooms.slice(1, 5).some((type) => type === 'combat' || type === 'elite')) {
-      rooms[rng.range(1, 4)] = 'combat';
+      rooms[rng.range(1, 3)] = 'combat';
     }
     const roomGraph = this.generateRoomGraph(rooms, rng);
     const mapRotation = 0 as StageData['mapRotation'];

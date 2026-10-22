@@ -18,7 +18,6 @@ import {
   HeroId,
   DungeonMapId,
   PlayerStats,
-  SkillInfo,
   RelicItem,
   DifficultyMode,
   DungeonRoomId,
@@ -129,9 +128,7 @@ export default function App() {
     inventory: [],
   });
 
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [dashCooldown, setDashCooldown] = useState<number>(0);
-  const [mirageRendCooldown, setMirageRendCooldown] = useState<number>(0);
   const [comboStep, setComboStep] = useState<number>(0);
   const [currentWave, setCurrentWave] = useState<number>(1);
   const [currentDungeonMap, setCurrentDungeonMap] = useState<DungeonMapId>('desert');
@@ -435,8 +432,6 @@ export default function App() {
     // Sync state
     setActiveHeroId(engine.activeHeroId);
     setPlayerStats({ ...engine.playerStats });
-    setSkills([...engine.skills]);
-    setMirageRendCooldown(engine.mirageRendCooldown);
     setCurrentDungeonMap(engine.currentDungeonMap);
 
     // Engine callbacks
@@ -448,9 +443,7 @@ export default function App() {
         setActiveHeroId(engine.activeHeroId);
         setRelics([...engine.relics]);
         setPlayerStats({ ...engine.playerStats });
-        setSkills([...engine.skills]);
         setDashCooldown(engine.dashCooldown);
-        setMirageRendCooldown(engine.mirageRendCooldown);
         setComboStep(engine.comboStep);
         setCurrentWave(engine.currentWave);
         setCurrentDungeonMap(engine.currentDungeonMap);
@@ -612,10 +605,6 @@ export default function App() {
 
       // Combat actions (only when active)
       if (gameModeRef.current === 'playing' || gameModeRef.current === 'lobby') {
-        if (e.code === 'Digit1' || e.code === 'KeyQ') engine.handleSkill1();
-        if (e.code === 'Digit2' || e.code === 'KeyF' || e.code === 'KeyZ') engine.handleSkill2();
-        if (e.code === 'Digit3' || e.code === 'KeyR' || e.code === 'KeyX') engine.handleSkill3();
-        if (e.code === 'KeyC') engine.handleMirageRend();
         if (e.code === 'Space') engine.handleDash();
       }
     };
@@ -891,10 +880,8 @@ export default function App() {
           mode={gameMode === 'lobby' ? 'lobby' : 'dungeon'}
           stats={playerStats}
           activeHeroId={activeHeroId}
-          skills={skills}
           relics={relics}
           dashCooldown={dashCooldown}
-          mirageRendCooldown={mirageRendCooldown}
           dashMaxCooldown={1.0}
           comboStep={comboStep}
           currentWave={currentWave}
@@ -928,10 +915,6 @@ export default function App() {
           onOpenInventory={() => setIsInventoryOpen(true)}
           onAttack={() => engineRef.current?.handleAttack()}
           onDash={() => engineRef.current?.handleDash()}
-          onSkill1={() => engineRef.current?.handleSkill1()}
-          onSkill2={() => engineRef.current?.handleSkill2()}
-          onSkill3={() => engineRef.current?.handleSkill3()}
-          onMirageRend={() => engineRef.current?.handleMirageRend()}
           onInteract={() => engineRef.current?.triggerInteraction()}
           onRunCommand={handleRunCommand}
           oneHitMode={oneHitMode}

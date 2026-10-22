@@ -153,7 +153,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           onClick={onOpenGuide}
           className="mt-4 text-xs font-rajdhani text-zinc-400 hover:text-amber-400 transition-colors underline underline-offset-4 cursor-pointer"
         >
-          วิธีบังคับและคำอธิบายสกิล 1-3
+          วิธีเล่นและการควบคุม
         </button>
       </div>
 
@@ -161,9 +161,9 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       <div className="w-full flex flex-col sm:flex-row items-center justify-between text-xs font-rajdhani text-zinc-400 border-t border-zinc-800/80 pt-4 px-2">
         <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-0">
           <span className="text-amber-400 font-bold">CONTROLS:</span>
-          <span>💻 คอมพิวเตอร์: WASD เคลื่อนที่ · เมาส์ เล็ง/โจมตี · 1-3 สกิล · Space แดช</span>
+          <span>💻 คอมพิวเตอร์: WASD เคลื่อนที่ · เมาส์ เล็ง/โจมตี · Space หลบ · E โต้ตอบ</span>
           <span className="text-zinc-600 hidden md:inline">|</span>
-          <span className="text-sky-300">📱 มือถือ: จอยสติ๊กสัมผัสบนจอ & ปุ่มโจมตี/สกิล</span>
+          <span className="text-sky-300">📱 มือถือ: จอยสติ๊กสัมผัสบนจอ & ปุ่มโจมตี/หลบ</span>
         </div>
         <div className="text-[11px] text-zinc-500">
           HTML5 WebGL 60FPS · 100% Web Playable

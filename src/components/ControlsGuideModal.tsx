@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, MousePointer, Sparkles, Shield, Flame, Compass, Heart, Zap, Wind } from 'lucide-react';
+import { X, MousePointer, Shield, Flame, Compass, Heart, Zap, Wind } from 'lucide-react';
 import { DUNGEON_MAPS } from '../data/gameData';
 
 interface ControlsGuideModalProps {
@@ -48,7 +48,7 @@ export const ControlsGuideModal: React.FC<ControlsGuideModalProps> = ({
               tab === 'controls' ? 'bg-amber-500 text-zinc-950 shadow' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            การควบคุม & สกิล
+            การควบคุม
           </button>
           <button
             onClick={() => setTab('stats')}
@@ -102,10 +102,6 @@ export const ControlsGuideModal: React.FC<ControlsGuideModalProps> = ({
                     <span className="font-bold text-sky-400 bg-zinc-800 px-1.5 py-0.5 rounded mr-1">Space / คลิกขวา</span>
                     <span>หลบหลีก (Dodge Roll อมตะ)</span>
                   </div>
-                  <div>
-                    <span className="font-bold text-purple-300 bg-zinc-800 px-1.5 py-0.5 rounded mr-1">Q / Z / X</span>
-                    <span>ใช้สกิล 1, 2, 3 (หรือปุ่ม 1, 2, 3)</span>
-                  </div>
                 </div>
 
                 {/* Mobile Touch Controls Section */}
@@ -116,21 +112,12 @@ export const ControlsGuideModal: React.FC<ControlsGuideModalProps> = ({
                   <div className="text-zinc-300 space-y-1 text-[11px] leading-relaxed">
                     <p>• <b>จอยสติ๊กสัมผัสซ้ายล่าง (Virtual Joystick):</b> แตะแล้วลากเพื่อเดินไปในทิศทางที่ต้องการ 360 องศา</p>
                     <p>• <b>ปุ่มโจมตีขวาล่าง (Attack Button):</b> แตะปุ่มวงกลมสีส้มเพื่อโจมตีคอมโบต่อเนื่อง</p>
-                    <p>• <b>ปุ่มสกิลและแดช (Skills & Dodge):</b> สามารถแตะไอคอนสกิล 1-3 หรือปุ่มแดชบนหน้าจอเพื่อกดใช้งานได้ทันที</p>
+                    <p>• <b>ปุ่มหลบและโต้ตอบ:</b> แตะปุ่มหลบเพื่อหลบการโจมตี และแตะปุ่ม E ที่ปรากฏใกล้แท่นหรือประตูเพื่อใช้งาน</p>
                     <p>• <b>ปุ่มโหมดเต็มจอ (Fullscreen):</b> แตะไอคอนสี่เหลี่ยมขวาบนเพื่อเล่นแบบเต็มจอไม่มีแถบที่อยู่บราวเซอร์</p>
                   </div>
                 </div>
               </div>
 
-              {/* Active Skills */}
-              <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-2">
-                <h4 className="font-rajdhani font-bold text-amber-400 text-sm flex items-center gap-1.5">
-                  <Sparkles size={15} /> 3 สกิลประจำตัวละคร (Q / Z / X หรือเลข 1, 2, 3)
-                </h4>
-                <p className="text-xs text-zinc-300 font-rajdhani leading-relaxed">
-                  ตัวละครแต่ละตัวมีความสามารถและคูลดาวน์เฉพาะตัว เช่น กินโซ (Ginzo) มีวิชาดาบอิไอพุ่งฟันและระบำซากุระ, กวนฮุ่ยอิง (Quan) มีหมัดรัวและเตะพายุดูดศัตรู, แคเธอรีน (Katherine) ปล่อยไอเย็นแช่แข็งและฝนดาวตกเพลิง
-                </p>
-              </div>
             </div>
           )}
 
