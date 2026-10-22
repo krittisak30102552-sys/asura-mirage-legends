@@ -103,7 +103,9 @@ export type EquipmentPerkType =
   | 'status_burn'
   | 'status_bleed'
   | 'status_slow'
-  | 'status_shock';
+  | 'status_shock'
+  | 'dodge_guard'
+  | 'revive_once';
 
 export interface EquipmentPerk {
   type: EquipmentPerkType;
@@ -143,6 +145,8 @@ export interface EquipmentItem {
   perk?: EquipmentPerk;
   specialPerkTh?: string;
   cost?: number;
+  /** Keep this curated item's authored stats instead of rolling random affixes. */
+  fixedStats?: boolean;
 }
 
 export type WeaponRarity = 'common' | 'rare' | 'epic' | 'legendary';

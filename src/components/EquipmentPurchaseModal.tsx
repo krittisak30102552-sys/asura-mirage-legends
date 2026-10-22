@@ -14,9 +14,9 @@ interface EquipmentPurchaseModalProps {
 
 const rarityStyle = {
   common: { label: 'ทั่วไป · 1 ค่า', frame: 'border-zinc-500/70', text: 'text-zinc-200', glow: 'shadow-zinc-500/10' },
-  rare: { label: 'หายาก · 2 ค่า', frame: 'border-sky-400/80', text: 'text-sky-200', glow: 'shadow-sky-500/20' },
+  rare: { label: 'หายาก · 2 ค่า หรือพลังตามเงื่อนไข', frame: 'border-sky-400/80', text: 'text-sky-200', glow: 'shadow-sky-500/20' },
   epic: { label: 'มหากาพย์ · 2 ค่า', frame: 'border-purple-400/80', text: 'text-purple-200', glow: 'shadow-purple-500/20' },
-  legendary: { label: 'ตำนาน · 2 ค่า + พิเศษ', frame: 'border-amber-300/90', text: 'text-amber-200', glow: 'shadow-amber-400/25' },
+  legendary: { label: 'ตำนาน · ค่าสูง + พลังพิเศษ', frame: 'border-amber-300/90', text: 'text-amber-200', glow: 'shadow-amber-400/25' },
 } as const;
 
 const statIcon = (key: EquipmentStatKey) => {
@@ -76,7 +76,9 @@ export const EquipmentPurchaseModal: React.FC<EquipmentPurchaseModalProps> = ({
                 {visibleStats.map(({ key, label, icon, format }) => {
                   const value = item[key] ?? 0;
                   const current = comparison?.[key] ?? 0;
-                  const color = comparison ? value > current ? 'text-emerald-300' : value < current ? 'text-rose-400' : 'text-zinc-300' : 'text-emerald-300';
+                  const color = comparison
+                    ? value > current ? 'text-emerald-300' : value < current ? 'text-rose-400' : 'text-zinc-300'
+                    : value < 0 ? 'text-rose-400' : 'text-emerald-300';
                   return (
                     <div key={key} className="flex items-center justify-between gap-3 text-sm">
                       <span className="flex items-center gap-2 text-zinc-400">{icon}<span>{label}</span></span>

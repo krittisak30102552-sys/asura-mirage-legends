@@ -383,6 +383,129 @@ export const INITIAL_EQUIPMENT: EquipmentItem[] = [
     cost: 210,
     specialPerkTh: 'เพิ่ม ATK +2, เกราะ +15, คริติคอล +8% และสร้างคลื่น Ki Blast ในคอมโบ 3',
   },
+
+  // CURATED DUNGEON EQUIPMENT (fixed stats authored for the requested rarity tiers)
+  {
+    id: 'bamboo_wolf_fang', name: 'Bamboo Wolf Fang', nameTh: 'เขี้ยวหมาป่าไผ่',
+    descTh: 'เขี้ยวสีงาช้างเสียบเชือกป่าน เครื่องรางนักล่าแห่งป่าไผ่หมอก',
+    rarity: 'common', icon: '🦷', bonusDamagePercent: 0.08, cost: 55, fixedStats: true,
+  },
+  {
+    id: 'wind_wrist_wrap', name: 'Wind Wrist Wrap', nameTh: 'สายรัดข้อมือลม',
+    descTh: 'แถบผ้าสีฟ้าซีด ปลายมีพู่ที่พริ้วไหวทุกครั้งที่ออกอาวุธ',
+    rarity: 'common', icon: '🌬️', bonusAttackSpeedPercent: 0.10, cost: 55, fixedStats: true,
+  },
+  {
+    id: 'mummy_scale', name: 'Mummy Scale', nameTh: 'เกล็ดมัมมี่',
+    descTh: 'แผ่นผ้าพันแผลเก่าพับเป็นเกราะจิ๋วจากสุสานใต้ดิน',
+    rarity: 'common', icon: '🛡️', bonusShield: 20, cost: 60, fixedStats: true,
+  },
+  {
+    id: 'ghost_lantern', name: 'Ghost Lantern', nameTh: 'ตะเกียงผี',
+    descTh: 'ตะเกียงกระดาษสีเขียวซีด ลอยนำทางวิญญาณในความมืด',
+    rarity: 'common', icon: '🏮', bonusMoveSpeedPercent: 0.08, cost: 55, fixedStats: true,
+  },
+  {
+    id: 'ancient_copper_coin', name: 'Ancient Copper Coin', nameTh: 'เหรียญทองแดงโบราณ',
+    descTh: 'เหรียญทองแดงมีรูตรงกลาง ผูกเชือกแดงไว้เรียกทรัพย์',
+    rarity: 'common', icon: '🪙', bonusCoinGain: 0.15, cost: 60, fixedStats: true,
+  },
+  {
+    id: 'ice_fan', name: 'Ice Fan', nameTh: 'ใบพัดน้ำแข็ง',
+    descTh: 'ผลึกน้ำแข็งบางรูปใบพัด หมุนช้า ๆ และลดคูลดาวน์สกิล',
+    rarity: 'common', icon: '❄️', bonusCooldownReduction: 0.08, cost: 60, fixedStats: true,
+  },
+  {
+    id: 'wooden_false_teeth', name: 'Wooden False Teeth', nameTh: 'ฟันปลอมไม้',
+    descTh: 'ฟันไม้แกะสลักเป็นรอยยิ้มกว้าง ดูดพลังจากผู้ที่ถูกกัด',
+    rarity: 'rare', icon: '😁', bonusLifesteal: 0.03, bonusDamagePercent: 0.05,
+    bonusMaxHpPercent: -0.10, cost: 105, fixedStats: true,
+  },
+  {
+    id: 'home_guard_jade', name: 'Home Guard Jade', nameTh: 'หยกเฝ้าบ้าน',
+    descTh: 'จี้หยกเขียวสลักรูปสิงโตผู้เฝ้าประตูโบราณ',
+    rarity: 'rare', icon: '🦁', bonusHp: 40, bonusShield: 15, bonusMoveSpeedPercent: -0.05,
+    cost: 120, fixedStats: true,
+  },
+  {
+    id: 'assassin_headwrap', name: "Assassin's Headwrap", nameTh: 'ผ้าโพกหัวนักฆ่า',
+    descTh: 'ผ้าสีดำปักด้ายเงินที่ช่วยเล็งจุดตาย แต่ลดเกราะป้องกันลง',
+    rarity: 'rare', icon: '🥷', bonusCritChance: 0.08, bonusShield: -10, cost: 105, fixedStats: true,
+  },
+  {
+    id: 'spirit_rattle_bell', name: 'Spirit Rattle Bell', nameTh: 'ระฆังสั่นวิญญาณ',
+    descTh: 'ระฆังเล็กห้อยเอว ส่งเสียงแผ่วเบาเมื่อวิญญาณพ่ายแพ้',
+    rarity: 'rare', icon: '🔔', perk: { type: 'kill_haste', value: 0.15, duration: 3 },
+    specialPerkTh: 'ฆ่าศัตรูแล้วความเร็วโจมตี +15% นาน 3 วินาที', cost: 115, fixedStats: true,
+  },
+  {
+    id: 'sand_turtle_shell', name: 'Sand Turtle Shell', nameTh: 'กระดองเต่าทราย',
+    descTh: 'เปลือกแข็งสีน้ำตาลทองจากทะเลทราย พาดหลังแล้วรับแรงปะทะได้ดี',
+    rarity: 'rare', icon: '🐢', bonusDamageReduction: 0.08, bonusAttackSpeedPercent: -0.08,
+    cost: 120, fixedStats: true,
+  },
+  {
+    id: 'blood_ink_brush', name: 'Blood Ink Brush', nameTh: 'พู่กันน้ำหมึกเลือด',
+    descTh: 'พู่กันด้ามแดง ปลายชุบหมึกดำที่ขีดเขียนความเสียหายรุนแรง',
+    rarity: 'rare', icon: '🖌️', bonusCritDamagePercent: 0.25, bonusCritChance: -0.03,
+    cost: 120, fixedStats: true,
+  },
+  {
+    id: 'hot_wine_bottle', name: 'Hot Wine Bottle', nameTh: 'ขวดไวน์ร้อน',
+    descTh: 'ขวดดินเผาอุ่นตลอดเวลา ฟื้นเลือด 1 หน่วยต่อวินาทีแต่เคลื่อนไหวช้าลง · ซ้อนได้ไม่เกิน 2 ขวด',
+    rarity: 'rare', icon: '🍶', bonusHpRegen: 1, bonusMoveSpeedPercent: -0.05,
+    cost: 125, fixedStats: true,
+  },
+  {
+    id: 'torn_map', name: 'Torn Map', nameTh: 'แผนที่ขาด',
+    descTh: 'กระดาษเก่ายับมีรอยไหม้ บอกทางไปหาสมบัติแต่ทำให้ลังเลเวลาโจมตี',
+    rarity: 'rare', icon: '🗺️', bonusChestLuck: 0.08, bonusCoinGain: 0.10,
+    bonusDamagePercent: -0.05, cost: 115, fixedStats: true,
+  },
+  {
+    id: 'reflecting_storm_sword', name: 'Reflecting Storm Sword', nameTh: 'ดาบพายุสะท้อน',
+    descTh: 'ดาบเรียวสีฟ้าอมเทา มีประกายไฟฟ้าวิ่งตามคม เป็นเครื่องรางสวมใส่ไม่ใช่อาวุธเปลี่ยนมือ',
+    rarity: 'legendary', icon: '⚔️', bonusCritChance: 0.08, bonusCritDamagePercent: 0.25,
+    bonusMaxHpPercent: -0.10, perk: { type: 'crit_haste', value: 0.02, duration: 4 },
+    specialPerkTh: 'ทุกครั้งที่คริติคอล ความเร็วโจมตี +2% ซ้อนสูงสุด 10 ครั้ง นาน 4 วินาที · เลือดสูงสุด -10%',
+    cost: 250, fixedStats: true,
+  },
+  {
+    id: 'white_tiger_mask', name: 'White Tiger Mask', nameTh: 'หน้ากากเสือขาว',
+    descTh: 'หน้ากากเงินสลักลายเสือขาว เครื่องรางของผู้ไม่ยอมให้ศัตรูแตะตัว',
+    rarity: 'legendary', icon: '🐯', perk: { type: 'full_hp_damage', value: 0.15, duration: 5 },
+    specialPerkTh: 'ขณะเลือดเต็ม ดาเมจ +15%; เมื่อโดนตี โบนัสนี้ถูกปิด 5 วินาที',
+    cost: 230, fixedStats: true,
+  },
+  {
+    id: 'forge_heart', name: 'Forge Heart', nameTh: 'หัวใจเตาหลอม',
+    descTh: 'ก้อนเหล็กแดงร้อนเต้นเป็นจังหวะ ส่งไอร้อนลามไปยังศัตรู',
+    rarity: 'legendary', icon: '❤️‍🔥', bonusDamagePercent: 0.20, bonusDamageReduction: -0.10,
+    perk: { type: 'status_burn', status: 'burn', chance: 1, duration: 3, value: 12 },
+    specialPerkTh: 'ดาเมจ +20% และการโจมตีทำให้ศัตรูติดไฟ 3 วินาที · ได้รับดาเมจ +10%',
+    cost: 260, fixedStats: true,
+  },
+  {
+    id: 'glass_cannon_orb', name: 'Glass Cannon Orb', nameTh: 'ปืนใหญ่แก้ว',
+    descTh: 'ลูกแก้วใสบรรจุแสงสีขาว พลังทำลายสูงแต่เปราะบาง',
+    rarity: 'legendary', icon: '🔮', bonusDamagePercent: 0.40, bonusMaxHpPercent: -0.20,
+    specialPerkTh: 'ดาเมจ +40% แลกกับเลือดสูงสุด -20%', cost: 250, fixedStats: true,
+  },
+  {
+    id: 'cloud_shadow_cloak', name: 'Cloud Shadow Cloak', nameTh: 'ผ้าคลุมเงาเมฆา',
+    descTh: 'ผ้าบางโปร่งสีเทาเงินลอยพลิ้วเอง ช่วยหลบแต่ลดเกราะป้องกันลง',
+    rarity: 'legendary', icon: '🌫️', bonusDodgeChance: 0.10, bonusMoveSpeedPercent: 0.10,
+    bonusShield: -20, perk: { type: 'dodge_guard', value: 12, duration: 3 },
+    specialPerkTh: 'หลบสำเร็จแล้วได้รับโล่ชั่วคราว 12 แต้ม นาน 3 วินาที · เกราะ -20 · โอกาสหลบรวมสูงสุด 60%',
+    cost: 260, fixedStats: true,
+  },
+  {
+    id: 'little_guardian_coffin', name: 'Little Guardian Coffin', nameTh: 'โลงน้อยเฝ้าตัว',
+    descTh: 'โลงไม้ขนาดเท่ากำปั้นผูกสร้อยคอ เฝ้าคุ้มครองเจ้าของจากความตาย',
+    rarity: 'legendary', icon: '⚰️', perk: { type: 'revive_once', value: 0.40, duration: 2 },
+    specialPerkTh: 'ครั้งแรกที่เลือดจะหมดในแต่ละฉาก ฟื้นกลับมา 40% และอมตะ 2 วินาที · ปิดการฟื้นเลือดตามเวลา',
+    cost: 280, fixedStats: true,
+  },
 ];
 
 /**

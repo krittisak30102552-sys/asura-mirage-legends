@@ -16,9 +16,9 @@ interface InventoryModalProps {
 
 const RARITY_COLORS: Record<string, { border: string; bg: string; text: string; label: string }> = {
   common: { border: 'border-zinc-600', bg: 'bg-zinc-900', text: 'text-zinc-200', label: 'ทั่วไป · 1 ค่า' },
-  rare: { border: 'border-sky-500', bg: 'bg-sky-950/40', text: 'text-sky-300', label: 'หายาก · 2 ค่า' },
+  rare: { border: 'border-sky-500', bg: 'bg-sky-950/40', text: 'text-sky-300', label: 'หายาก · 2 ค่า หรือพลังตามเงื่อนไข' },
   epic: { border: 'border-purple-500', bg: 'bg-purple-950/40', text: 'text-purple-300', label: 'มหากาพย์ · 2 ค่า' },
-  legendary: { border: 'border-amber-400', bg: 'bg-amber-950/40', text: 'text-amber-300', label: 'ตำนาน · 2 ค่า + พิเศษ' },
+  legendary: { border: 'border-amber-400', bg: 'bg-amber-950/40', text: 'text-amber-300', label: 'ตำนาน · ค่าสูง + พลังพิเศษ' },
 };
 
 const itemFamily = (item: EquipmentItem) => item.templateId ?? item.id;
@@ -59,18 +59,23 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       return <span className="text-[10px] text-zinc-400">{item.specialPerkTh || item.descTh}</span>;
     }
 
-    return visibleStats.map(({ key, label, format }) => {
-      const value = item[key] ?? 0;
-      const comparedValue = comparison?.[key] ?? value;
-      const color = comparison
-        ? value > comparedValue ? 'text-emerald-300' : value < comparedValue ? 'text-rose-400' : 'text-zinc-300'
-        : value < 0 ? 'text-rose-400' : 'text-emerald-300';
-      return (
-        <span key={key} className={`mr-2 inline-block text-[10px] ${color}`}>
-          {label} {format(value)}
-        </span>
-      );
-    });
+    return (
+      <>
+        {visibleStats.map(({ key, label, format }) => {
+          const value = item[key] ?? 0;
+          const comparedValue = comparison?.[key] ?? value;
+          const color = comparison
+            ? value > comparedValue ? 'text-emerald-300' : value < comparedValue ? 'text-rose-400' : 'text-zinc-300'
+            : value < 0 ? 'text-rose-400' : 'text-emerald-300';
+          return (
+            <span key={key} className={`mr-2 inline-block text-[10px] ${color}`}>
+              {label} {format(value)}
+            </span>
+          );
+        })}
+        {item.specialPerkTh && <span className="mt-1 block text-[10px] leading-relaxed text-purple-300">✦ {item.specialPerkTh}</span>}
+      </>
+    );
   };
 
   return (
@@ -186,7 +191,6 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-amber-100">{selectedItem.nameTh}</div>
                     <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">{selectedItem.descTh}</p>
-                    {selectedItem.specialPerkTh && <p className="mt-2 text-[10px] leading-relaxed text-purple-200">✦ {selectedItem.specialPerkTh}</p>}
                     {compareItem && <p className="mt-2 text-[10px] text-zinc-500">เทียบกับชิ้นที่ใส่อยู่: <span className="text-amber-200">{compareItem.nameTh}</span></p>}
                     <div className="mt-1 leading-relaxed">{renderItemStats(selectedItem, compareItem)}</div>
                   </div>

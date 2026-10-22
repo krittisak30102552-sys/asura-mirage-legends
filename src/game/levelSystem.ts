@@ -1,7 +1,7 @@
 import rawLevelsConfig from '../data/levels.json';
 import { DifficultyMode, EquipmentItem } from '../types/game';
 import { INITIAL_EQUIPMENT } from '../data/gameData';
-import { EQUIPMENT_RARITY_META, rollEquipmentVariant } from './equipmentStats';
+import { EQUIPMENT_RARITY_META, hasEquipmentBonuses, rollEquipmentVariant } from './equipmentStats';
 
 export type StageRoomType = 'start' | 'combat' | 'elite' | 'shop' | 'chest' | 'boss' | 'exit' | 'forge' | 'secret';
 export type RoomDirection = 'north' | 'east' | 'south' | 'west';
@@ -310,10 +310,7 @@ export class LevelSystem {
   }
 
   public generateShopOffers(rng: SeededRNG): ShopOfferItem[] {
-    const eligible = INITIAL_EQUIPMENT.filter((item) =>
-      [item.bonusHp, item.bonusShield, item.bonusAttack, item.bonusDefense, item.bonusCritChance, item.bonusMoveSpeed, item.bonusAttackSpeed]
-        .some((bonus) => typeof bonus === 'number' && bonus > 0)
-    );
+    const eligible = INITIAL_EQUIPMENT.filter(hasEquipmentBonuses);
     const chosen: EquipmentItem[] = [];
     const rarityOrder = ['common', 'rare', 'epic', 'legendary'] as const;
     while (chosen.length < LEVELS_CONFIG.shop.items && chosen.length < eligible.length) {

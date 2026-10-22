@@ -2,9 +2,9 @@ import { EquipmentItem, EquipmentPerk, ItemRarity } from '../types/game';
 
 export const EQUIPMENT_RARITY_META: Record<ItemRarity, { label: string; weight: number }> = {
   common: { label: 'ทั่วไป · 1 ค่าสถานะ', weight: 55 },
-  rare: { label: 'หายาก · 2 ค่าสถานะ', weight: 28 },
+  rare: { label: 'หายาก · 2 ค่า หรือ 1 ค่าพร้อมเงื่อนไข', weight: 28 },
   epic: { label: 'มหากาพย์ · 2 ค่าสถานะ', weight: 13 },
-  legendary: { label: 'ตำนาน · 2 ค่าสถานะ + พลังพิเศษ', weight: 4 },
+  legendary: { label: 'ตำนาน · ค่าสูง + พลังพิเศษ', weight: 4 },
 };
 
 export type EquipmentStatKey =
@@ -49,6 +49,10 @@ export function getEquipmentStatEntries(item: EquipmentItem) {
   return EQUIPMENT_STAT_DEFINITIONS
     .map((definition) => ({ ...definition, value: item[definition.key] ?? 0 }))
     .filter((entry) => entry.value !== 0);
+}
+
+export function hasEquipmentBonuses(item: EquipmentItem): boolean {
+  return getEquipmentStatEntries(item).length > 0 || Boolean(item.perk);
 }
 
 export function formatEquipmentStatBonuses(item: EquipmentItem): string[] {
@@ -104,6 +108,10 @@ const LEGACY_AFFIX_KEYS: EquipmentStatKey[] = ['bonusAttack', 'bonusAttackSpeed'
 const ALL_AFFIX_KEYS = [...ROLLABLE_STATS.map(({ key }) => key), ...LEGACY_AFFIX_KEYS] as EquipmentStatKey[];
 
 export function rollEquipmentVariant(item: EquipmentItem, random: () => number = Math.random): EquipmentItem {
+  if (item.fixedStats) {
+    return { ...item, templateId: item.templateId ?? item.id };
+  }
+
   const rolled: EquipmentItem = {
     ...item,
     templateId: item.templateId ?? item.id,

@@ -3,7 +3,7 @@ import { Check, Coins, X } from 'lucide-react';
 import { EquipmentItem, MAX_EQUIPPED_ITEMS } from '../types/game';
 import { INITIAL_EQUIPMENT } from '../data/gameData';
 import { soundEngine } from '../audio/soundEngine';
-import { formatEquipmentStatSummary } from '../game/equipmentStats';
+import { EQUIPMENT_STAT_DEFINITIONS, formatEquipmentStatSummary, hasEquipmentBonuses } from '../game/equipmentStats';
 
 interface EquipmentShopModalProps {
   isOpen: boolean;
@@ -22,20 +22,6 @@ const RARITY: Record<string, { text: string; border: string; label: string }> = 
 };
 
 const itemFamily = (item: EquipmentItem) => item.templateId ?? item.id;
-const STAT_FIELDS: Array<{
-  key: 'bonusAttack' | 'bonusCritChance' | 'bonusAttackSpeed' | 'bonusHp' | 'bonusShield' | 'bonusDefense' | 'bonusMoveSpeed';
-  label: string;
-  format: (value: number) => string;
-}> = [
-  { key: 'bonusAttack', label: 'โจมตี', format: (value) => `+${value}` },
-  { key: 'bonusCritChance', label: 'คริติคอล', format: (value) => `+${Math.round(value * 100)}%` },
-  { key: 'bonusAttackSpeed', label: 'ความเร็วโจมตี', format: (value) => `+${value.toFixed(2)}x` },
-  { key: 'bonusHp', label: 'พลังชีวิต', format: (value) => `+${value}` },
-  { key: 'bonusShield', label: 'โล่', format: (value) => `+${value}` },
-  { key: 'bonusDefense', label: 'ป้องกัน', format: (value) => `+${value}` },
-  { key: 'bonusMoveSpeed', label: 'ความเร็วเคลื่อนที่', format: (value) => `+${value.toFixed(1)}` },
-];
-
 export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
   isOpen,
   onClose,
@@ -44,17 +30,14 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
   equippedItems,
   onBuyEquipment,
 }) => {
-  const catalog = INITIAL_EQUIPMENT.filter((item) =>
-    [item.bonusHp, item.bonusShield, item.bonusAttack, item.bonusDefense, item.bonusCritChance, item.bonusMoveSpeed, item.bonusAttackSpeed]
-      .some((bonus) => typeof bonus === 'number' && bonus > 0)
-  );
+  const catalog = INITIAL_EQUIPMENT.filter(hasEquipmentBonuses);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   if (!isOpen) return null;
 
   const selected = catalog.find((item) => item.id === selectedId) ?? catalog[0];
   const compareItem = selected && equippedItems.find((item) => itemFamily(item) === itemFamily(selected));
   const comparedStats = selected
-    ? STAT_FIELDS.filter(({ key }) => (selected[key] ?? 0) > 0 || (compareItem?.[key] ?? 0) > 0)
+    ? EQUIPMENT_STAT_DEFINITIONS.filter(({ key }) => (selected[key] ?? 0) !== 0 || (compareItem?.[key] ?? 0) !== 0)
     : [];
   const buy = (item: EquipmentItem) => {
     if (gold < (item.cost ?? 50)) return;
@@ -70,7 +53,7 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3 pr-8">
           <div>
             <h2 className="font-pixel text-sm text-emerald-300 sm:text-base">แท่นขายอุปกรณ์บัฟ</h2>
-            <p className="mt-1 text-xs text-zinc-400">ซื้อซ้ำได้ ค่าสถานะของแต่ละชิ้นสุ่มต่างกัน · ใส่ได้ {equippedItems.length}/{MAX_EQUIPPED_ITEMS}</p>
+            <p className="mt-1 text-xs text-zinc-400">ซื้อซ้ำได้ ดูค่าสถานะและข้อเสียของแต่ละชิ้นก่อนซื้อ · ใส่ได้ {equippedItems.length}/{MAX_EQUIPPED_ITEMS}</p>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/50 bg-zinc-900 px-3 py-2 font-pixel text-xs text-amber-300"><Coins size={15} /> {gold} เหรียญ</div>
         </div>
@@ -113,10 +96,10 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
                 <div className="mb-1 text-[10px] font-bold text-zinc-400">ค่าสถานะ</div>
                 {selected && comparedStats.map(({ key, label, format }) => {
                   const value = selected[key] ?? 0;
-                  const current = compareItem?.[key] ?? value;
+                  const current = compareItem?.[key] ?? 0;
                   const color = compareItem
                     ? value > current ? 'text-emerald-300' : value < current ? 'text-rose-400' : 'text-zinc-300'
-                    : 'text-emerald-200';
+                    : value > 0 ? 'text-emerald-200' : value < 0 ? 'text-rose-400' : 'text-zinc-300';
                   return <div key={key} className={`text-xs ${color}`}>{label} {format(value)}</div>;
                 })}
                 {selected.specialPerkTh && <div className="mt-2 text-[10px] text-purple-300">{selected.specialPerkTh}</div>}
@@ -127,7 +110,7 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
                 <button onClick={() => buy(selected)} disabled={gold < (selected.cost ?? 50)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400 bg-emerald-700 px-4 py-3 font-pixel text-xs text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40">
                   <Check size={15} /> ซื้อซ้ำได้ · {selected.cost ?? 50} เหรียญ
                 </button>
-                <p className="mt-2 text-center text-[9px] text-zinc-500">ค่าสถานะของชิ้นที่ซื้อจะสุ่มแยกกัน</p>
+                <p className="mt-2 text-center text-[9px] text-zinc-500">ตรวจดูค่าสถานะและเอฟเฟกต์ก่อนซื้อได้เลย</p>
               </div>
             </aside>
           )}

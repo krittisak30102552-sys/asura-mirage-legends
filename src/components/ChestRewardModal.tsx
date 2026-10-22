@@ -80,9 +80,9 @@ export const ChestRewardModal: React.FC<ChestRewardModalProps> = ({
   }[rarity];
   const equipmentRarityLabel = reward.rawItem ? ({
     common: 'ทั่วไป · 1 ค่าสถานะ',
-    rare: 'หายาก · 2 ค่าสถานะ',
+    rare: 'หายาก · 2 ค่า หรือพลังตามเงื่อนไข',
     epic: 'มหากาพย์ · 2 ค่าสถานะ',
-    legendary: 'ตำนาน · 2 ค่าสถานะ + พิเศษ',
+    legendary: 'ตำนาน · ค่าสูง + พลังพิเศษ',
   }[reward.rawItem.rarity]) : null;
   const family = (item: EquipmentItem) => item.templateId ?? item.id;
   const comparisonItem = reward.rawItem
@@ -144,7 +144,7 @@ export const ChestRewardModal: React.FC<ChestRewardModalProps> = ({
               {reward.rawItem && (
                 <>
                   <div className="text-[10px] font-pixel text-purple-300 mb-1">ระดับอุปกรณ์: {equipmentRarityLabel}</div>
-                  {reward.rawItem.specialPerkTh && <p className="mb-2 max-w-xs text-[10px] leading-snug text-purple-200">✦ {reward.rawItem.specialPerkTh}</p>}
+                  {reward.rawItem.specialPerkTh && comparisonItem && <p className="mb-2 max-w-xs text-[10px] leading-snug text-purple-200">✦ {reward.rawItem.specialPerkTh}</p>}
                   {comparisonItem ? (
                     <div className="mb-2 max-w-xs text-left">
                       <p className="mb-1 text-[9px] text-zinc-400">เทียบกับชิ้นที่ใส่อยู่: {comparisonItem.nameTh}</p>

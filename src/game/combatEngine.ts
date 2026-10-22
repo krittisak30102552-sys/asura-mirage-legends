@@ -54,7 +54,7 @@ import {
 } from '../data/gameData';
 import { ArenaScene } from '../three/arenaScene';
 import { soundEngine } from '../audio/soundEngine';
-import { rollEquipmentVariant } from './equipmentStats';
+import { hasEquipmentBonuses, rollEquipmentVariant } from './equipmentStats';
 import {
   generateHeroTexture,
   generateEnemyTexture,
@@ -253,6 +253,8 @@ export class CombatEngine {
   private critSpeedStacks = 0;
   private critSpeedTimer = 0;
   private lowHpShieldUsedRoomKey: string | null = null;
+  private coffinReviveUsedSceneKey: string | null = null;
+  private fullHpDamageLockoutTimer = 0;
 
   // Active Skills
   public skills: SkillInfo[] = [];
@@ -364,6 +366,7 @@ export class CombatEngine {
     let gearCooldownReduction = 0;
     let gearCoinGain = 0;
     let gearChestLuck = 0;
+    let hotWineRegenCopies = 0;
 
     for (const item of this.playerStats.equippedItems ?? []) {
       gearHp += item.bonusHp || 0;
@@ -380,7 +383,11 @@ export class CombatEngine {
       gearMaxHpPercent += item.bonusMaxHpPercent || 0;
       gearDamageReduction += item.bonusDamageReduction || 0;
       gearDodge += item.bonusDodgeChance || 0;
-      gearHpRegen += item.bonusHpRegen || 0;
+      const itemTemplateId = item.templateId ?? item.id;
+      if (itemTemplateId !== 'hot_wine_bottle' || hotWineRegenCopies < 2) {
+        gearHpRegen += item.bonusHpRegen || 0;
+        if (itemTemplateId === 'hot_wine_bottle') hotWineRegenCopies++;
+      }
       gearMoveSpeedPercent += item.bonusMoveSpeedPercent || 0;
       gearCooldownReduction += item.bonusCooldownReduction || 0;
       gearCoinGain += item.bonusCoinGain || 0;
@@ -390,7 +397,7 @@ export class CombatEngine {
     this.playerStats.heroId = this.activeHeroId;
     const rawMaxHp = heroCfg.maxHp + relicBonus.bonusHp + this.statAltarBonuses.hp + gearHp;
     this.playerStats.maxHp = Math.max(1, Math.round(rawMaxHp * (1 + gearMaxHpPercent)));
-    this.playerStats.maxShield = heroCfg.maxShield + relicBonus.bonusShield + this.statAltarBonuses.shield + gearShield;
+    this.playerStats.maxShield = Math.max(0, heroCfg.maxShield + relicBonus.bonusShield + this.statAltarBonuses.shield + gearShield);
     this.playerStats.attackPower = Number(
       ((heroCfg.attackPower + bonusAtk + relicBonus.bonusAttack + this.statAltarBonuses.attack + gearAtk) * (1 + gearDamagePercent)).toFixed(2)
     );
@@ -407,8 +414,11 @@ export class CombatEngine {
     this.playerStats.critMultiplier = heroCfg.critMultiplier + gearCritDamagePercent;
     this.playerStats.defense = 5 + gearDef;
     this.playerStats.damageReduction = Math.min(0.75, gearDamageReduction);
-    this.playerStats.dodgeChance = Math.min(0.75, gearDodge);
-    this.playerStats.hpRegen = gearHpRegen;
+    this.playerStats.dodgeChance = Math.min(0.60, gearDodge);
+    const hasGuardianCoffin = (this.playerStats.equippedItems ?? []).some(
+      (item) => (item.templateId ?? item.id) === 'little_guardian_coffin'
+    );
+    this.playerStats.hpRegen = hasGuardianCoffin ? 0 : gearHpRegen;
     this.playerStats.lifesteal = Math.min(0.35, gearLifesteal);
     this.playerStats.cooldownReduction = Math.min(0.75, gearCooldownReduction);
     this.playerStats.coinGain = Math.min(1.0, gearCoinGain);
@@ -549,7 +559,7 @@ export class CombatEngine {
     if (hpRatio < 0.3) {
       bonus += this.getEquippedPerks('low_hp_damage').reduce((sum, perk) => sum + perk.value, 0);
     }
-    if (hpRatio >= 0.999) {
+    if (hpRatio >= 0.999 && this.fullHpDamageLockoutTimer <= 0) {
       bonus += this.getEquippedPerks('full_hp_damage').reduce((sum, perk) => sum + perk.value, 0);
     }
     return 1 + Math.min(0.75, bonus);
@@ -610,8 +620,46 @@ export class CombatEngine {
             enemy.vz += (dz / distance) * perk.value;
           }
         }
+      } else if (perk.type === 'full_hp_damage') {
+        this.fullHpDamageLockoutTimer = Math.max(this.fullHpDamageLockoutTimer, perk.duration ?? 0);
       }
     }
+  }
+
+  private triggerEquipmentDodgeEffects() {
+    const perks = this.getEquippedPerks('dodge_guard');
+    let totalShieldGain = 0;
+    let duration = 0;
+    for (const perk of perks) {
+      const shieldGain = Math.max(0, Math.min(perk.value, this.playerStats.maxShield + 60 - this.playerStats.shield));
+      this.playerStats.shield += shieldGain;
+      this.temporaryGuardShield = Math.min(60, this.temporaryGuardShield + shieldGain);
+      totalShieldGain += shieldGain;
+      duration = Math.max(duration, perk.duration ?? 3);
+    }
+    if (totalShieldGain > 0) {
+      this.temporaryGuardShieldTimer = Math.max(this.temporaryGuardShieldTimer, duration);
+      this.arena.spawnSkillBurst(this.playerX, 0.9, this.playerZ, 0x93c5fd, 12, 2.5, 0.42);
+    }
+  }
+
+  private tryEquipmentCoffinRevive(): boolean {
+    if (this.playerStats.hp > 0) return false;
+    const perks = this.getEquippedPerks('revive_once');
+    if (!perks.length) return false;
+
+    const stage = levelSystem.run?.stage;
+    const sceneKey = stage ? `stage:${stage.stageNumber}` : `wave:${this.currentWave}`;
+    if (this.coffinReviveUsedSceneKey === sceneKey) return false;
+
+    const revive = perks[0];
+    this.coffinReviveUsedSceneKey = sceneKey;
+    this.playerStats.hp = Math.max(1, Math.ceil(this.playerStats.maxHp * revive.value));
+    this.isInvulnerable = true;
+    this.invulnerableTimer = Math.max(this.invulnerableTimer, revive.duration ?? 2);
+    this.arena.spawnSkillBurst(this.playerX, 1, this.playerZ, 0xa78bfa, 24, 4.2, 0.8);
+    this.arena.addCameraShake(0.16);
+    return true;
   }
 
   private triggerLowHealthShield() {
@@ -651,9 +699,18 @@ export class CombatEngine {
     const equipped = this.playerStats.equippedItems;
     if (equipped.some((current) => current.id === item.id)) return true;
 
+    const replaceIndex = replaceItemId ? equipped.findIndex((current) => current.id === replaceItemId) : -1;
+    if (replaceItemId && replaceIndex < 0) return false;
+    const templateId = item.templateId ?? item.id;
+    if (templateId === 'hot_wine_bottle') {
+      const otherWineCopies = equipped.filter((current, index) =>
+        index !== replaceIndex && (current.templateId ?? current.id) === templateId
+      ).length;
+      if (otherWineCopies >= 2) return false;
+    }
+
+    const previousMaxShield = this.playerStats.maxShield;
     if (replaceItemId) {
-      const replaceIndex = equipped.findIndex((current) => current.id === replaceItemId);
-      if (replaceIndex < 0) return false;
       equipped[replaceIndex] = item;
     } else {
       if (equipped.length >= MAX_EQUIPPED_ITEMS) return false;
@@ -664,8 +721,15 @@ export class CombatEngine {
     }
     soundEngine.playEquipItem();
     this.recalcHeroStats();
+    this.applyEquipmentArmorIncrease(previousMaxShield);
     if (this.onStateChange) this.onStateChange();
     return true;
+  }
+
+  private applyEquipmentArmorIncrease(previousMaxShield: number) {
+    const gainedArmor = Math.max(0, this.playerStats.maxShield - previousMaxShield);
+    if (gainedArmor <= 0) return;
+    this.playerStats.shield = Math.min(this.playerStats.maxShield + 60, this.playerStats.shield + gainedArmor);
   }
 
   public unequipItem(itemId: string) {
@@ -678,6 +742,7 @@ export class CombatEngine {
   public buyEquipment(item: EquipmentItem): boolean {
     const cost = item.cost ?? 50;
     if (this.playerStats.gold < cost) return false;
+    const previousMaxShield = this.playerStats.maxShield;
     const templateId = item.templateId ?? item.id;
     const ownedItem = !item.templateId || item.id === templateId
       ? {
@@ -697,6 +762,7 @@ export class CombatEngine {
       this.playerStats.equippedItems.push(ownedItem);
     }
     this.recalcHeroStats();
+    this.applyEquipmentArmorIncrease(previousMaxShield);
     if (this.onStateChange) this.onStateChange();
     return true;
   }
@@ -800,6 +866,8 @@ export class CombatEngine {
     this.temporaryGuardShield = 0;
     this.temporaryGuardShieldTimer = 0;
     this.lowHpShieldUsedRoomKey = null;
+    this.coffinReviveUsedSceneKey = null;
+    this.fullHpDamageLockoutTimer = 0;
     this.statAltarBonuses = {
       hp: 0,
       shield: 0,
@@ -894,6 +962,8 @@ export class CombatEngine {
     this.temporaryGuardShield = 0;
     this.temporaryGuardShieldTimer = 0;
     this.lowHpShieldUsedRoomKey = null;
+    this.coffinReviveUsedSceneKey = null;
+    this.fullHpDamageLockoutTimer = 0;
     this.statAltarBonuses = {
       hp: 0,
       shield: 0,
@@ -938,10 +1008,7 @@ export class CombatEngine {
   }
 
   private chooseStatEquipmentForChest(rarity: 'white' | 'blue' | 'gold' | 'themed'): EquipmentItem {
-    const statGear = INITIAL_EQUIPMENT.filter((item) =>
-      [item.bonusHp, item.bonusShield, item.bonusAttack, item.bonusDefense, item.bonusCritChance, item.bonusMoveSpeed, item.bonusAttackSpeed]
-        .some((bonus) => typeof bonus === 'number' && bonus > 0)
-    );
+    const statGear = INITIAL_EQUIPMENT.filter(hasEquipmentBonuses);
     const preferredRarities = rarity === 'white'
       ? ['common']
       : rarity === 'blue'
@@ -2750,6 +2817,7 @@ export class CombatEngine {
     if (Math.random() < this.playerStats.dodgeChance) {
       this.arena.spawnSkillBurst(this.playerX, 0.8, this.playerZ, 0x93c5fd, 10, 1.8, 0.3);
       this.arena.addCameraShake(0.04);
+      this.triggerEquipmentDodgeEffects();
       return;
     }
 
@@ -2773,6 +2841,7 @@ export class CombatEngine {
 
     this.spawnDamageNumber(this.playerX, 1.2, this.playerZ, mitigation.shieldDamage + mitigation.healthDamage, false, true);
     this.triggerEquipmentHitEffects();
+    this.tryEquipmentCoffinRevive();
     this.triggerLowHealthShield();
 
     if (this.playerStats.hp <= 0) {
@@ -2952,6 +3021,9 @@ export class CombatEngine {
     if (this.critSpeedTimer > 0) {
       this.critSpeedTimer = Math.max(0, this.critSpeedTimer - dt);
       if (this.critSpeedTimer === 0) this.critSpeedStacks = 0;
+    }
+    if (this.fullHpDamageLockoutTimer > 0) {
+      this.fullHpDamageLockoutTimer = Math.max(0, this.fullHpDamageLockoutTimer - dt);
     }
 
     if (this.playerStats.hpRegen > 0 && this.playerStats.hp < this.playerStats.maxHp) {
