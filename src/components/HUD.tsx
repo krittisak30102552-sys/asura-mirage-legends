@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerStats, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
 import { HERO_CONFIGS, HERO_SKILLS } from '../data/gameData';
+import { ItemIcon } from './ItemIcon';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
 import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
 import { VirtualJoystick } from './VirtualJoystick';
@@ -673,7 +674,7 @@ export const HUD: React.FC<HUDProps> = ({
                 style={{ borderColor: r.iconColor }}
                 title={`${r.nameTh}: ${r.descTh}`}
               >
-                {r.iconSymbol}
+                <ItemIcon itemId={r.id} rarity={r.rarity} color={r.iconColor} size={25} kind="relic" />
               </div>
             ))}
           </div>
@@ -747,7 +748,7 @@ export const HUD: React.FC<HUDProps> = ({
                     }`}
                   >
                     <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>
-                      {skill.icon}
+                      <ItemIcon itemId={skill.id} rarity="epic" color={skill.color} size={32} kind="skill" />
                     </span>
                     {!referenceDungeonHud && (
                       <span className="text-[6.5px] sm:text-[8px] font-pixel text-zinc-300 font-bold mt-0.5 line-clamp-1 px-0.5 text-center">
