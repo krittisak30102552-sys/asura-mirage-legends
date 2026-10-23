@@ -1,7 +1,7 @@
 {
   "run": {
     "stagesPerRun": 20,
-    "roomsPerStage": 6,
+    "roomsPerStage": 7,
     "hpMultiplierPerStage": 0.065
   },
   "theme": {
