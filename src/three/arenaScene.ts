@@ -84,6 +84,8 @@ export class ArenaScene {
   private targetCamZ: number = 0;
   private graphicsQuality: GraphicsQuality = 'balanced';
   private vfxFrameTasks = new Set<(now: number) => void>();
+  private readonly vfxTaskScratch: Array<(now: number) => void> = [];
+  private readonly particleQuadGeometry = new THREE.PlaneGeometry(1, 1);
   private disposed = false;
 
   // Current Scene Theme
@@ -620,14 +622,14 @@ export class ArenaScene {
       // Elite Room
       this.createFloatingBadge('💀 ห้องศัตรูระดับสูง (ELITE COMBAT)', '#ef4444', 0, 4.4, -7.5);
     } else if (room === 'altar') {
-      this.createBossArenaAltar(-4.8, -2.5);
-      this.createFloatingBadge('🗿 [E] อัญเชิญบอส', '#67e8f9', -4.8, 4.4, -2.5);
+      this.createBossArenaAltar(0, -1.2);
+      this.createFloatingBadge('🗿 [E] อัญเชิญบอส', '#67e8f9', 0, 4.4, -1.2);
     } else if (room === 'boss_arena') {
-      this.createBossArenaAltar(-5.0, -2.7);
+      this.createBossArenaAltar(0, -1.2);
       this.createFloatingBadge('⚔️ มิติแห่งผู้พิทักษ์ (BOSS REALM)', '#e879f9', 0, 4.4, -7.5);
       this.createFloatingBadge('การต่อสู้ครั้งสุดท้ายเริ่มต้นขึ้น', '#67e8f9', 0, 2.5, -1.4);
     } else if (room === 'boss') {
-      this.createBossArenaAltar(-4.8, -2.5);
+      this.createBossArenaAltar(0, -1.2);
       this.buildDungeonPortalGate(0, 7.5);
       this.createFloatingBadge('👑 ศึกประจัญบอสใหญ่ (BOSS ARENA)', '#a855f7', 0, 4.4, -7.5);
       this.createFloatingBadge('🌀 [E] ประตูสู่ด่านถัดไป', '#38d9e8', 0, 5.7, 7.4);
@@ -1112,61 +1114,66 @@ export class ArenaScene {
   // BOSS ATTACK TELEGRAPHS
   // ----------------------------------------------------------------------
   public showSmashTelegraph(x: number, z: number, radius: number = 3.2, duration: number = 0.6, color: number = 0xef4444) {
-    const ringGeo = new THREE.RingGeometry(0.2, radius, 32);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.55,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(ringGeo, ringMat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.04, z);
-    this.telegraphGroup.add(mesh);
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+    this.telegraphGroup.add(group);
+    const geometries: THREE.BufferGeometry[] = [];
+    const materials: THREE.Material[] = [];
+    const outerGeo = new THREE.RingGeometry(radius * 0.82, radius, 32);
+    const innerGeo = new THREE.RingGeometry(radius * 0.35, radius * 0.39, 24);
+    const outerMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.78, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const outer = new THREE.Mesh(outerGeo, outerMat);
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    outer.rotation.x = inner.rotation.x = -Math.PI / 2;
+    outer.position.y = 0.06; inner.position.y = 0.07;
+    group.add(outer, inner);
+    geometries.push(outerGeo, innerGeo); materials.push(outerMat, innerMat);
 
-    setTimeout(() => {
-      mesh.removeFromParent();
-      ringGeo.dispose();
-      ringMat.dispose();
-    }, duration * 1000);
+    const crackCoords: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2, r1 = radius * 0.16;
+      const r2 = radius * (0.46 + (i % 2) * 0.06), r3 = radius * (0.78 - (i % 3) * 0.035);
+      const side = i % 2 === 0 ? 1 : -1;
+      const points = [
+        [Math.cos(a) * r1, 0.075, Math.sin(a) * r1],
+        [Math.cos(a) * r2 + Math.cos(a + Math.PI / 2) * 0.15 * side, 0.075, Math.sin(a) * r2 + Math.sin(a + Math.PI / 2) * 0.15 * side],
+        [Math.cos(a) * r3, 0.075, Math.sin(a) * r3],
+      ];
+      for (let p = 0; p < points.length - 1; p++) crackCoords.push(...points[p], ...points[p + 1]);
+    }
+    const crackGeo = new THREE.BufferGeometry();
+    crackGeo.setAttribute('position', new THREE.Float32BufferAttribute(crackCoords, 3));
+    const crackMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    group.add(new THREE.LineSegments(crackGeo, crackMat)); geometries.push(crackGeo); materials.push(crackMat);
+
+    const shardGeo = new THREE.ConeGeometry(0.22, 1.12, 5);
+    const shardMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.94, blending: THREE.AdditiveBlending, depthWrite: false });
+    geometries.push(shardGeo); materials.push(shardMat);
+    const spikes: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const spike = new THREE.Mesh(shardGeo, shardMat);
+      spike.position.set(Math.cos(a) * radius * 0.68, 0.24, Math.sin(a) * radius * 0.68);
+      spike.rotation.z = i % 2 ? 0.14 : -0.14;
+      spike.scale.set(0.35, 0.12, 0.35);
+      group.add(spike); spikes.push(spike);
+    }
+    const startedAt = performance.now();
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - startedAt) / Math.max(1, duration * 1000));
+      outerMat.opacity = 0.8 * (0.65 + Math.sin(p * Math.PI * 10) * 0.22) * (1 - p * 0.3);
+      innerMat.opacity = 0.72 * (1 - p * 0.55); crackMat.opacity = 0.86 * (1 - p * 0.65);
+      outer.rotation.z += 0.025; inner.rotation.z -= 0.04;
+      spikes.forEach((spike) => { spike.scale.y = 0.12 + Math.sin(p * Math.PI) * 0.85; shardMat.opacity = 0.92 * (1 - p); });
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); new Set(geometries).forEach(g => g.dispose()); new Set(materials).forEach(m => m.dispose()); }
+    };
+    this.scheduleVfxFrame(animate);
   }
 
   public showEnemySkillTelegraph(x: number, z: number, radius: number, duration: number, color: number) {
-    const group = new THREE.Group();
-    group.position.set(x, 0.055, z);
-    const outer = new THREE.Mesh(
-      new THREE.RingGeometry(radius * 0.78, radius, 48),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
-    );
-    const inner = new THREE.Mesh(
-      new THREE.RingGeometry(radius * 0.36, radius * 0.4, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
-    );
-    outer.rotation.x = inner.rotation.x = -Math.PI / 2;
-    group.add(outer, inner);
-    this.telegraphGroup.add(group);
-
-    const startedAt = performance.now();
-    const animate = (now: number) => {
-      const progress = (now - startedAt) / (duration * 1000);
-      if (progress >= 1 || !group.parent) {
-        group.removeFromParent();
-        group.traverse((object) => {
-          const mesh = object as THREE.Mesh;
-          if (!mesh.isMesh) return;
-          mesh.geometry.dispose();
-          (mesh.material as THREE.Material).dispose();
-        });
-        return;
-      }
-      const pulse = 0.68 + Math.sin(progress * Math.PI * 8) * 0.25;
-      outer.material.opacity = pulse;
-      inner.material.opacity = 0.5 + Math.sin(progress * Math.PI * 10) * 0.35;
-      inner.rotation.z += 0.055;
-      this.scheduleVfxFrame(animate);
-    };
-    this.scheduleVfxFrame(animate);
+    this.showSmashTelegraph(x, z, radius, duration, color);
   }
 
   public showEnemyVolleyTelegraph(fromX: number, fromZ: number, targetX: number, targetZ: number, duration: number, color: number) {
@@ -1243,43 +1250,67 @@ export class ArenaScene {
     this.scheduleVfxFrame(animate);
   }
 
-  public spawnEnemySkillBurst(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley' = 'slam') {
-    const isSlam = kind === 'slam';
-    const radius = isSlam ? 3.25 : kind === 'volley' ? 1.25 : 1.75;
-    const duration = isSlam ? 0.62 : 0.4;
-    this.spawnSkillRing(x, z, color, radius, duration);
-    this.spawnSkillBurst(x, isSlam ? 0.68 : 0.9, z, color, isSlam ? 30 : 14, isSlam ? 7.2 : 5.1, isSlam ? 0.72 : 0.48);
+  public spawnEnemyImpactShapeVFX(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley') {
+    const group = new THREE.Group(); group.position.set(x, 0, z); this.vfxGroup.add(group);
+    const geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [], animated: THREE.Mesh[] = [];
+    const ringGeo = new THREE.RingGeometry(0.72, 1, 28);
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; group.add(ring);
+    geos.push(ringGeo); mats.push(ringMat);
+    const coreGeo = kind === 'slam' ? new THREE.DodecahedronGeometry(0.48, 0) : new THREE.IcosahedronGeometry(0.38, 1);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false });
+    const core = new THREE.Mesh(coreGeo, coreMat); core.position.y = kind === 'slam' ? 0.48 : 0.8; group.add(core);
+    geos.push(coreGeo); mats.push(coreMat); animated.push(core);
+    if (kind === 'slam') {
+      const spikeGeo = new THREE.ConeGeometry(0.22, 1.35, 5);
+      const spikeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false });
+      geos.push(spikeGeo); mats.push(spikeMat);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const spike = new THREE.Mesh(spikeGeo, spikeMat);
+        spike.position.set(Math.cos(a) * 1.7, 0.42, Math.sin(a) * 1.7);
+        spike.rotation.z = Math.cos(a) * 0.22; spike.scale.set(0.45, 0.08, 0.45);
+        group.add(spike); animated.push(spike);
+      }
+    } else {
+      const shardGeo = new THREE.ConeGeometry(kind === 'volley' ? 0.12 : 0.18, kind === 'volley' ? 1.0 : 1.55, 5);
+      const shardMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending, depthWrite: false });
+      geos.push(shardGeo); mats.push(shardMat);
+      const count = kind === 'volley' ? 3 : 4;
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2;
+        const shard = new THREE.Mesh(shardGeo, shardMat);
+        shard.position.set(Math.cos(a) * 0.55, 0.45 + (i % 2) * 0.25, Math.sin(a) * 0.55);
+        shard.rotation.z = Math.cos(a) * 0.3; shard.rotation.x = Math.sin(a) * 0.3;
+        group.add(shard); animated.push(shard);
+      }
+    }
+    const started = performance.now();
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - started) / 480);
+      ring.scale.setScalar(0.35 + p * (kind === 'slam' ? 3 : 1.8)); ringMat.opacity = 0.92 * (1 - p);
+      core.rotation.x += 0.09; core.rotation.y += 0.12; core.scale.setScalar(0.65 + Math.sin(p * Math.PI) * 0.6); coreMat.opacity = 0.98 * (1 - p);
+      animated.slice(1).forEach((mesh, i) => { mesh.scale.y = (0.08 + Math.sin(p * Math.PI) * 0.95) * (kind === 'slam' ? 1 : 0.65); (mesh.material as THREE.MeshBasicMaterial).opacity = 0.92 * (1 - p); mesh.rotation.y += i % 2 ? 0.08 : -0.08; });
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); new Set(geos).forEach(g => g.dispose()); new Set(mats).forEach(m => m.dispose()); }
+    };
+    this.scheduleVfxFrame(animate);
+  }
 
+  public spawnEnemySkillBurst(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley' = 'slam') {
+    const slam = kind === 'slam';
+    this.spawnEnemyImpactShapeVFX(x, z, color, kind);
+    this.spawnSkillRing(x, z, color, slam ? 3.25 : kind === 'volley' ? 1.25 : 1.75, slam ? 0.62 : 0.4);
+    this.spawnSkillBurst(x, slam ? 0.68 : 0.9, z, color, slam ? 18 : 8, slam ? 5.8 : 4.4, slam ? 0.62 : 0.4);
     const sparkTex = this.getSparkTexture();
-    const particleCount = this.scaleParticleCount(isSlam ? 16 : 7);
-    for (let i = 0; i < particleCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
-      const material = new THREE.MeshBasicMaterial({
-        map: sparkTex,
-        color,
-        transparent: true,
-        opacity: 0.95,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), material);
-      mesh.rotation.x = -Math.PI / 3;
-      mesh.position.set(x, 0.35 + Math.random() * 0.6, z);
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const speed = isSlam ? 2.8 + Math.random() * 2.8 : 1.8 + Math.random() * 2.2;
-      this.addCombatParticle({
-        mesh,
-        vx: Math.cos(angle) * speed,
-        vy: 2.4 + Math.random() * 1.8,
-        vz: Math.sin(angle) * speed,
-        gravity: -4.5,
-        drag: 1.1,
-        life: isSlam ? 0.56 + Math.random() * 0.2 : 0.48 + Math.random() * 0.18,
-        maxLife: isSlam ? 0.76 : 0.66,
-        initialScale: isSlam ? 1.4 : 1.15,
-        shrink: true,
-        spin: (Math.random() - 0.5) * 12,
-      });
+    const count = this.scaleParticleCount(slam ? 10 : 4);
+    for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
+      const mat = new THREE.MeshBasicMaterial({ map: sparkTex, color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const mesh = this.createParticleMesh(0.34, 0.34, mat);
+      mesh.rotation.x = -Math.PI / 3; mesh.position.set(x, 0.35 + Math.random() * 0.6, z);
+      const a = (Math.PI * 2 * i) / Math.max(1, count);
+      const speed = slam ? 2.8 + Math.random() * 2.8 : 1.8 + Math.random() * 2.2;
+      this.addCombatParticle({ mesh, vx: Math.cos(a) * speed, vy: 2.4 + Math.random() * 1.8, vz: Math.sin(a) * speed, gravity: -4.5, drag: 1.1, life: slam ? 0.56 + Math.random() * 0.2 : 0.48 + Math.random() * 0.18, maxLife: slam ? 0.76 : 0.66, initialScale: slam ? 1.4 : 1.15, shrink: true, spin: (Math.random() - 0.5) * 12 });
     }
   }
 
@@ -1432,30 +1463,94 @@ export class ArenaScene {
   }
 
   public showDashTelegraph(fromX: number, fromZ: number, toX: number, toZ: number, duration: number = 0.5, color: number = 0xf97316) {
-    const dx = toX - fromX;
-    const dz = toZ - fromZ;
-    const dist = Math.hypot(dx, dz);
-    const angle = Math.atan2(dz, dx);
+    const dx = toX - fromX, dz = toZ - fromZ, dist = Math.max(0.01, Math.hypot(dx, dz));
+    const dirX = dx / dist, dirZ = dz / dist, normalX = -dirZ, normalZ = dirX;
+    const group = new THREE.Group();
+    this.telegraphGroup.add(group);
+    const geometries: THREE.BufferGeometry[] = [], materials: THREE.Material[] = [];
+    const beamGeo = new THREE.BoxGeometry(dist, 0.045, 1.15);
+    const beamMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set((fromX + toX) / 2, 0.055, (fromZ + toZ) / 2);
+    beam.rotation.y = -Math.atan2(dz, dx);
+    group.add(beam); geometries.push(beamGeo); materials.push(beamMat);
 
-    const lineGeo = new THREE.PlaneGeometry(dist, 1.8);
-    const lineMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(lineGeo, lineMat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.rotation.z = -angle;
-    mesh.position.set(fromX + dx / 2, 0.04, fromZ + dz / 2);
-    this.telegraphGroup.add(mesh);
+    const coords: number[] = [];
+    for (const t of [0.28, 0.5, 0.72, 0.9]) {
+      const px = fromX + dx * t, pz = fromZ + dz * t;
+      const bx = px - dirX * Math.min(0.7, dist * 0.08), bz = pz - dirZ * Math.min(0.7, dist * 0.08);
+      const wing = Math.min(0.5, dist * 0.06);
+      coords.push(bx + normalX * wing, 0.09, bz + normalZ * wing, px, 0.09, pz);
+      coords.push(px, 0.09, pz, bx - normalX * wing, 0.09, bz - normalZ * wing);
+    }
+    const arrowGeo = new THREE.BufferGeometry();
+    arrowGeo.setAttribute('position', new THREE.Float32BufferAttribute(coords, 3));
+    const arrowMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    group.add(new THREE.LineSegments(arrowGeo, arrowMat)); geometries.push(arrowGeo); materials.push(arrowMat);
 
-    setTimeout(() => {
-      mesh.removeFromParent();
-      lineGeo.dispose();
-      lineMat.dispose();
-    }, duration * 1000);
+    const ringGeo = new THREE.RingGeometry(0.42, 0.66, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.set(toX, 0.07, toZ);
+    group.add(ring); geometries.push(ringGeo); materials.push(ringMat);
+
+    const shardGeo = new THREE.ConeGeometry(0.24, 0.9, 5);
+    const shardMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.94, blending: THREE.AdditiveBlending, depthWrite: false });
+    const shard = new THREE.Mesh(shardGeo, shardMat); shard.position.set(toX, 0.5, toZ);
+    group.add(shard); geometries.push(shardGeo); materials.push(shardMat);
+    const startedAt = performance.now();
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - startedAt) / Math.max(1, duration * 1000));
+      beamMat.opacity = (0.34 + Math.sin(p * Math.PI * 12) * 0.2) * (1 - p * 0.3);
+      arrowMat.opacity = 0.65 + Math.sin(p * Math.PI * 10) * 0.3;
+      ringMat.opacity = 0.85 * (1 - p * 0.25); ring.rotation.z += 0.06;
+      shard.scale.y = 0.35 + Math.sin(p * Math.PI) * 0.8; shardMat.opacity = 0.94 * (1 - p);
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); new Set(geometries).forEach(g => g.dispose()); new Set(materials).forEach(m => m.dispose()); }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  public showEnemyMeleeTelegraph(x: number, z: number, angle: number, duration: number, color: number) {
+    const group = new THREE.Group();
+    group.position.set(x, 0.065, z); group.rotation.y = -angle; this.telegraphGroup.add(group);
+    const shape = new THREE.Shape();
+    shape.moveTo(0.35, -0.62); shape.quadraticCurveTo(1.15, -0.72, 2.15, -0.1);
+    shape.quadraticCurveTo(1.25, 0.02, 0.35, 0.62); shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape, 14);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.65, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat); mesh.rotation.x = -Math.PI / 2; group.add(mesh);
+    const startedAt = performance.now();
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - startedAt) / Math.max(1, duration * 1000));
+      mesh.scale.set(0.8 + p * 0.25, 1, 0.8 + p * 0.25);
+      mat.opacity = (0.45 + Math.sin(p * Math.PI * 8) * 0.2) * (1 - p * 0.3);
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); geo.dispose(); mat.dispose(); }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  public spawnEnemyMeleeSlashVFX(x: number, z: number, angle: number, color: number) {
+    const group = new THREE.Group(); group.position.set(x, 1.0, z); group.rotation.y = -angle; this.vfxGroup.add(group);
+    const outerShape = new THREE.Shape();
+    outerShape.moveTo(-0.2, -0.8); outerShape.quadraticCurveTo(1.0, 0.3, 2.25, 0.45); outerShape.quadraticCurveTo(1.25, -0.55, -0.2, -0.8); outerShape.closePath();
+    const innerShape = new THREE.Shape();
+    innerShape.moveTo(0.0, -0.58); innerShape.quadraticCurveTo(1.0, 0.25, 2.05, 0.38); innerShape.quadraticCurveTo(1.0, -0.35, 0.0, -0.58); innerShape.closePath();
+    const og = new THREE.ShapeGeometry(outerShape, 12), ig = new THREE.ShapeGeometry(innerShape, 12);
+    const om = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const im = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const outer = new THREE.Mesh(og, om), inner = new THREE.Mesh(ig, im);
+    outer.position.z = 0.02; inner.position.z = 0.035; group.add(outer, inner);
+    this.spawnSkillBurst(x + Math.cos(angle) * 1.25, 1.15, z + Math.sin(angle) * 1.25, color, 4, 2.3, 0.22);
+    let elapsed = 0;
+    const animate = () => {
+      elapsed += 1 / 60; const p = Math.min(1, elapsed / 0.24);
+      group.scale.setScalar(0.78 + p * 0.36); group.rotation.z += 0.04;
+      om.opacity = 0.82 * (1 - p); im.opacity = 0.9 * (1 - p);
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); og.dispose(); ig.dispose(); om.dispose(); im.dispose(); }
+    };
+    this.scheduleVfxFrame(animate);
   }
 
   private createStatDevicePedestal(x: number, z: number) {
@@ -2086,7 +2181,6 @@ export class ArenaScene {
     const particleCount = this.scaleParticleCount(count);
     for (let i = 0; i < particleCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const size = 0.24 + Math.random() * 0.28;
-      const geo = new THREE.PlaneGeometry(size, size);
       const mat = new THREE.MeshBasicMaterial({
         map: sparkTex,
         color: i % 4 === 0 ? 0xffffff : color,
@@ -2096,7 +2190,7 @@ export class ArenaScene {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = this.createParticleMesh(size, size, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.45, y + (Math.random() - 0.5) * 0.35, z + (Math.random() - 0.5) * 0.45);
       mesh.rotation.x = -Math.PI / 3;
       const angle = Math.random() * Math.PI * 2;
@@ -2978,83 +3072,66 @@ export class ArenaScene {
    * Renders an expanding/pulsing glowing decal on the floor so combat is readable.
    */
   public spawnGroundTelegraph(
-    x: number,
-    z: number,
-    radius: number,
-    duration: number = 0.45,
-    color: number = 0xf59e0b,
-    shape: 'circle' | 'line' | 'cone' = 'circle',
-    angle: number = 0,
-    length: number = 7
+    x: number, z: number, radius: number, duration: number = 0.45, color: number = 0xf59e0b,
+    shape: 'circle' | 'line' | 'cone' = 'circle', angle: number = 0, length: number = 7
   ) {
-    const group = new THREE.Group();
-    group.position.set(x, 0.045, z);
+    const group = new THREE.Group(); group.position.set(x, 0.045, z);
+    if (shape === 'cone') group.rotation.y = -angle;
     this.vfxGroup.add(group);
-
-    const geos: THREE.BufferGeometry[] = [];
-    const mats: THREE.Material[] = [];
-
+    const geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [], animated: THREE.Mesh[] = [];
     if (shape === 'line') {
-      const lineGeo = new THREE.PlaneGeometry(0.8, length);
-      const lineMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.65,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const mesh = new THREE.Mesh(lineGeo, lineMat);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.rotation.z = -angle + Math.PI / 2;
-      mesh.position.set(Math.cos(angle) * (length / 2), 0, Math.sin(angle) * (length / 2));
-      group.add(mesh);
-      geos.push(lineGeo);
-      mats.push(lineMat);
+      const geo = new THREE.BoxGeometry(length, 0.035, Math.max(0.35, radius * 0.5));
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.58, blending: THREE.AdditiveBlending, depthWrite: false });
+      const line = new THREE.Mesh(geo, mat); line.position.set(Math.cos(angle) * length / 2, 0.02, Math.sin(angle) * length / 2); line.rotation.y = -angle; group.add(line);
+      geos.push(geo); mats.push(mat);
+      const arrowGeo = new THREE.ConeGeometry(0.22, 0.8, 4);
+      const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending, depthWrite: false });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat); arrow.position.set(Math.cos(angle) * length, 0.45, Math.sin(angle) * length); arrow.rotation.z = -Math.PI / 2; arrow.rotation.y = -angle; group.add(arrow);
+      geos.push(arrowGeo); mats.push(arrowMat); animated.push(arrow);
+    } else if (shape === 'cone') {
+      const wedge = new THREE.Shape(); wedge.moveTo(0.45, -0.1); wedge.lineTo(length, -radius * 0.7);
+      wedge.quadraticCurveTo(length * 0.78, 0, length, radius * 0.7); wedge.lineTo(0.45, 0.1); wedge.closePath();
+      const wedgeGeo = new THREE.ShapeGeometry(wedge, 18);
+      const wedgeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const wedgeMesh = new THREE.Mesh(wedgeGeo, wedgeMat); wedgeMesh.rotation.x = -Math.PI / 2; group.add(wedgeMesh); geos.push(wedgeGeo); mats.push(wedgeMat);
+      const coords: number[] = [];
+      for (const side of [-1, 1]) coords.push(0.45, 0.07, side * 0.1, length, 0.07, side * radius * 0.7);
+      const edgeGeo = new THREE.BufferGeometry(); edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(coords, 3));
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.84, blending: THREE.AdditiveBlending, depthWrite: false });
+      group.add(new THREE.LineSegments(edgeGeo, edgeMat)); geos.push(edgeGeo); mats.push(edgeMat);
     } else {
-      const ringGeo = new THREE.RingGeometry(radius * 0.88, radius, 32);
-      const innerGeo = new THREE.CircleGeometry(radius * 0.85, 24);
-      const ringMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const innerMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.22,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = -Math.PI / 2;
-      const inner = new THREE.Mesh(innerGeo, innerMat);
-      inner.rotation.x = -Math.PI / 2;
-      group.add(ring, inner);
-      geos.push(ringGeo, innerGeo);
-      mats.push(ringMat, innerMat);
-    }
-
-    let elapsed = 0;
-    const animate = () => {
-      elapsed += 1 / 60;
-      const p = Math.min(1, elapsed / duration);
-      const pulse = 0.95 + Math.sin(elapsed * 24) * 0.08;
-      group.scale.set(pulse, 1, pulse);
-      mats.forEach((m) => {
-        (m as THREE.MeshBasicMaterial).opacity *= (1 - p * 0.35);
-      });
-      if (p < 1 && !this.disposed) {
-        this.scheduleVfxFrame(animate);
-      } else {
-        this.vfxGroup.remove(group);
-        geos.forEach((g) => g.dispose());
-        mats.forEach((m) => m.dispose());
+      const outerGeo = new THREE.RingGeometry(radius * 0.88, radius, 32), innerGeo = new THREE.CircleGeometry(radius * 0.82, 24);
+      const outerMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const innerMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const outer = new THREE.Mesh(outerGeo, outerMat), inner = new THREE.Mesh(innerGeo, innerMat);
+      outer.rotation.x = inner.rotation.x = -Math.PI / 2; group.add(outer, inner);
+      geos.push(outerGeo, innerGeo); mats.push(outerMat, innerMat);
+      const points: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2, r1 = radius * (i % 3 === 0 ? 0.68 : 0.77), r2 = radius * (i % 3 === 0 ? 0.92 : 0.87);
+        points.push(Math.cos(a) * r1, 0.075, Math.sin(a) * r1, Math.cos(a) * r2, 0.075, Math.sin(a) * r2);
       }
+      const markGeo = new THREE.BufferGeometry(); markGeo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+      const markMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.84, blending: THREE.AdditiveBlending, depthWrite: false });
+      group.add(new THREE.LineSegments(markGeo, markMat)); geos.push(markGeo); mats.push(markMat);
+      const spikeGeo = new THREE.ConeGeometry(0.16, 0.52, 4);
+      const spikeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+      geos.push(spikeGeo); mats.push(spikeMat);
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2, spike = new THREE.Mesh(spikeGeo, spikeMat);
+        spike.position.set(Math.cos(a) * radius * 0.69, 0.26, Math.sin(a) * radius * 0.69); spike.rotation.z = Math.cos(a) * 0.18;
+        spike.scale.set(0.45, 0.2, 0.45); group.add(spike); animated.push(spike);
+      }
+      animated.push(outer, inner);
+    }
+    const started = performance.now(), opacities = mats.map(m => (m as THREE.Material & { opacity?: number }).opacity ?? 1);
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - started) / Math.max(1, duration * 1000)), pulse = 0.88 + Math.sin((now - started) * 0.025) * 0.12;
+      group.scale.set(pulse, 1, pulse);
+      mats.forEach((mat, i) => { (mat as THREE.Material & { opacity?: number }).opacity = opacities[i] * (1 - p * 0.5); });
+      animated.forEach((mesh) => { if (mesh.geometry instanceof THREE.ConeGeometry) { mesh.scale.y = 0.2 + Math.sin(p * Math.PI) * 0.7; (mesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - p); } });
+      if (p < 1 && !this.disposed) this.scheduleVfxFrame(animate);
+      else { group.removeFromParent(); new Set(geos).forEach(g => g.dispose()); new Set(mats).forEach(m => m.dispose()); }
     };
     this.scheduleVfxFrame(animate);
   }
@@ -3351,23 +3428,18 @@ export class ArenaScene {
   }
 
   private flushVfxFrameTasks = (now: number) => {
-    // Snapshot first, then clear the live queue so callbacks can safely
-    // enqueue their next animation frame while this batch is running.
-    const tasks = [...this.vfxFrameTasks];
+    const tasks = this.vfxTaskScratch;
+    tasks.length = 0;
+    for (const task of this.vfxFrameTasks) tasks.push(task);
     this.vfxFrameTasks.clear();
-
     for (const task of tasks) {
-      try {
-        task(now);
-      } catch (error) {
-        console.error('[ArenaScene] VFX animation failed', error);
-      }
+      try { task(now); } catch (error) { console.error('[ArenaScene] VFX animation failed', error); }
     }
-
-  };
+    tasks.length = 0;
+  };;
 
   private get maxActiveCombatParticles() {
-    return this.graphicsQuality === 'low' ? 72 : this.graphicsQuality === 'balanced' ? 140 : 220;
+    return this.graphicsQuality === 'low' ? 44 : this.graphicsQuality === 'balanced' ? 96 : 160;
   }
 
   private scaleParticleCount(count: number) {
@@ -3376,8 +3448,15 @@ export class ArenaScene {
     return Math.max(2, Math.round(count * multiplier));
   }
 
+  private createParticleMesh(width: number, height: number, material: THREE.Material): THREE.Mesh {
+    const mesh = new THREE.Mesh(this.particleQuadGeometry, material);
+    mesh.userData.particleBaseWidth = width;
+    mesh.userData.particleBaseHeight = height;
+    return mesh;
+  }
+
   private disposeParticleMesh(mesh: THREE.Mesh) {
-    mesh.geometry.dispose();
+    if (mesh.geometry !== this.particleQuadGeometry) mesh.geometry.dispose();
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     materials.forEach((material) => material.dispose());
   }
@@ -3396,6 +3475,29 @@ export class ArenaScene {
     if (!particle) return;
     this.vfxGroup.remove(particle.mesh);
     this.disposeParticleMesh(particle.mesh);
+  }
+
+  public clearTransientVFX() {
+    this.vfxFrameTasks.clear();
+    this.vfxTaskScratch.length = 0;
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    const collect = (root: THREE.Object3D) => {
+      root.traverse((object) => {
+        if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points)) return;
+        const renderable = object as THREE.Mesh | THREE.Line | THREE.Points;
+        if (renderable.geometry !== this.particleQuadGeometry) geometries.add(renderable.geometry as THREE.BufferGeometry);
+        const material = renderable.material as THREE.Material | THREE.Material[];
+        (Array.isArray(material) ? material : [material]).forEach((entry) => materials.add(entry));
+      });
+    };
+    collect(this.vfxGroup);
+    collect(this.telegraphGroup);
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    this.vfxGroup.clear();
+    this.telegraphGroup.clear();
+    this.activeParticles.length = 0;
   }
 
   public setPortalActive(active: boolean) {
@@ -3490,7 +3592,6 @@ export class ArenaScene {
       : [0xfef08a, 0xfbbf24, 0xffffff];
 
     for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
-      const pGeo = new THREE.PlaneGeometry(0.24, 0.38);
       const col = baseColors[Math.floor(Math.random() * baseColors.length)];
       const pMat = new THREE.MeshBasicMaterial({
         map: sparkTex,
@@ -3501,7 +3602,7 @@ export class ArenaScene {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const pMesh = new THREE.Mesh(pGeo, pMat);
+      const pMesh = this.createParticleMesh(0.24, 0.38, pMat);
       pMesh.position.set(x + (Math.random() - 0.5) * 0.2, y + (Math.random() - 0.5) * 0.2, z + (Math.random() - 0.5) * 0.2);
       pMesh.rotation.set(-Math.PI / 3, 0, Math.random() * Math.PI);
 
@@ -3570,7 +3671,6 @@ export class ArenaScene {
     const colVal = typeof colorHex === 'string' ? new THREE.Color(colorHex).getHex() : colorHex;
 
     for (let i = 0; i < numParticles && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
-      const geo = new THREE.PlaneGeometry(0.38, 0.38);
       const mat = new THREE.MeshBasicMaterial({
         map: sparkTex,
         color: colVal,
@@ -3580,7 +3680,7 @@ export class ArenaScene {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = this.createParticleMesh(0.38, 0.38, mat);
       mesh.position.set(x, y, z);
       mesh.rotation.x = -Math.PI / 3;
 
@@ -3614,7 +3714,6 @@ export class ArenaScene {
     const colors = [0xa855f7, 0xec4899, 0xef4444, 0x3b82f6];
 
     for (let i = 0; i < count && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
-      const geo = new THREE.PlaneGeometry(0.42, 0.42);
       const col = colors[Math.floor(Math.random() * colors.length)];
       const mat = new THREE.MeshBasicMaterial({
         map: sparkTex,
@@ -3625,7 +3724,7 @@ export class ArenaScene {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = this.createParticleMesh(0.42, 0.42, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.8, y + Math.random() * 0.5, z + (Math.random() - 0.5) * 0.8);
       mesh.rotation.x = -Math.PI / 3;
 
@@ -3716,7 +3815,6 @@ export class ArenaScene {
     if (this.activeParticles.length >= this.maxActiveCombatParticles) return;
     const sparkTex = this.getSparkTexture();
     const col = type === 'burn' ? 0xf97316 : type === 'freeze' ? 0x38bdf8 : 0x22c55e;
-    const geo = new THREE.PlaneGeometry(0.26, 0.26);
     const mat = new THREE.MeshBasicMaterial({
       map: sparkTex,
       color: col,
@@ -3726,7 +3824,7 @@ export class ArenaScene {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = this.createParticleMesh(0.26, 0.26, mat);
     mesh.position.set(x + (Math.random() - 0.5) * 0.6, y + 0.3 + Math.random() * 0.8, z + (Math.random() - 0.5) * 0.6);
     mesh.rotation.x = -Math.PI / 3;
 
@@ -3862,7 +3960,9 @@ export class ArenaScene {
       const progress = p.life / p.maxLife;
       if (p.shrink) {
         const s = p.initialScale * Math.max(0.01, progress);
-        p.mesh.scale.set(s, s, 1);
+        const baseWidth = p.mesh.userData.particleBaseWidth ?? 1;
+        const baseHeight = p.mesh.userData.particleBaseHeight ?? 1;
+        p.mesh.scale.set(s * baseWidth, s * baseHeight, 1);
       }
       (p.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1.0, progress * 1.5);
     }
@@ -3878,8 +3978,8 @@ export class ArenaScene {
 
   public dispose() {
     this.disposed = true;
-    this.vfxFrameTasks.clear();
-    while (this.activeParticles.length > 0) this.removeCombatParticle(this.activeParticles.length - 1);
+    this.clearTransientVFX();
+    this.particleQuadGeometry.dispose();
 
     if (this.renderer.domElement && this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);

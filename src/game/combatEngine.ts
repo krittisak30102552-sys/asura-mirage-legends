@@ -831,9 +831,8 @@ export class CombatEngine {
       if (enemy.shadowMesh) this.arena.actorsGroup.remove(enemy.shadowMesh);
     }
     this.arena.actorsGroup.clear();
-    this.arena.vfxGroup.clear();
+    this.arena.clearTransientVFX();
     this.arena.breakablesGroup.clear();
-    this.arena.telegraphGroup.clear();
     this.trainerNpcMesh = null;
     this.enemies = [];
     this.projectiles = [];
@@ -2372,7 +2371,7 @@ export class CombatEngine {
     this.bossStageTransitionTimer = 0.9;
     this.waveState = 'spawning';
     this.arena.setPortalActive(false);
-    this.arena.spawnSkillBurst(-4.8, 0.9, -2.5, 0xa855f7, 32, 7.5, 0.9);
+    this.arena.spawnSkillBurst(0, 0.9, -1.2, 0xa855f7, 32, 7.5, 0.9);
     this.arena.addCameraShake(0.55);
     soundEngine.playBossGong();
     this.onCinematicTransition?.('มิติอสูรกำลังเปิดออก', 'เจ้ากำลังถูกส่งเข้าสู่สนามประลองผู้พิทักษ์', 2600);
@@ -2391,7 +2390,7 @@ export class CombatEngine {
     this.arena.setPortalActive(false);
 
     const bossHp = Math.round(550 * run.hpMultiplier);
-    this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, 0, -1.5);
+    this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, 0, -1.2);
     if (this.currentBoss) {
       this.currentBoss.mesh.scale.setScalar(0.03);
       const bossMaterial = this.currentBoss.mesh.material;
@@ -2844,7 +2843,7 @@ export class CombatEngine {
           soundEngine.playBossGong();
           this.playerStats.gold += 100;
           this.arena.addCameraShake(0.7);
-          this.arena.spawnSkillBurst(0, 0.9, -1.5, 0xfbbf24, 34, 7.2, 0.9);
+          this.arena.spawnSkillBurst(0, 0.9, -1.2, 0xfbbf24, 34, 7.2, 0.9);
           this.stageAdvanceTransitionTimer = 2.0;
           this.onCinematicTransition?.('ผู้พิทักษ์พ่ายแพ้', 'มิติถัดไปกำลังปรากฏขึ้น · ได้รับ 100 G', 2600);
         } else if (currentRoomType === 'secret' && run.stage.hasSecretBoss) {
@@ -3106,7 +3105,7 @@ export class CombatEngine {
 
       if ((roomType === 'altar' && !this.bossSummonedForRoom && this.waveState === 'cleared') ||
           (roomType === 'boss' && !this.bossSummonedForRoom && this.waveState === 'fighting')) {
-        const altarDistance = Math.hypot(this.playerX - (-4.8), this.playerZ - (-2.5));
+        const altarDistance = Math.hypot(this.playerX, this.playerZ - (-1.2));
         if (altarDistance < 3.6) {
           this.nearbyDungeonInteractable = 'boss_altar';
           return;
@@ -3519,6 +3518,8 @@ export class CombatEngine {
               } else if (dist <= 2.8) {
                 enemy.state = 'windup';
                 enemy.stateTimer = 0.45;
+                const attackAngle = Math.atan2(this.playerZ - enemy.z, this.playerX - enemy.x);
+                this.arena.showEnemyMeleeTelegraph(enemy.x, enemy.z, attackAngle, enemy.stateTimer, this.getEnemySkillColor(enemy.type));
                 soundEngine.playTelegraph();
               }
             }
@@ -3532,6 +3533,7 @@ export class CombatEngine {
                 enemy.state = 'attack';
                 enemy.stateTimer = 0.3;
                 soundEngine.playKiExplosion();
+                this.arena.spawnEnemySkillBurst(enemy.x, enemy.z, enemy.isHappyBoss ? 0xec4899 : 0xef4444, 'slam');
                 this.arena.addCameraShake(0.55);
                 if (dist <= 3.8 && !this.isDashing && !this.isInvulnerable) {
                   this.damagePlayer(enemy.isHappyBoss ? this.getHappyCounterDamage(enemy) : Math.round(enemy.damage * 1.4));
@@ -3550,6 +3552,8 @@ export class CombatEngine {
                 enemy.stateTimer = 0.35;
                 soundEngine.playDash();
                 const dashAng = Math.atan2(enemy.targetZ - enemy.z, enemy.targetX - enemy.x);
+                const dashDistance = Math.hypot(enemy.targetX - enemy.x, enemy.targetZ - enemy.z);
+                this.arena.spawnSkillProjectileVFX(enemy.x, enemy.z, dashAng, dashDistance, enemy.isHappyBoss ? 0xec4899 : this.getEnemySkillColor(enemy.type), 'blade', enemy.isPhase2 ? 1.35 : 1.05);
                 enemy.vx = Math.cos(dashAng) * 22.0;
                 enemy.vz = Math.sin(dashAng) * 22.0;
 
@@ -3600,7 +3604,9 @@ export class CombatEngine {
             } else {
               enemy.state = 'attack';
               enemy.stateTimer = 0.25;
-              if (dist <= 2.4) this.damagePlayer(enemy.damage);
+              const attackAngle = Math.atan2(this.playerZ - enemy.z, this.playerX - enemy.x);
+              this.arena.spawnEnemyMeleeSlashVFX(enemy.x, enemy.z, attackAngle, this.getEnemySkillColor(enemy.type));
+              if (dist <= 2.4 && !this.isDashing && !this.isInvulnerable) this.damagePlayer(enemy.damage);
             }
           }
         } else if (enemy.state === 'skill_windup') {
