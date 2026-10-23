@@ -2298,7 +2298,7 @@ export class ArenaScene {
 
     let glow: THREE.Mesh;
     let core: THREE.Mesh;
-    const animatedRings: THREE.Mesh[] = [];
+    const animatedRings: THREE.Object3D[] = [];
     if (style === 'orb') {
       glow = addMesh(new THREE.SphereGeometry(0.9, 20, 16), glowMat);
       core = addMesh(new THREE.IcosahedronGeometry(0.48, 1), coreMat);
@@ -2959,6 +2959,344 @@ export class ArenaScene {
       }
     };
     this.scheduleVfxFrame(spin);
+  }
+
+  /**
+   * Ground telegraph warning indicator before major active skills impact.
+   * Renders an expanding/pulsing glowing decal on the floor so combat is readable.
+   */
+  public spawnGroundTelegraph(
+    x: number,
+    z: number,
+    radius: number,
+    duration: number = 0.45,
+    color: number = 0xf59e0b,
+    shape: 'circle' | 'line' | 'cone' = 'circle',
+    angle: number = 0,
+    length: number = 7
+  ) {
+    const group = new THREE.Group();
+    group.position.set(x, 0.045, z);
+    this.vfxGroup.add(group);
+
+    const geos: THREE.BufferGeometry[] = [];
+    const mats: THREE.Material[] = [];
+
+    if (shape === 'line') {
+      const lineGeo = new THREE.PlaneGeometry(0.8, length);
+      const lineMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.65,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(lineGeo, lineMat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = -angle + Math.PI / 2;
+      mesh.position.set(Math.cos(angle) * (length / 2), 0, Math.sin(angle) * (length / 2));
+      group.add(mesh);
+      geos.push(lineGeo);
+      mats.push(lineMat);
+    } else {
+      const ringGeo = new THREE.RingGeometry(radius * 0.88, radius, 32);
+      const innerGeo = new THREE.CircleGeometry(radius * 0.85, 24);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const innerMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      const inner = new THREE.Mesh(innerGeo, innerMat);
+      inner.rotation.x = -Math.PI / 2;
+      group.add(ring, inner);
+      geos.push(ringGeo, innerGeo);
+      mats.push(ringMat, innerMat);
+    }
+
+    let elapsed = 0;
+    const animate = () => {
+      elapsed += 1 / 60;
+      const p = Math.min(1, elapsed / duration);
+      const pulse = 0.95 + Math.sin(elapsed * 24) * 0.08;
+      group.scale.set(pulse, 1, pulse);
+      mats.forEach((m) => {
+        (m as THREE.MeshBasicMaterial).opacity *= (1 - p * 0.35);
+      });
+      if (p < 1 && !this.disposed) {
+        this.scheduleVfxFrame(animate);
+      } else {
+        this.vfxGroup.remove(group);
+        geos.forEach((g) => g.dispose());
+        mats.forEach((m) => m.dispose());
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  /**
+   * Ginzo Skill 3: Zero-Frame Severance (ดาบตัดมิติศูนย์เฟรม)
+   * High-speed dimensional cut piercing between two points with silver-pink seam and vacuum rift
+   */
+  public spawnZeroFrameSeveranceVFX(startX: number, startZ: number, endX: number, endZ: number) {
+    const group = new THREE.Group();
+    group.position.set((startX + endX) / 2, 1.1, (startZ + endZ) / 2);
+    const angle = Math.atan2(endZ - startZ, endX - startX);
+    group.rotation.y = -angle;
+    this.vfxGroup.add(group);
+
+    const dist = Math.hypot(endX - startX, endZ - startZ);
+    const slashGeo = new THREE.PlaneGeometry(dist, 1.2);
+    const slashMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.98,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const slash = new THREE.Mesh(slashGeo, slashMat);
+    group.add(slash);
+
+    const riftGeo = new THREE.PlaneGeometry(dist * 1.05, 0.22);
+    const riftMat = new THREE.MeshBasicMaterial({
+      color: 0xf43f5e,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const rift = new THREE.Mesh(riftGeo, riftMat);
+    rift.position.y = 0.02;
+    group.add(rift);
+
+    // Cross slivers along the line
+    const sliverGeo = new THREE.ConeGeometry(0.18, 1.4, 4);
+    const sliverMat = new THREE.MeshBasicMaterial({
+      color: 0xfbcfe8,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+    });
+    const slivers: THREE.Mesh[] = [];
+    const count = 5;
+    for (let i = 0; i < count; i++) {
+      const s = new THREE.Mesh(sliverGeo, sliverMat);
+      s.position.set(-dist / 2 + (i + 0.5) * (dist / count), 0, (Math.random() - 0.5) * 0.4);
+      s.rotation.z = Math.PI / 4 * (i % 2 === 0 ? 1 : -1);
+      group.add(s);
+      slivers.push(s);
+    }
+
+    this.spawnSkillBurst(startX, 1.0, startZ, 0xffffff, 14, 5.2, 0.45);
+    this.spawnSkillBurst(endX, 1.0, endZ, 0xf43f5e, 26, 7.8, 0.65);
+    this.spawnSkillRing(endX, endZ, 0xf472b6, 4.6, 0.55);
+
+    let life = 0.28;
+    const fade = () => {
+      life -= 0.035;
+      if (life > 0 && !this.disposed) {
+        slashMat.opacity = life / 0.28;
+        riftMat.opacity = life / 0.28 * 0.95;
+        sliverMat.opacity = life / 0.28 * 0.85;
+        slash.scale.y = 1 + (1 - life / 0.28) * 2.5;
+        this.scheduleVfxFrame(fade);
+      } else {
+        this.vfxGroup.remove(group);
+        slashGeo.dispose();
+        slashMat.dispose();
+        riftGeo.dispose();
+        riftMat.dispose();
+        sliverGeo.dispose();
+        sliverMat.dispose();
+      }
+    };
+    this.scheduleVfxFrame(fade);
+  }
+
+  /**
+   * Quan Skill 1: Heaven Drum Palm (ฝ่ามือกลองสวรรค์)
+   * Concentrated cyan and gold sonic shockwave rings bursting forward
+   */
+  public spawnHeavenDrumPalmVFX(x: number, z: number, angle: number) {
+    this.spawnSkillRing(x, z, 0x38bdf8, 3.8, 0.45);
+    const group = new THREE.Group();
+    group.position.set(x, 1.1, z);
+    group.rotation.y = -angle;
+    this.vfxGroup.add(group);
+
+    const ringCount = 3;
+    const rings: THREE.Mesh[] = [];
+    const geos: THREE.BufferGeometry[] = [];
+    const mats: THREE.Material[] = [];
+
+    for (let i = 0; i < ringCount; i++) {
+      const geo = new THREE.TorusGeometry(0.7 + i * 0.45, 0.08, 8, 32);
+      const mat = new THREE.MeshBasicMaterial({
+        color: i === 0 ? 0xfacc15 : 0x38bdf8,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+      });
+      const ring = new THREE.Mesh(geo, mat);
+      ring.position.x = 0.4 + i * 0.8;
+      group.add(ring);
+      rings.push(ring);
+      geos.push(geo);
+      mats.push(mat);
+    }
+
+    this.spawnSkillBurst(x + Math.cos(angle) * 2.2, 1.1, z + Math.sin(angle) * 2.2, 0x38bdf8, 18, 6.2, 0.42);
+
+    let progress = 0;
+    const animate = () => {
+      progress += 0.055;
+      group.position.x = x + Math.cos(angle) * progress * 5.2;
+      group.position.z = z + Math.sin(angle) * progress * 5.2;
+      rings.forEach((r, idx) => {
+        r.scale.multiplyScalar(1.06);
+        (r.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.95 * (1 - progress));
+      });
+      if (progress < 1.0 && !this.disposed) {
+        this.scheduleVfxFrame(animate);
+      } else {
+        this.vfxGroup.remove(group);
+        geos.forEach((g) => g.dispose());
+        mats.forEach((m) => m.dispose());
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  /**
+   * Quan Skill 2: Jade Dragon Spiral (มังกรหยกหมุนวน)
+   * Orbiting jade dragon energy helix circling around Quan with vacuum spiral rings
+   */
+  public spawnJadeDragonSpiralVFX(x: number, z: number, radius: number = 4.8) {
+    this.spawnSkillRing(x, z, 0x34d399, radius, 0.65);
+    const group = new THREE.Group();
+    group.position.set(x, 0.35, z);
+    this.vfxGroup.add(group);
+
+    const coilPoints: THREE.Vector3[] = [];
+    for (let i = 0; i <= 36; i++) {
+      const t = i / 36;
+      const turn = t * Math.PI * 4;
+      const r = radius * 0.55 * (1 - t * 0.25);
+      coilPoints.push(new THREE.Vector3(Math.cos(turn) * r, 0.3 + t * 2.2, Math.sin(turn) * r));
+    }
+    const coilGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coilPoints), 64, 0.12, 8, false);
+    const coilMat = new THREE.MeshStandardMaterial({
+      color: 0x6ee7b7,
+      emissive: 0x10b981,
+      emissiveIntensity: 2.8,
+      metalness: 0.5,
+      roughness: 0.2,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const coil = new THREE.Mesh(coilGeo, coilMat);
+    group.add(coil);
+
+    const ringGeo = new THREE.RingGeometry(radius * 0.4, radius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x34d399,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    group.add(ring);
+
+    let t = 0;
+    const spin = () => {
+      t += 0.045;
+      group.rotation.y += 0.16;
+      coilMat.opacity = Math.max(0, 0.95 * (1 - t));
+      ringMat.opacity = Math.max(0, 0.65 * (1 - t));
+      ring.scale.setScalar(1 + t * 0.3);
+      if (t < 1.0 && !this.disposed) {
+        this.scheduleVfxFrame(spin);
+      } else {
+        this.vfxGroup.remove(group);
+        coilGeo.dispose();
+        coilMat.dispose();
+        ringGeo.dispose();
+        ringMat.dispose();
+      }
+    };
+    this.scheduleVfxFrame(spin);
+  }
+
+  /**
+   * Hero-Specific 3D Hybrid Combo VFX
+   * Renders the distinctive Three.js 3D layers matching user prompt specifications
+   */
+  public spawnHeroComboVFX(heroId: 'ginzo' | 'quan' | 'katherine', step: number, x: number, z: number, angle: number) {
+    if (heroId === 'ginzo') {
+      if (step === 1) {
+        // Combo 1: Silver Moon — silver crescent slash & pink sparks
+        this.spawnSkillBurst(x, 1.1, z, 0xf1f5f9, 7, 3.4, 0.26);
+        this.spawnSkillBurst(x, 1.1, z, 0xf472b6, 4, 2.2, 0.22);
+      } else if (step === 2) {
+        // Combo 2: Rose Cross Rift — dual intersecting cross rift
+        this.spawnSkillBurst(x, 1.1, z, 0xf43f5e, 10, 3.8, 0.3);
+        this.spawnGroundShockwaveVFX(x, z, 2.2);
+      } else {
+        // Combo 3: Abyssal Crescent — deep dimensional rift, ground shockwave, sakura storm petals
+        this.spawnDimensionalSlashVFX(x, z, angle);
+        this.spawnGroundShockwaveVFX(x, z, 3.6);
+        this.spawnSkillBurst(x, 1.2, z, 0xf9a8d4, 18, 4.6, 0.48);
+        this.addCameraShake(0.32);
+      }
+    } else if (heroId === 'quan') {
+      if (step === 1) {
+        // Combo 1: Jade Pulse — cyan/gold punch burst
+        this.spawnSkillBurst(x, 1.0, z, 0x38bdf8, 8, 3.2, 0.28);
+        this.spawnSkillBurst(x, 1.0, z, 0xfacc15, 6, 2.8, 0.25);
+      } else if (step === 2) {
+        // Combo 2: Azure Dragon Orbit — surrounding dragon swirl ring
+        this.spawnWhirlwindVFX(x, z, 2.6);
+        this.spawnSkillBurst(x, 1.0, z, 0x22d3ee, 12, 3.6, 0.32);
+      } else {
+        // Combo 3: Sky-Rising Dragon — golden ascension dragon silhouette & shockwave
+        this.spawnDragonAscensionVFX(x, z);
+        this.spawnGroundShockwaveVFX(x, z, 4.2);
+        this.addCameraShake(0.38);
+      }
+    } else if (heroId === 'katherine') {
+      if (step === 1) {
+        // Combo 1: Frost Shard — crystalline ice projectile trail
+        this.spawnSkillBurst(x, 1.2, z, 0x7dd3fc, 9, 3.8, 0.32);
+        this.spawnSkillBurst(x, 1.2, z, 0xffffff, 6, 2.5, 0.24);
+      } else if (step === 2) {
+        // Combo 2: Storm Relay — branching electric storm discharge
+        this.spawnThunderBoltVFX(x - Math.cos(angle) * 0.8, z - Math.sin(angle) * 0.8, x + Math.cos(angle) * 3.2, z + Math.sin(angle) * 3.2);
+        this.spawnSkillBurst(x, 1.2, z, 0xa78bfa, 12, 4.5, 0.35);
+      } else {
+        // Combo 3: Astral Convergence — crystal flare & violet thunder burst
+        this.spawnFrostNovaVFX(x, z);
+        this.spawnSkillRing(x, z, 0xa855f7, 4.8, 0.55);
+        this.spawnSkillBurst(x, 1.3, z, 0xc084fc, 22, 5.8, 0.55);
+        this.addCameraShake(0.36);
+      }
+    }
   }
 
   private buildAmbientParticles() {

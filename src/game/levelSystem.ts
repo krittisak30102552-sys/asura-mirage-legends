@@ -69,6 +69,164 @@ export const TEST_DUNGEON: BiomeDetails = {
   icon: '🕳️',
 };
 
+export const AVAILABLE_BIOMES: BiomeDetails[] = [
+  TEST_DUNGEON,
+  {
+    id: 'desert',
+    name: 'Arabian Mirage Palace',
+    nameTh: 'พระราชวังอาหรับโบราณ',
+    themeDesc: 'พระราชวังอาหรับโบราณกลางพายุทราย กระเบื้องมรกตและอสูรจีนี่สีม่วง',
+    mobA: 'desert_assassin',
+    mobB: 'desert_genie',
+    mobElite: 'desert_assassin',
+    mobANameTh: 'นักฆ่าทะเลทราย',
+    mobBNameTh: 'จีนี่พรายทราย',
+    mobEliteNameTh: 'หัวหน้านักฆ่าทะเลทราย',
+    bossId: 'boss_iblis',
+    bossName: 'Iblis',
+    bossNameTh: 'จอมอสูรอิบลิส',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0x0d9488,
+    accentColor: 0xfbbf24,
+    bgTileColor: '#0f766e',
+    icon: '🧞‍♂️',
+  },
+  {
+    id: 'japan',
+    name: 'Bamboo Courtyard',
+    nameTh: 'ลานไผ่ศาลเจ้าญี่ปุ่น',
+    themeDesc: 'ศาลเจ้าญี่ปุ่นโบราณล้อมรอบด้วยป่าไผ่ ซามูไรโรนินและพลธนูวิหค',
+    mobA: 'japan_ronin',
+    mobB: 'japan_archer',
+    mobElite: 'japan_ronin',
+    mobANameTh: 'ซามูไรพเนจร',
+    mobBNameTh: 'พลธนูเงา',
+    mobEliteNameTh: 'แม่ทัพซามูไร',
+    bossId: 'boss_tengu',
+    bossName: 'Tengu',
+    bossNameTh: 'เท็งกุจอมอหังการ',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0xff9a42,
+    accentColor: 0xfb7185,
+    bgTileColor: '#3c2415',
+    icon: '🎋',
+  },
+  {
+    id: 'elfland',
+    name: 'Elfland Woods',
+    nameTh: 'พงไพรเอลฟ์ลึกลับ',
+    themeDesc: 'ป่าโบราณเรืองแสงปกคลุมด้วยเถาวัลย์ วิญญาณพฤกษาและอสูรพืชดุร้าย',
+    mobA: 'elf_wisp',
+    mobB: 'elf_treant',
+    mobElite: 'elf_treant',
+    mobANameTh: 'ภูตพฤกษา',
+    mobBNameTh: 'อสูรต้นไม้ยักษ์',
+    mobEliteNameTh: 'พญาพฤกษาบรรพกาล',
+    bossId: 'boss_muno_wonda',
+    bossName: 'Muno Wonda',
+    bossNameTh: 'มูโน วอนดา',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0x047857,
+    accentColor: 0xa3e635,
+    bgTileColor: '#064e3b',
+    icon: '🧝‍♂️',
+  },
+  {
+    id: 'stronghold',
+    name: 'Cyber Stronghold',
+    nameTh: 'ป้อมปราการจักรกล',
+    themeDesc: 'ฐานทัพเหล็กกล้าและห้องทดลองไซบอร์ก หุ่นยนต์ยามและโดรนสังหาร',
+    mobA: 'stronghold_drone',
+    mobB: 'stronghold_cyborg',
+    mobElite: 'stronghold_cyborg',
+    mobANameTh: 'โดรนตรวจการณ์',
+    mobBNameTh: 'ไซบอร์กทะลวงแนว',
+    mobEliteNameTh: 'คอมมานเดอร์จักรกล',
+    bossId: 'boss_dr_universelove',
+    bossName: 'Dr. Universelove',
+    bossNameTh: 'ดร. ยูนิเวิร์สเลิฟ',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0x0284c7,
+    accentColor: 0x38bdf8,
+    bgTileColor: '#334155',
+    icon: '🤖',
+  },
+  {
+    id: 'china',
+    name: 'Shaolin Monastery',
+    nameTh: 'อารามหลวงเส้าหลิน',
+    themeDesc: 'ลานกระเบื้องมังกรแดงและเสาหยกสลัก เพลงหมัดและพลองยาว',
+    mobA: 'china_monk',
+    mobB: 'china_spearman',
+    mobElite: 'china_spearman',
+    mobANameTh: 'ศิษย์กังฟู',
+    mobBNameTh: 'ทวนทะลวงค่าย',
+    mobEliteNameTh: 'ปรมาจารย์พลองทอง',
+    bossId: 'boss_chen',
+    bossName: 'Master Chen',
+    bossNameTh: 'ปรมาจารย์เฉิน',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0xb91c1c,
+    accentColor: 0xfbbf24,
+    bgTileColor: '#991b1b',
+    icon: '🐉',
+  },
+  {
+    id: 'ice',
+    name: 'Frost Glacial Cavern',
+    nameTh: 'ถ้ำเหมันต์เยือกแข็ง',
+    themeDesc: 'ทะเลสาบน้ำแข็งและผลึกคริสตัลดารา เหล่าอสูรน้ำแข็งโบราณ',
+    mobA: 'norse_frostmage',
+    mobB: 'norse_berserker',
+    mobElite: 'norse_berserker',
+    mobANameTh: 'นักเวทน้ำแข็ง',
+    mobBNameTh: 'นักรบคลั่งนอร์ส',
+    mobEliteNameTh: 'ยักษ์น้ำแข็งทมิฬ',
+    bossId: 'boss_kraken',
+    bossName: 'Kraken',
+    bossNameTh: 'พญาคราเคนเยือกแข็ง',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0x0284c7,
+    accentColor: 0x93c5fd,
+    bgTileColor: '#0c4a6e',
+    icon: '❄️',
+  },
+  {
+    id: 'forge',
+    name: 'Abyssal Forge',
+    nameTh: 'เตาหลอมอเวจี',
+    themeDesc: 'ธารลาวาและเตาหลอมโบราณ เปลวเพลิงนรกและอสูรหินเพลิง',
+    mobA: 'undead_skeleton',
+    mobB: 'undead_ghoul',
+    mobElite: 'undead_ghoul',
+    mobANameTh: 'โครงกระดูกเพลิง',
+    mobBNameTh: 'กูลอเวจี',
+    mobEliteNameTh: 'จอมทัพไฟบรรลัยกัลป์',
+    bossId: 'boss_valentine',
+    bossName: 'Valentine',
+    bossNameTh: 'วาเลนไทน์',
+    secretBossId: 'boss_blood_demon',
+    secretBossName: 'Blood Demon',
+    secretBossNameTh: 'จอมมารเลือด',
+    ambientColor: 0xea580c,
+    accentColor: 0xfacc15,
+    bgTileColor: '#451a03',
+    icon: '🔥',
+  },
+];
+
 export interface ShopOfferItem {
   id: string;
   type: 'equipment';
@@ -170,10 +328,11 @@ export class LevelSystem {
   public startNewRun(customSeed?: number): RunSession {
     const seed = customSeed ?? Math.floor(Math.random() * 900000) + 100000;
     const rng = new SeededRNG(seed);
+    const shuffledBiomes = rng.shuffle(AVAILABLE_BIOMES);
     this.run = {
       seed,
       rng,
-      selectedBiomes: [TEST_DUNGEON],
+      selectedBiomes: shuffledBiomes,
       currentBiomeIndex: 0,
       currentStageIndex: 0,
       hpMultiplier: 1,
@@ -399,12 +558,15 @@ export class LevelSystem {
     this.run.currentStageIndex++;
     const stageNumber = this.run.currentStageIndex + 1;
     this.run.hpMultiplier = 1 + (stageNumber - 1) * LEVELS_CONFIG.run.hpMultiplierPerStage;
+    this.run.currentBiomeIndex = this.run.currentStageIndex % this.run.selectedBiomes.length;
     this.run.stage = this.generateStage(stageNumber, this.run.rng);
-    return { runCompleted: false, newBiome: false, stageName: `${TEST_DUNGEON.nameTh} - ด่าน ${stageNumber}` };
+    const biome = this.getCurrentBiome();
+    return { runCompleted: false, newBiome: true, stageName: `${biome.nameTh} - ด่าน ${stageNumber}` };
   }
 
   public getCurrentBiome(): BiomeDetails {
-    return TEST_DUNGEON;
+    if (!this.run || !this.run.selectedBiomes || this.run.selectedBiomes.length === 0) return AVAILABLE_BIOMES[0];
+    return this.run.selectedBiomes[this.run.currentBiomeIndex] || AVAILABLE_BIOMES[0];
   }
 
   public getCurrentRoomType(): StageRoomType {

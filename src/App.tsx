@@ -129,6 +129,7 @@ export default function App() {
   });
 
   const [dashCooldown, setDashCooldown] = useState<number>(0);
+  const [skillCooldowns, setSkillCooldowns] = useState<Record<1 | 2 | 3, number>>({ 1: 0, 2: 0, 3: 0 });
   const [comboStep, setComboStep] = useState<number>(0);
   const [currentWave, setCurrentWave] = useState<number>(1);
   const [currentDungeonMap, setCurrentDungeonMap] = useState<DungeonMapId>('desert');
@@ -444,6 +445,7 @@ export default function App() {
         setRelics([...engine.relics]);
         setPlayerStats({ ...engine.playerStats });
         setDashCooldown(engine.dashCooldown);
+        setSkillCooldowns({ ...engine.skillCooldowns });
         setComboStep(engine.comboStep);
         setCurrentWave(engine.currentWave);
         setCurrentDungeonMap(engine.currentDungeonMap);
@@ -606,6 +608,9 @@ export default function App() {
       // Combat actions (only when active)
       if (gameModeRef.current === 'playing' || gameModeRef.current === 'lobby') {
         if (e.code === 'Space') engine.handleDash();
+        if (e.code === 'Digit1' || e.code === 'Numpad1') engine.castSkill(1);
+        if (e.code === 'Digit2' || e.code === 'Numpad2') engine.castSkill(2);
+        if (e.code === 'Digit3' || e.code === 'Numpad3') engine.castSkill(3);
       }
     };
 
@@ -915,6 +920,8 @@ export default function App() {
           onOpenInventory={() => setIsInventoryOpen(true)}
           onAttack={() => engineRef.current?.handleAttack()}
           onDash={() => engineRef.current?.handleDash()}
+          onSkill={(slot) => engineRef.current?.castSkill(slot)}
+          skillCooldowns={skillCooldowns}
           onInteract={() => engineRef.current?.triggerInteraction()}
           onRunCommand={handleRunCommand}
           oneHitMode={oneHitMode}

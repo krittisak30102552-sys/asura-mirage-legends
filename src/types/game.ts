@@ -30,6 +30,19 @@ export interface HeroConfig {
   icon: string;
 }
 
+export interface ActiveSkillDef {
+  id: string;
+  slot: 1 | 2 | 3;
+  name: string;
+  nameTh: string;
+  descTh: string;
+  icon: string;
+  color: string;
+  badgeBg: string;
+  cooldown: number;
+  damageMultiplier: number;
+}
+
 export type DungeonMapId =
   | 'undead'
   | 'japan'

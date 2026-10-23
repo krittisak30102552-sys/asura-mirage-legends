@@ -22,6 +22,7 @@ export interface Owner {
   pos: Vec2;
   facing: 1 | -1;
   aim: Vec2;
+  heroId?: 'ginzo' | 'quan' | 'katherine';
   stats: Stats;
   heal(amount: number): void;
   moveBy(dx: number, dy: number): void; // ใช้ตอนพุ่ง (ควรเช็กชนกำแพงในนี้)
@@ -64,22 +65,24 @@ function angDiff(a: number, b: number): number {
 }
 
 // ---------- เอฟเฟกต์ ----------
-interface Slash { x: number; y: number; a: number; arc: number; range: number; t: number; life: number; rgb: string; flip: 1 | -1 }
+interface Slash { x: number; y: number; a: number; arc: number; range: number; t: number; life: number; rgb: string; flip: 1 | -1; isCross?: boolean }
 interface Spark { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number; rgb: string }
-interface Ghost { x: number; y: number; facing: 1 | -1; t: number; life: number }
+interface Ghost { x: number; y: number; facing: 1 | -1; t: number; life: number; color?: string }
 interface Ring { x: number; y: number; r: number; t: number; life: number; rgb: string }
+interface Petal { x: number; y: number; vx: number; vy: number; rot: number; vrot: number; t: number; life: number; color: string }
 
 export class CombatFx {
   private slashes: Slash[] = [];
   private sparks: Spark[] = [];
   private ghosts: Ghost[] = [];
   private rings: Ring[] = [];
+  private petals: Petal[] = [];
   private shakeT = 0;
   private shakeDur = 0.0001;
   private shakeMag = 0;
 
-  slash(x: number, y: number, a: number, arc: number, range: number, rgb: string, life: number, flip: 1 | -1) {
-    this.slashes.push({ x, y, a, arc, range, t: 0, life, rgb, flip });
+  slash(x: number, y: number, a: number, arc: number, range: number, rgb: string, life: number, flip: 1 | -1, isCross: boolean = false) {
+    this.slashes.push({ x, y, a, arc, range, t: 0, life, rgb, flip, isCross });
   }
   burst(x: number, y: number, n: number, rgb: string) {
     for (let i = 0; i < n; i++) {
@@ -88,7 +91,26 @@ export class CombatFx {
       this.sparks.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, t: 0, life: 0.25 + Math.random() * 0.2, size: 2 + Math.random() * 2, rgb });
     }
   }
-  ghost(x: number, y: number, facing: 1 | -1, life: number) { this.ghosts.push({ x, y, facing, t: 0, life }); }
+  petalBurst(x: number, y: number, n: number, color: string = '244,114,182') {
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * TAU;
+      const sp = 40 + Math.random() * 110;
+      this.petals.push({
+        x,
+        y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 20,
+        rot: Math.random() * Math.PI,
+        vrot: (Math.random() - 0.5) * 8,
+        t: 0,
+        life: 0.45 + Math.random() * 0.35,
+        color,
+      });
+    }
+  }
+  ghost(x: number, y: number, facing: 1 | -1, life: number, color?: string) {
+    this.ghosts.push({ x, y, facing, t: 0, life, color });
+  }
   ring(x: number, y: number, r: number, rgb: string) { this.rings.push({ x, y, r, t: 0, life: 0.3, rgb }); }
   shake(mag: number, dur: number) { this.shakeMag = Math.max(this.shakeMag, mag); this.shakeT = Math.max(this.shakeT, dur); this.shakeDur = Math.max(this.shakeDur, dur); }
 
@@ -104,19 +126,32 @@ export class CombatFx {
     for (const p of this.sparks) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.9; p.vy *= 0.9; }
     for (const g of this.ghosts) g.t += dt;
     for (const r of this.rings) r.t += dt;
+    for (const pt of this.petals) {
+      pt.t += dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.vy += 45 * dt; // gentle gravity
+      pt.vx *= 0.94;
+      pt.rot += pt.vrot * dt;
+    }
     this.slashes = this.slashes.filter(s => s.t < s.life);
     this.sparks = this.sparks.filter(p => p.t < p.life);
     this.ghosts = this.ghosts.filter(g => g.t < g.life);
     this.rings = this.rings.filter(r => r.t < r.life);
+    this.petals = this.petals.filter(pt => pt.t < pt.life);
     if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) { this.shakeMag = 0; this.shakeDur = 0.0001; } }
   }
 
   draw(ctx: CanvasRenderingContext2D, ghostRenderer?: GhostRenderer) {
     ctx.save();
     for (const g of this.ghosts) {
-      const a = (1 - g.t / g.life) * 0.5;
+      const a = (1 - g.t / g.life) * 0.55;
       if (ghostRenderer) ghostRenderer(ctx, g.x, g.y, g.facing, a);
-      else { ctx.globalAlpha = a; ctx.fillStyle = '#7fe3ff'; ctx.fillRect(g.x - 10, g.y - 28, 20, 40); }
+      else {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = g.color || '#7fe3ff';
+        ctx.fillRect(g.x - 10, g.y - 28, 20, 40);
+      }
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter';
@@ -130,7 +165,7 @@ export class CombatFx {
       const ccw = s.flip === -1;
       const grad = ctx.createRadialGradient(s.x, s.y, s.range * 0.45, s.x, s.y, s.range);
       grad.addColorStop(0, `rgba(${s.rgb},0)`);
-      grad.addColorStop(0.75, `rgba(${s.rgb},0.55)`);
+      grad.addColorStop(0.75, `rgba(${s.rgb},0.65)`);
       grad.addColorStop(1, 'rgba(255,255,255,0.95)');
       ctx.globalAlpha = fade;
       ctx.beginPath();
@@ -139,13 +174,25 @@ export class CombatFx {
       ctx.closePath();
       ctx.fillStyle = grad;
       ctx.fill();
+
+      // If cross slash (Combo 2 Rose Cross Rift), render the intersecting counter-angle slash
+      if (s.isCross) {
+        const cStart = s.a + (s.arc / 2) * s.flip;
+        const cEnd = cStart - s.arc * sweep * s.flip;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.range * 0.85, cStart, cEnd, !ccw);
+        ctx.arc(s.x, s.y, s.range * 0.45, cEnd, cStart, ccw);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
     }
 
     for (const r of this.rings) {
       const p = r.t / r.life;
       ctx.globalAlpha = 1 - p;
       ctx.strokeStyle = `rgb(${r.rgb})`;
-      ctx.lineWidth = 3 * (1 - p) + 1;
+      ctx.lineWidth = 3.5 * (1 - p) + 1;
       ctx.beginPath();
       ctx.arc(r.x, r.y, r.r * easeOut(p), 0, TAU);
       ctx.stroke();
@@ -159,6 +206,20 @@ export class CombatFx {
       ctx.moveTo(p.x, p.y);
       ctx.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
       ctx.stroke();
+    }
+
+    // Sakura petals for Ginzo / floral bursts
+    for (const pt of this.petals) {
+      const p = pt.t / pt.life;
+      ctx.globalAlpha = Math.max(0, 1 - p);
+      ctx.save();
+      ctx.translate(pt.x, pt.y);
+      ctx.rotate(pt.rot);
+      ctx.fillStyle = `rgb(${pt.color})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5, 2.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -250,8 +311,58 @@ export class PlayerCombat {
         if (this.t >= def.windup) {
           this.m1 = 'active'; this.t = 0; this.hitSet.clear();
           const o = this.owner;
+          const hero = o.heroId || 'ginzo';
           const heavy = this.step === COMBO.length - 1;
-          this.fx.slash(o.pos.x, o.pos.y, Math.atan2(o.aim.y, o.aim.x), def.arc, def.range, heavy ? '255,190,90' : '255,255,255', heavy ? 0.28 : 0.18, this.flip);
+          const aimAngle = Math.atan2(o.aim.y, o.aim.x);
+
+          if (hero === 'ginzo') {
+            if (this.step === 0) {
+              // Combo 1: Silver Moon — silver crescent + pink ghost after-image
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range, '241,245,249', 0.22, this.flip);
+              this.fx.ghost(o.pos.x - Math.cos(aimAngle) * 12, o.pos.y - Math.sin(aimAngle) * 12, o.facing, 0.25, '#fb7185');
+            } else if (this.step === 1) {
+              // Combo 2: Rose Cross Rift — dual intersecting rose cross slashes
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.1, def.range, '244,63,94', 0.24, this.flip, true);
+              this.fx.petalBurst(o.pos.x, o.pos.y, 4, '251,113,133');
+            } else {
+              // Combo 3: Abyssal Crescent — deep dimensional crescent + sakura explosion
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.25, def.range * 1.15, '236,72,153', 0.32, this.flip);
+              this.fx.petalBurst(o.pos.x, o.pos.y, 14, '244,114,182');
+              this.fx.ring(o.pos.x, o.pos.y, 35, '244,114,182');
+            }
+          } else if (hero === 'quan') {
+            if (this.step === 0) {
+              // Combo 1: Jade Pulse — cyan/gold fist shockwave
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 0.9, def.range * 0.9, '56,189,248', 0.2, this.flip);
+              this.fx.ring(o.pos.x, o.pos.y, 24, '250,204,21');
+            } else if (this.step === 1) {
+              // Combo 2: Azure Dragon Orbit — circular swirl ring around player
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.2, def.range, '34,211,238', 0.24, this.flip);
+              this.fx.ring(o.pos.x, o.pos.y, 38, '34,211,238');
+            } else {
+              // Combo 3: Sky-Rising Dragon — golden energy burst + expanding ring
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.35, def.range * 1.2, '251,191,36', 0.34, this.flip);
+              this.fx.ring(o.pos.x, o.pos.y, 50, '251,191,36');
+              this.fx.burst(o.pos.x, o.pos.y, 12, '253,224,71');
+            }
+          } else if (hero === 'katherine') {
+            if (this.step === 0) {
+              // Combo 1: Frost Shard — crystalline ice projectile trail
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 0.75, def.range * 1.1, '125,211,252', 0.22, this.flip);
+              this.fx.burst(o.pos.x, o.pos.y, 6, '224,242,254');
+            } else if (this.step === 1) {
+              // Combo 2: Storm Relay — branching electric storm discharge
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range * 1.1, '167,139,250', 0.24, this.flip);
+              this.fx.burst(o.pos.x, o.pos.y, 10, '147,197,253');
+            } else {
+              // Combo 3: Astral Convergence — crystal flare & violet thunder burst
+              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.4, def.range * 1.25, '192,132,252', 0.34, this.flip);
+              this.fx.ring(o.pos.x, o.pos.y, 45, '192,132,252');
+              this.fx.burst(o.pos.x, o.pos.y, 16, '244,114,182');
+            }
+          } else {
+            this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range, heavy ? '255,190,90' : '255,255,255', heavy ? 0.28 : 0.18, this.flip);
+          }
         }
         break;
       case 'active':

@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, MousePointer, Shield, Flame, Compass, Heart, Zap, Wind } from 'lucide-react';
+import { X, MousePointer, Shield, Flame, Compass, Heart, Zap, Wind, Sparkles } from 'lucide-react';
 import { DUNGEON_MAPS } from '../data/gameData';
 
 interface ControlsGuideModalProps {
@@ -101,6 +101,14 @@ export const ControlsGuideModal: React.FC<ControlsGuideModalProps> = ({
                   <div>
                     <span className="font-bold text-sky-400 bg-zinc-800 px-1.5 py-0.5 rounded mr-1">Space / คลิกขวา</span>
                     <span>หลบหลีก (Dodge Roll อมตะ)</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-rose-400 bg-zinc-800 px-1.5 py-0.5 rounded mr-1">ปุ่ม 1, 2, 3</span>
+                    <span>กดสกิลประจำตัว Slot 1, 2, 3 (รองรับ Numpad 1-3)</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-amber-300 bg-zinc-800 px-1.5 py-0.5 rounded mr-1">ปุ่ม E / B</span>
+                    <span>E = โต้ตอบ/เปิดหีบ/เข้าประตู, B = เปิดกระเป๋า</span>
                   </div>
                 </div>
 

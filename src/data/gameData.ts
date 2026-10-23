@@ -2,7 +2,7 @@
  * Comprehensive Data configurations for Heroes, Weapons, Equipment, Relics, and 10 Wiki Dungeons
  */
 
-import { HeroConfig, WeaponItem, DungeonMapConfig, RelicItem, EquipmentItem, StatUpgradeType } from '../types/game';
+import { HeroConfig, HeroId, ActiveSkillDef, WeaponItem, DungeonMapConfig, RelicItem, EquipmentItem, StatUpgradeType } from '../types/game';
 
 export const HERO_CONFIGS: Record<string, HeroConfig> = {
   quan: {
@@ -56,6 +56,123 @@ export const HERO_CONFIGS: Record<string, HeroConfig> = {
     cost: 120,
     icon: '🧙‍♀️',
   },
+};
+
+export const HERO_SKILLS: Record<HeroId, [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef]> = {
+  ginzo: [
+    {
+      id: 'dimensional_rift',
+      slot: 1,
+      name: 'Dimensional Rift',
+      nameTh: 'คมดาบตัดมิติ',
+      descTh: 'ฟาดดาบสร้างรอยแยกมิติ 3D พุ่งผ่าทะลวงศัตรูในแนวเส้นตรงอย่างรุนแรง',
+      icon: '🌌',
+      color: '#f472b6',
+      badgeBg: 'bg-rose-500/20 border-rose-500/50 text-rose-300',
+      cooldown: 5.5,
+      damageMultiplier: 2.6,
+    },
+    {
+      id: 'sakura_storm',
+      slot: 2,
+      name: 'Sakura Storm',
+      nameTh: 'พายุซากุระสลาตัน',
+      descTh: 'กระหน่ำฟัน 8 ทิศทางรอบตัวอย่างรวดเร็ว พร้อมระเบิดกลีบซากุระชะลอศัตรู',
+      icon: '🌸',
+      color: '#fb7185',
+      badgeBg: 'bg-pink-500/20 border-pink-500/50 text-pink-300',
+      cooldown: 9.0,
+      damageMultiplier: 3.5,
+    },
+    {
+      id: 'zero_frame',
+      slot: 3,
+      name: 'Zero-Frame Severance',
+      nameTh: 'ดาบตัดมิติศูนย์เฟรม',
+      descTh: 'พุ่งวาร์ปตัดผ่านมิติในเสี้ยววินาที สร้างรอยแยกมิติสีเงินพร้อมระเบิดดาเมจคริติคอลมหาศาล',
+      icon: '⚡',
+      color: '#e2e8f0',
+      badgeBg: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+      cooldown: 15.0,
+      damageMultiplier: 5.2,
+    },
+  ],
+  quan: [
+    {
+      id: 'heaven_drum',
+      slot: 1,
+      name: 'Heaven Drum Palm',
+      nameTh: 'ฝ่ามือกลองสวรรค์',
+      descTh: 'กระแทกฝ่ามือสร้างคลื่นหมัดและวงแหวนพลัง ผลักศัตรูกระเด็นและติดสตัน',
+      icon: '🥊',
+      color: '#38bdf8',
+      badgeBg: 'bg-sky-500/20 border-sky-500/50 text-sky-300',
+      cooldown: 5.0,
+      damageMultiplier: 2.5,
+    },
+    {
+      id: 'dragon_spiral',
+      slot: 2,
+      name: 'Jade Dragon Spiral',
+      nameTh: 'มังกรหยกหมุนวน',
+      descTh: 'หมุนควงเพลงหมัดมังกร 360 องศา ดึงดูดศัตรูเข้าสู่ศูนย์กลางแล้วบดขยี้',
+      icon: '🐉',
+      color: '#34d399',
+      badgeBg: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300',
+      cooldown: 8.5,
+      damageMultiplier: 3.2,
+    },
+    {
+      id: 'celestial_dragon',
+      slot: 3,
+      name: 'Celestial Dragon Ascension',
+      nameTh: 'มังกรสวรรค์ทะยานฟ้า',
+      descTh: 'ปลดปล่อยเสาพลังมังกรทองคำ 3D พุ่งขึ้นจากพื้น ระเบิดคลื่นกระแทกยักษ์ถล่มศัตรู',
+      icon: '👑',
+      color: '#fbbf24',
+      badgeBg: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+      cooldown: 15.0,
+      damageMultiplier: 5.4,
+    },
+  ],
+  katherine: [
+    {
+      id: 'frost_nova',
+      slot: 1,
+      name: 'Frost Nova',
+      nameTh: 'โนวาน้ำแข็งเยือกแข็ง',
+      descTh: 'เสกวงแหวนเวทระเบิดเสาผลึกน้ำแข็ง 8 ทิศ แช่แข็งศัตรูให้อยู่กับที่',
+      icon: '❄️',
+      color: '#38bdf8',
+      badgeBg: 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300',
+      cooldown: 6.0,
+      damageMultiplier: 2.5,
+    },
+    {
+      id: 'thunderbolt_surge',
+      slot: 2,
+      name: 'Thunderbolt Surge',
+      nameTh: 'อัสนีบาตสายฟ้าฟาด',
+      descTh: 'ยิงลำแสงสายฟ้าฟาดพุ่งทะลวงเป็นเส้นตรง แตกแขนงช็อตสตันศัตรูต่อเนื่อง',
+      icon: '🌩️',
+      color: '#a78bfa',
+      badgeBg: 'bg-purple-500/20 border-purple-500/50 text-purple-300',
+      cooldown: 8.0,
+      damageMultiplier: 3.4,
+    },
+    {
+      id: 'meteor_calamity',
+      slot: 3,
+      name: 'Meteor Calamity',
+      nameTh: 'อุกกาบาตบรรจบดวงดาว',
+      descTh: 'เรียกอุกกาบาตยักษ์ 3D ตกลงมา ณ จุดเล็ง ระเบิดเปลวเพลิงลาวาเผาผลาญศัตรู',
+      icon: '☄️',
+      color: '#fb923c',
+      badgeBg: 'bg-orange-500/20 border-orange-500/50 text-orange-300',
+      cooldown: 16.0,
+      damageMultiplier: 5.5,
+    },
+  ],
 };
 
 export const INITIAL_WEAPONS: WeaponItem[] = [

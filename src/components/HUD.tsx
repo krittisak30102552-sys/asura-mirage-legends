@@ -10,7 +10,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerStats, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
-import { HERO_CONFIGS } from '../data/gameData';
+import { HERO_CONFIGS, HERO_SKILLS } from '../data/gameData';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
 import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
 import { VirtualJoystick } from './VirtualJoystick';
@@ -121,6 +121,8 @@ interface HUDProps {
   // Combat Action handlers for touch & click
   onAttack?: () => void;
   onDash?: () => void;
+  onSkill?: (slot: 1 | 2 | 3) => void;
+  skillCooldowns?: Record<1 | 2 | 3, number>;
   onInteract?: () => void;
   onRunCommand?: (command: string) => boolean;
   oneHitMode?: boolean;
@@ -160,6 +162,8 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenInventory,
   onAttack,
   onDash,
+  onSkill,
+  skillCooldowns,
   onInteract,
   onRunCommand,
   oneHitMode = false,
@@ -721,6 +725,55 @@ export const HUD: React.FC<HUDProps> = ({
                 {referenceDungeonHud ? 'LMB' : activeHeroId === 'ginzo' ? 'ฟันคอมโบ' : activeHeroId === 'katherine' ? 'ยิงเวท' : 'หมัดคอมโบ'}
               </span>
             </button>
+
+            {/* Active Skills Slots 1, 2, 3 */}
+            {HERO_SKILLS[activeHeroId]?.map((skill) => {
+              const cd = skillCooldowns?.[skill.slot as (1 | 2 | 3)] ?? 0;
+              const isOnCd = cd > 0;
+              return (
+                <button
+                  key={skill.id}
+                  type="button"
+                  onClick={() => onSkill?.(skill.slot as (1 | 2 | 3))}
+                  disabled={isOnCd}
+                  className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60"
+                  title={`${skill.name} (${skill.nameTh}) [กดเลข ${skill.slot}]`}
+                >
+                  <div
+                    className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden transition-all ${
+                      referenceDungeonHud
+                        ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]'
+                        : 'rounded-lg bg-zinc-900 border-2 border-zinc-700 hover:border-amber-400'
+                    }`}
+                  >
+                    <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>
+                      {skill.icon}
+                    </span>
+                    {!referenceDungeonHud && (
+                      <span className="text-[6.5px] sm:text-[8px] font-pixel text-zinc-300 font-bold mt-0.5 line-clamp-1 px-0.5 text-center">
+                        {skill.nameTh.length > 7 ? skill.nameTh.slice(0, 6) + '…' : skill.nameTh}
+                      </span>
+                    )}
+                    {isOnCd && (
+                      <div
+                        className="absolute inset-0 bg-zinc-950/85 flex items-center justify-center text-[10px] sm:text-xs font-pixel text-amber-300 font-bold"
+                        style={{
+                          clipPath: `polygon(0 0, 100% 0, 100% ${100 - (cd / skill.cooldown) * 100}%, 0 ${100 - (cd / skill.cooldown) * 100}%)`,
+                        }}
+                      >
+                        {cd.toFixed(1)}
+                      </div>
+                    )}
+                    <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-0.2 rounded font-bold shadow">
+                      {skill.slot}
+                    </div>
+                  </div>
+                  <span className={`font-pixel font-bold ${referenceDungeonHud ? 'mt-1 border border-zinc-200 bg-zinc-950 px-1 py-0.5 text-[7px] text-white' : 'text-[8px] sm:text-[9.5px] font-rajdhani text-zinc-300 mt-0.5 line-clamp-1'}`}>
+                    {referenceDungeonHud ? `[${skill.slot}]` : skill.nameTh.slice(0, 5)}
+                  </span>
+                </button>
+              );
+            })}
 
             {/* Dash / Dodge (Space / RMB / Tap) */}
             <button

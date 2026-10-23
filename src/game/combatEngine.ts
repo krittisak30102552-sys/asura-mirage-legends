@@ -44,6 +44,7 @@ import {
 } from './levelSystem';
 import {
   HERO_CONFIGS,
+  HERO_SKILLS,
   INITIAL_WEAPONS,
   INITIAL_EQUIPMENT,
   DUNGEON_MAPS,
@@ -236,6 +237,7 @@ export class CombatEngine {
   public attackTimer: number = 0;
   public playerCombat!: PlayerCombat;
   private combatTargets = new WeakMap<object, CombatTarget>();
+  public skillCooldowns: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 };
 
   // Dash & Dodge
   public isDashing: boolean = false;
@@ -335,6 +337,7 @@ export class CombatEngine {
       get pos() { return { x: thisEngine.playerX * 32, y: thisEngine.playerZ * 32 }; },
       get facing() { return thisEngine.playerFacing < 0 ? -1 : 1; },
       get aim() { return { x: Math.cos(thisEngine.playerAimAngle), y: Math.sin(thisEngine.playerAimAngle) }; },
+      get heroId() { return thisEngine.activeHeroId; },
       get stats() {
         const weapon = thisEngine.weapons.find((item) => item.id === thisEngine.equippedWeaponId);
         const difficulty = DIFFICULTY_CONFIGS[thisEngine.difficulty] || DIFFICULTY_CONFIGS.normal;
@@ -950,7 +953,8 @@ export class CombatEngine {
     this.bossStageTransitionTimer = 0;
     this.bossSummonedForRoom = false;
     this.lowHpShieldUsedRoomKey = null;
-    this.currentDungeonMap = 'test_dungeon';
+    const currentBiome = levelSystem.getCurrentBiome();
+    this.currentDungeonMap = currentBiome.id as any;
     this.currentRoomType = roomType as any;
     const wasRoomCleared = stage.clearedRoomIndices.includes(stage.currentRoomIndex);
 
@@ -963,7 +967,7 @@ export class CombatEngine {
 
     this.clearDungeonEntities();
     this.arena.removeHappyVendor();
-    this.arena.loadRoom(roomType as any, 'test_dungeon', this.getDoorLabels());
+    this.arena.loadRoom(roomType as any, this.currentDungeonMap, this.getDoorLabels());
     this.nearbyDungeonInteractable = null;
     this.nearbyShopItemIndex = null;
     if (roomType === 'shop' && !stage.happyProvokedRoomIndices.includes(stage.currentRoomIndex)) {
@@ -1901,6 +1905,266 @@ export class CombatEngine {
     this.playerCombat.pressM1();
   }
 
+  public castSkill(slot: 1 | 2 | 3): boolean {
+    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.playerStats.hp <= 0) {
+      return false;
+    }
+    if ((this.skillCooldowns[slot] ?? 0) > 0) {
+      return false;
+    }
+
+    const heroSkills = HERO_SKILLS[this.activeHeroId];
+    if (!heroSkills) return false;
+    const skillDef = heroSkills[slot - 1];
+    if (!skillDef) return false;
+
+    // Set cooldown (accounting for cooldown reduction stat)
+    const effectiveCooldown = skillDef.cooldown * (1 - Math.min(0.5, this.playerStats.cooldownReduction || 0));
+    this.skillCooldowns[slot] = effectiveCooldown;
+
+    const angle = this.playerAimAngle;
+    const heroId = this.activeHeroId;
+    const pX = this.playerX;
+    const pZ = this.playerZ;
+    const rawDamage = this.playerStats.attackPower * skillDef.damageMultiplier;
+
+    if (heroId === 'ginzo') {
+      if (slot === 1) {
+        // Ginzo 1: Dimensional Rift (คมดาบตัดมิติ)
+        soundEngine.playKatanaSlash();
+        this.arena.spawnGroundTelegraph(pX, pZ, 1.2, 0.22, 0xf472b6, 'line', angle, 8.0);
+        this.arena.spawnDimensionalSlashVFX(pX + Math.cos(angle) * 2.5, pZ + Math.sin(angle) * 2.5, angle);
+        this.arena.addCameraShake(0.28);
+
+        let hitCount = 0;
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dx = enemy.x - pX;
+          const dz = enemy.z - pZ;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 8.0) continue;
+          const enemyAngle = Math.atan2(dz, dx);
+          let diff = Math.abs(enemyAngle - angle);
+          while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+          if (diff <= 0.55 || dist <= 1.8) {
+            hitCount++;
+            const isCrit = Math.random() < this.playerStats.critChance + 0.15;
+            this.applyStatusEffect(enemy, 'bleed', 3.0, 18);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+            enemy.vx += Math.cos(angle) * 12;
+            enemy.vz += Math.sin(angle) * 12;
+          }
+        }
+        if (hitCount > 0) soundEngine.playHit(true);
+
+      } else if (slot === 2) {
+        // Ginzo 2: Sakura Storm (พายุซากุระสลาตัน)
+        soundEngine.playWhirlwind();
+        this.arena.spawnGroundTelegraph(pX, pZ, 4.4, 0.35, 0xfb7185, 'circle');
+        this.arena.spawnSakuraStormVFX(pX, pZ);
+        this.arena.addCameraShake(0.38);
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
+          if (dist <= 4.6) {
+            const isCrit = Math.random() < this.playerStats.critChance;
+            this.applyStatusEffect(enemy, 'slow', 3.5);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+            const pushAngle = Math.atan2(enemy.z - pZ, enemy.x - pX);
+            enemy.vx += Math.cos(pushAngle) * 9;
+            enemy.vz += Math.sin(pushAngle) * 9;
+          }
+        }
+
+      } else {
+        // Ginzo 3: Zero-Frame Severance (ดาบตัดมิติศูนย์เฟรม)
+        const dashDist = 7.0;
+        const targetX = THREE.MathUtils.clamp(
+          pX + Math.cos(angle) * dashDist,
+          this.arena.bounds.minX + 1.2,
+          this.arena.bounds.maxX - 1.2
+        );
+        const targetZ = THREE.MathUtils.clamp(
+          pZ + Math.sin(angle) * dashDist,
+          this.arena.bounds.minZ + 1.2,
+          this.arena.bounds.maxZ - 1.2
+        );
+
+        this.arena.spawnGroundTelegraph(pX, pZ, 1.4, 0.2, 0xffffff, 'line', angle, dashDist);
+        this.arena.spawnZeroFrameSeveranceVFX(pX, pZ, targetX, targetZ);
+        soundEngine.playBossGong();
+        soundEngine.playKatanaSlash();
+        this.arena.addCameraShake(0.48);
+        this.hitstopTimer = 0.08;
+
+        this.playerX = targetX;
+        this.playerZ = targetZ;
+        this.invulnerableTimer = 0.45;
+        this.isInvulnerable = true;
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const l2 = Math.hypot(targetX - pX, targetZ - pZ) ** 2;
+          const t = Math.max(0, Math.min(1, ((enemy.x - pX) * (targetX - pX) + (enemy.z - pZ) * (targetZ - pZ)) / l2));
+          const projX = pX + t * (targetX - pX);
+          const projZ = pZ + t * (targetZ - pZ);
+          const distToCut = Math.hypot(enemy.x - projX, enemy.z - projZ);
+          if (distToCut <= 2.2) {
+            this.damageEnemy(enemy, Math.round(rawDamage), true, true);
+            this.applyStatusEffect(enemy, 'bleed', 4.0, 35);
+          }
+        }
+      }
+
+    } else if (heroId === 'quan') {
+      if (slot === 1) {
+        // Quan 1: Heaven Drum Palm (ฝ่ามือกลองสวรรค์)
+        soundEngine.playKiExplosion();
+        this.arena.spawnGroundTelegraph(pX, pZ, 1.8, 0.22, 0x38bdf8, 'cone', angle, 6.0);
+        this.arena.spawnHeavenDrumPalmVFX(pX, pZ, angle);
+        this.arena.addCameraShake(0.3);
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dx = enemy.x - pX;
+          const dz = enemy.z - pZ;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 6.0) continue;
+          const enemyAngle = Math.atan2(dz, dx);
+          let diff = Math.abs(enemyAngle - angle);
+          while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+          if (diff <= 0.75 || dist <= 1.8) {
+            const isCrit = Math.random() < this.playerStats.critChance;
+            this.applyStatusEffect(enemy, 'stun', 1.4);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+            enemy.vx += Math.cos(angle) * 16;
+            enemy.vz += Math.sin(angle) * 16;
+          }
+        }
+
+      } else if (slot === 2) {
+        // Quan 2: Jade Dragon Spiral (มังกรหยกหมุนวน)
+        soundEngine.playWhirlwind();
+        this.arena.spawnGroundTelegraph(pX, pZ, 4.2, 0.28, 0x34d399, 'circle');
+        this.arena.spawnJadeDragonSpiralVFX(pX, pZ);
+        this.arena.addCameraShake(0.34);
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
+          if (dist <= 4.5) {
+            const isCrit = Math.random() < this.playerStats.critChance;
+            const pullAngle = Math.atan2(pZ - enemy.z, pX - enemy.x);
+            enemy.vx += Math.cos(pullAngle) * 8;
+            enemy.vz += Math.sin(pullAngle) * 8;
+            this.applyStatusEffect(enemy, 'shock', 2.5);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+          }
+        }
+
+      } else {
+        // Quan 3: Celestial Dragon Ascension (มังกรสวรรค์ทะยานฟ้า)
+        const targetX = this.lockedTarget ? this.lockedTarget.x : pX + Math.cos(angle) * 2.8;
+        const targetZ = this.lockedTarget ? this.lockedTarget.z : pZ + Math.sin(angle) * 2.8;
+
+        this.arena.spawnGroundTelegraph(targetX, targetZ, 4.6, 0.35, 0xfbbf24, 'circle');
+        this.arena.spawnDragonAscensionVFX(targetX, targetZ);
+        soundEngine.playBossGong();
+        this.arena.addCameraShake(0.5);
+        this.hitstopTimer = 0.06;
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dist = Math.hypot(enemy.x - targetX, enemy.z - targetZ);
+          if (dist <= 5.0) {
+            const isCrit = Math.random() < this.playerStats.critChance + 0.2;
+            this.applyStatusEffect(enemy, 'stun', 1.8);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+            const launchAngle = Math.atan2(enemy.z - targetZ, enemy.x - targetX);
+            enemy.vx += Math.cos(launchAngle) * 14;
+            enemy.vz += Math.sin(launchAngle) * 14;
+          }
+        }
+      }
+
+    } else if (heroId === 'katherine') {
+      if (slot === 1) {
+        // Katherine 1: Frost Nova (โนวาน้ำแข็งเยือกแข็ง)
+        soundEngine.playPotion();
+        this.arena.spawnGroundTelegraph(pX, pZ, 4.2, 0.25, 0x38bdf8, 'circle');
+        this.arena.spawnFrostNovaVFX(pX, pZ);
+        this.arena.addCameraShake(0.28);
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
+          if (dist <= 4.5) {
+            const isCrit = Math.random() < this.playerStats.critChance;
+            this.applyStatusEffect(enemy, 'freeze', 2.8);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+          }
+        }
+
+      } else if (slot === 2) {
+        // Katherine 2: Thunderbolt Surge (อัสนีบาตสายฟ้าฟาด)
+        const range = 8.8;
+        const targetX = THREE.MathUtils.clamp(
+          pX + Math.cos(angle) * range,
+          this.arena.bounds.minX + 1.2,
+          this.arena.bounds.maxX - 1.2
+        );
+        const targetZ = THREE.MathUtils.clamp(
+          pZ + Math.sin(angle) * range,
+          this.arena.bounds.minZ + 1.2,
+          this.arena.bounds.maxZ - 1.2
+        );
+
+        this.arena.spawnGroundTelegraph(pX, pZ, 1.2, 0.2, 0xa78bfa, 'line', angle, range);
+        this.arena.spawnThunderBoltVFX(pX, pZ, targetX, targetZ);
+        soundEngine.playThunderBolt();
+        this.arena.addCameraShake(0.32);
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const l2 = Math.hypot(targetX - pX, targetZ - pZ) ** 2;
+          const t = Math.max(0, Math.min(1, ((enemy.x - pX) * (targetX - pX) + (enemy.z - pZ) * (targetZ - pZ)) / l2));
+          const projX = pX + t * (targetX - pX);
+          const projZ = pZ + t * (targetZ - pZ);
+          const dist = Math.hypot(enemy.x - projX, enemy.z - projZ);
+          if (dist <= 2.2) {
+            const isCrit = Math.random() < this.playerStats.critChance;
+            this.applyStatusEffect(enemy, 'shock', 3.0);
+            this.applyStatusEffect(enemy, 'stun', 0.8);
+            this.damageEnemy(enemy, Math.round(rawDamage), isCrit, true);
+          }
+        }
+
+      } else {
+        // Katherine 3: Meteor Calamity (อุกกาบาตบรรจบดวงดาว)
+        const targetX = this.mouseWorldX || (this.lockedTarget ? this.lockedTarget.x : pX + Math.cos(angle) * 4.2);
+        const targetZ = this.mouseWorldZ || (this.lockedTarget ? this.lockedTarget.z : pZ + Math.sin(angle) * 4.2);
+
+        this.arena.spawnGroundTelegraph(targetX, targetZ, 4.8, 0.55, 0xf97316, 'circle');
+        this.arena.spawnMeteorVFX(targetX, targetZ, () => {
+          soundEngine.playKiExplosion();
+          this.arena.addCameraShake(0.55);
+          for (const enemy of this.enemies) {
+            if (enemy.state === 'dead') continue;
+            const dist = Math.hypot(enemy.x - targetX, enemy.z - targetZ);
+            if (dist <= 5.2) {
+              this.applyStatusEffect(enemy, 'burn', 4.5, 30);
+              this.damageEnemy(enemy, Math.round(rawDamage), true, true);
+            }
+          }
+        });
+      }
+    }
+
+    if (this.onStateChange) this.onStateChange();
+    return true;
+  }
+
   private handlePlayerCombatEvent(event: CombatEvent) {
     if (event.type === 'swing') {
       this.comboStep = event.step + 1;
@@ -1909,12 +2173,18 @@ export class CombatEngine {
       this.animFrame = 0;
       const x = this.playerX + Math.cos(this.playerAimAngle) * 1.1;
       const z = this.playerZ + Math.sin(this.playerAimAngle) * 1.1;
-      soundEngine.playKatanaSlash();
-      this.spawnSlashVfx(x, z, this.playerAimAngle);
-      if (this.comboStep === 3) {
-        this.arena.spawnDimensionalSlashVFX?.(x, z, this.playerAimAngle);
-        this.arena.addCameraShake(0.28);
+
+      // Hero-specific swing audio
+      if (this.activeHeroId === 'ginzo') {
+        soundEngine.playKatanaSlash();
+      } else if (this.activeHeroId === 'quan') {
+        soundEngine.playKiExplosion();
+      } else {
+        soundEngine.playThunderBolt();
       }
+
+      this.spawnSlashVfx(x, z, this.playerAimAngle);
+      this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, this.playerAimAngle);
     } else if (event.type === 'hit') {
       if (event.crit) this.arena.addCameraShake(0.2);
     }
@@ -2648,6 +2918,9 @@ export class CombatEngine {
     }
 
     if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.skillCooldowns[1] = Math.max(0, (this.skillCooldowns[1] ?? 0) - dt);
+    this.skillCooldowns[2] = Math.max(0, (this.skillCooldowns[2] ?? 0) - dt);
+    this.skillCooldowns[3] = Math.max(0, (this.skillCooldowns[3] ?? 0) - dt);
     if (this.temporaryAttackSpeedTimer > 0) {
       this.temporaryAttackSpeedTimer = Math.max(0, this.temporaryAttackSpeedTimer - dt);
       if (this.temporaryAttackSpeedTimer === 0) this.temporaryAttackSpeedBonus = 0;
