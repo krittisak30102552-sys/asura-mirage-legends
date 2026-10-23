@@ -3,6 +3,7 @@ import { Check, Coins, Heart, Shield, Sparkles, Wind, X, Zap } from 'lucide-reac
 import { EquipmentItem, MAX_EQUIPPED_ITEMS } from '../types/game';
 import { ShopOfferItem } from '../game/levelSystem';
 import { EQUIPMENT_STAT_DEFINITIONS, EquipmentStatKey } from '../game/equipmentStats';
+import { ItemIcon } from './ItemIcon';
 
 interface EquipmentPurchaseModalProps {
   offer: ShopOfferItem | null;
@@ -55,7 +56,7 @@ export const EquipmentPurchaseModal: React.FC<EquipmentPurchaseModalProps> = ({
         </button>
 
         <header className="flex items-center gap-4 border-b border-zinc-800 bg-gradient-to-r from-pink-950/60 to-zinc-950 p-5 pr-14">
-          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border ${rarity.frame} bg-zinc-900 text-4xl`}>{offer.icon}</div>
+          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border ${rarity.frame} bg-zinc-900`}><ItemIcon itemId={offer.itemData.id} rarity={offer.itemData.rarity} size={50} /></div>
           <div className="min-w-0">
             <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${rarity.text}`}>{rarity.label} · อุปกรณ์เพิ่มสถานะ</div>
             <h2 id="purchase-item-title" className="mt-1 text-lg font-black leading-tight text-white">{offer.nameTh}</h2>
