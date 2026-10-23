@@ -3101,6 +3101,8 @@ export class ArenaScene {
     x: number, z: number, radius: number, duration: number = 0.45, color: number = 0xf59e0b,
     shape: 'circle' | 'line' | 'cone' = 'circle', angle: number = 0, length: number = 7
   ) {
+    // Samurai blade arcs and chi-dragon silhouettes replace generic ground glyphs for these signature moves.
+    if ((color === 0xf472b6 && shape === 'line') || (color === 0xfb7185 && shape === 'circle') || (color === 0xffffff && shape === 'line') || (color === 0x34d399 && shape === 'circle') || (color === 0xfbbf24 && shape === 'circle')) return;
     const group = new THREE.Group(); group.position.set(x, 0.045, z);
     if (shape === 'cone') group.rotation.y = -angle;
     this.vfxGroup.add(group);
