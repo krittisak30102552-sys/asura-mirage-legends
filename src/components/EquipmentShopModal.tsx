@@ -4,6 +4,7 @@ import { EquipmentItem, MAX_EQUIPPED_ITEMS } from '../types/game';
 import { INITIAL_EQUIPMENT } from '../data/gameData';
 import { soundEngine } from '../audio/soundEngine';
 import { EQUIPMENT_STAT_DEFINITIONS, formatEquipmentStatSummary, hasEquipmentBonuses } from '../game/equipmentStats';
+import { ItemIcon } from './ItemIcon';
 
 interface EquipmentShopModalProps {
   isOpen: boolean;
@@ -68,7 +69,7 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
               return (
                 <button key={item.id} onClick={() => setSelectedId(item.id)} className={`rounded-xl border p-3 text-left transition ${rarity.border} bg-zinc-900/70 ${isSelected ? 'ring-2 ring-emerald-300' : 'hover:border-emerald-500 hover:bg-zinc-900'}`}>
                   <div className="flex items-start gap-2">
-                    <span className="text-2xl">{item.icon}</span>
+                    <ItemIcon itemId={item.id} rarity={item.rarity} size={36} />
                     <div className="min-w-0 flex-1">
                       <div className={`text-xs font-bold ${rarity.text}`}>{item.nameTh}</div>
                       <div className="mt-0.5 text-[9px] text-zinc-500">{rarity.label}{ownedCount ? ` · มีแล้ว ${ownedCount}` : ''}</div>
@@ -85,7 +86,7 @@ export const EquipmentShopModal: React.FC<EquipmentShopModalProps> = ({
           {selected && (
             <aside className="flex flex-col rounded-xl border border-emerald-800/70 bg-zinc-900/60 p-4">
               <div className="flex items-center gap-3">
-                <span className="text-4xl">{selected.icon}</span>
+                <ItemIcon itemId={selected.id} rarity={selected.rarity} size={52} />
                 <div>
                   <div className={`font-bold ${RARITY[selected.rarity].text}`}>{selected.nameTh}</div>
                   <div className="text-[10px] text-zinc-500">{RARITY[selected.rarity].label}</div>
