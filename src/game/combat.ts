@@ -328,7 +328,6 @@ export class PlayerCombat {
               // Combo 3: Abyssal Crescent — deep dimensional crescent + sakura explosion
               this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.25, def.range * 1.15, '236,72,153', 0.32, this.flip);
               this.fx.petalBurst(o.pos.x, o.pos.y, 14, '244,114,182');
-              this.fx.ring(o.pos.x, o.pos.y, 35, '244,114,182');
             }
           } else if (hero === 'quan') {
             if (this.step === 0) {
