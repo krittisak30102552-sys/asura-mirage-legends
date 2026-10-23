@@ -705,6 +705,7 @@ export default function App() {
       setGameMode('lobby');
       gameModeRef.current = 'lobby';
       soundEngine.playRoomClear();
+      soundEngine.startMusic('lobby');
     }
   }, []);
 
@@ -722,6 +723,7 @@ export default function App() {
     setIsDungeonModalOpen(false);
     if (engineRef.current) {
       engineRef.current.startLevelRun(undefined, diff);
+      soundEngine.startMusic('dungeon');
       setGameMode('playing');
       gameModeRef.current = 'playing';
       setLevelTick((t) => t + 1);
@@ -769,6 +771,7 @@ export default function App() {
       setGameMode('lobby');
       gameModeRef.current = 'lobby';
       soundEngine.playRoomClear();
+      soundEngine.startMusic('lobby');
     }
   }, []);
 
