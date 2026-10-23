@@ -8,6 +8,7 @@ import React from 'react';
 import { X, RefreshCw, Sparkles } from 'lucide-react';
 import { ShopOfferItem } from '../game/levelSystem';
 import { formatEquipmentStatSummary } from '../game/equipmentStats';
+import { ItemIcon } from './ItemIcon';
 
 const rarityStyle = {
   common: { label: 'ทั่วไป', text: 'text-zinc-300', border: 'border-zinc-500/50' },
@@ -89,7 +90,7 @@ export const StageShopModal: React.FC<StageShopModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-2xl w-10 h-10 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0">
-                      {offer.icon}
+                      <ItemIcon itemId={offer.itemData.id} rarity={offer.itemData.rarity} size={34} />
                     </span>
                     <span className={`text-[9px] font-pixel px-1.5 py-0.5 rounded font-bold bg-zinc-950 ${rarityStyle[offer.itemData.rarity].text}`}>
                       {rarityStyle[offer.itemData.rarity].label}
