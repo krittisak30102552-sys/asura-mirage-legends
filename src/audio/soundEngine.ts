@@ -11,6 +11,7 @@ class SoundEngine {
   private musicTimer: number | null = null;
   private musicMode: 'lobby' | 'dungeon' | 'boss' | null = null;
   private musicStep = 0;
+  private suppressDuplicateSkillSfx = false;
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -110,6 +111,14 @@ class SoundEngine {
     envelope.connect(this.musicGain);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.025);
+  }
+
+  public castSkillWithSound(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3, action: () => boolean) {
+    this.suppressDuplicateSkillSfx = true;
+    let succeeded = false;
+    try { succeeded = action(); } finally { this.suppressDuplicateSkillSfx = false; }
+    if (succeeded) this.playSkillCast(heroId, slot);
+    return succeeded;
   }
 
   public playSkillCast(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3) {
@@ -258,6 +267,7 @@ class SoundEngine {
 
   // Skill 2: Ki Blast Launch & Explode
   public playKiBlastLaunch() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
 
@@ -279,6 +289,7 @@ class SoundEngine {
   }
 
   public playKiExplosion() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
 
@@ -301,6 +312,7 @@ class SoundEngine {
 
   // Skill 3: Whirlwind Dragon Kick
   public playWhirlwindSpin() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
 
@@ -405,6 +417,7 @@ class SoundEngine {
 
   // Potion pickup
   public playPotion() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
 
@@ -427,6 +440,7 @@ class SoundEngine {
 
   // Boss Warning Gong
   public playBossGong() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
 
@@ -510,6 +524,7 @@ class SoundEngine {
 
   // Magic: Thunder Bolt Zap
   public playThunderBolt() {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
     const t = this.ctx.currentTime;
@@ -601,6 +616,7 @@ class SoundEngine {
 
   // Katana / Swift Blade Slash
   public playSwordSlash(comboStep: number = 1) {
+    if (this.suppressDuplicateSkillSfx) return;
     this.initContext();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
     const t = this.ctx.currentTime;
