@@ -542,13 +542,21 @@ export class ArenaScene {
       lanternGlow2 = 0xf59e0b;
     }
 
-    this.scene.background = new THREE.Color(0x050507);
-    this.scene.fog = new THREE.FogExp2(0x09090b, Math.max(fogDensity, 0.018));
-    this.keyLight.color.setHex(0xffd6ab);
-    this.keyLight.intensity = 1.75;
-    this.ambientLight.color.setHex(0x81727a);
-    this.ambientLight.groundColor.setHex(0x181014);
-    this.ambientLight.intensity = 0.82;
+    const isBossArena = room === 'boss_arena';
+    if (isBossArena) {
+      floorColor = 0x382035;
+      roughness = 0.72;
+      metalness = 0.24;
+      lanternGlow1 = 0xe879f9;
+      lanternGlow2 = 0x22d3ee;
+    }
+    this.scene.background = new THREE.Color(isBossArena ? 0x09020e : 0x050507);
+    this.scene.fog = new THREE.FogExp2(isBossArena ? 0x18051e : 0x09090b, Math.max(fogDensity, isBossArena ? 0.026 : 0.018));
+    this.keyLight.color.setHex(isBossArena ? 0xc4b5fd : 0xffd6ab);
+    this.keyLight.intensity = isBossArena ? 1.25 : 1.75;
+    this.ambientLight.color.setHex(isBossArena ? 0xc026d3 : 0x81727a);
+    this.ambientLight.groundColor.setHex(isBossArena ? 0x12071b : 0x181014);
+    this.ambientLight.intensity = isBossArena ? 0.72 : 0.82;
 
     // Standardized spacious arena bounds for all dungeon rooms
     // Push the physical arena edge beyond the camera framing so the fight reads as open-ended.
@@ -614,6 +622,10 @@ export class ArenaScene {
     } else if (room === 'altar') {
       this.createBossArenaAltar(-4.8, -2.5);
       this.createFloatingBadge('🗿 [E] อัญเชิญบอส', '#67e8f9', -4.8, 4.4, -2.5);
+    } else if (room === 'boss_arena') {
+      this.createBossArenaAltar(-5.0, -2.7);
+      this.createFloatingBadge('⚔️ มิติแห่งผู้พิทักษ์ (BOSS REALM)', '#e879f9', 0, 4.4, -7.5);
+      this.createFloatingBadge('การต่อสู้ครั้งสุดท้ายเริ่มต้นขึ้น', '#67e8f9', 0, 2.5, -1.4);
     } else if (room === 'boss') {
       this.createBossArenaAltar(-4.8, -2.5);
       this.buildDungeonPortalGate(0, 7.5);

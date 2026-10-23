@@ -79,6 +79,9 @@ export default function App() {
   const [isChestRewardOpen, setIsChestRewardOpen] = useState<boolean>(false);
   const [bossIntroName, setBossIntroName] = useState<string | null>(null);
   const bossIntroTimeoutRef = useRef<number | null>(null);
+  const [cinematicTransition, setCinematicTransition] = useState<{ title: string; subtitle: string; id: number } | null>(null);
+  const cinematicTransitionTimeoutRef = useRef<number | null>(null);
+  const cinematicSequenceRef = useRef(0);
   const [pendingShopPurchase, setPendingShopPurchase] = useState<{ offer: ShopOfferItem; index: number } | null>(null);
   const [levelTick, setLevelTick] = useState<number>(0);
   const [relicChoices, setRelicChoices] = useState<RelicItem[]>([]);
@@ -484,6 +487,16 @@ export default function App() {
       }, 2600);
     };
 
+    engine.onCinematicTransition = (title: string, subtitle: string, duration = 2600) => {
+      if (cinematicTransitionTimeoutRef.current !== null) window.clearTimeout(cinematicTransitionTimeoutRef.current);
+      const id = ++cinematicSequenceRef.current;
+      setCinematicTransition({ title, subtitle, id });
+      cinematicTransitionTimeoutRef.current = window.setTimeout(() => {
+        setCinematicTransition(null);
+        cinematicTransitionTimeoutRef.current = null;
+      }, duration);
+    };
+
     engine.onOpenModal = (modal) => {
       if (modal === 'gate') setIsDungeonModalOpen(true);
       if (modal === 'trainer') setIsHeroModalOpen(true);
@@ -677,6 +690,7 @@ export default function App() {
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.removeEventListener('blur', handleBlur);
       if (bossIntroTimeoutRef.current !== null) window.clearTimeout(bossIntroTimeoutRef.current);
+      if (cinematicTransitionTimeoutRef.current !== null) window.clearTimeout(cinematicTransitionTimeoutRef.current);
       arena.dispose();
     };
   }, []);
@@ -865,6 +879,33 @@ export default function App() {
             <div className="mx-auto mb-3 h-px w-40 bg-gradient-to-r from-transparent via-red-300 to-transparent" />
             <h2 className="font-pixel text-xl text-[#f3e8e5] sm:text-3xl">{bossIntroName}</h2>
             <p className="mt-2 font-pixel text-[9px] tracking-[0.22em] text-red-200 sm:text-xs">ผู้พิทักษ์ตื่นขึ้นแล้ว</p>
+          </div>
+        </div>
+      )}
+
+      {cinematicTransition && (
+        <div
+          key={cinematicTransition.id}
+          className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-[#03020a] animate-cinematic-warp"
+          aria-live="assertive"
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(88,28,135,0.24),rgba(3,2,10,0.99)_72%)]" />
+          <div className="absolute inset-x-0 top-0 h-[9vh] border-b border-fuchsia-200/30 bg-gradient-to-b from-black to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-[9vh] border-t border-cyan-200/20 bg-gradient-to-t from-black to-transparent" />
+          <div className="absolute h-64 w-64 rounded-full border border-fuchsia-300/35 shadow-[0_0_70px_rgba(217,70,239,0.18)] animate-spin sm:h-80 sm:w-80" />
+          <div className="absolute h-52 w-52 rounded-full border border-cyan-200/25 sm:h-64 sm:w-64" />
+          <div className="relative z-10 max-w-2xl px-6 text-center drop-shadow-[0_4px_18px_rgba(0,0,0,1)]">
+            <div className="mb-5 font-pixel text-[8px] tracking-[0.5em] text-cyan-200 sm:text-[10px]">DIMENSIONAL SHIFT</div>
+            <div className="mx-auto mb-5 h-px w-36 bg-gradient-to-r from-transparent via-fuchsia-300 to-transparent sm:w-52" />
+            <h2 className="font-pixel text-lg leading-relaxed text-white sm:text-2xl">{cinematicTransition.title}</h2>
+            <p className="mx-auto mt-4 max-w-lg font-rajdhani text-base font-semibold tracking-wide text-fuchsia-100 sm:text-xl">{cinematicTransition.subtitle}</p>
+            <div className="mx-auto mt-6 flex items-center justify-center gap-2 text-cyan-200">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+              <span className="h-px w-10 bg-cyan-200/50" />
+              <span className="font-pixel text-[7px] tracking-[0.28em]">REALITY IS SHIFTING</span>
+              <span className="h-px w-10 bg-cyan-200/50" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-fuchsia-300" />
+            </div>
           </div>
         </div>
       )}

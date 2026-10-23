@@ -287,6 +287,7 @@ export class CombatEngine {
   private bossSummonedForRoom = false;
   private pendingBossStageTransition = false;
   private bossStageTransitionTimer = 0;
+  private stageAdvanceTransitionTimer = 0;
   private bossIntroTimer = 0;
   private bossIntroDuration = 2.6;
 
@@ -311,6 +312,7 @@ export class CombatEngine {
   public onStateChange?: () => void;
   public onGameOver?: (won: boolean) => void;
   public onBossIntro?: (name: string) => void;
+  public onCinematicTransition?: (title: string, subtitle: string, duration?: number) => void;
   public onOpenModal?: (
     modal:
       | 'blacksmith'
@@ -866,6 +868,9 @@ export class CombatEngine {
     if (difficulty) this.difficulty = difficulty;
     this.currentMode = 'dungeon';
     this.isLevelRun = true;
+    this.bossStageTransitionTimer = 0;
+    this.stageAdvanceTransitionTimer = 0;
+    this.pendingBossStageTransition = false;
 
     // Reset temporary relics and stat altar bonuses on starting fresh run
     this.relics = [];
@@ -949,6 +954,7 @@ export class CombatEngine {
     }
     const run = levelSystem.run!;
     const stage = run.stage;
+    const enteringBossArena = roomType === 'boss' && this.pendingBossStageTransition;
     this.bossIntroTimer = 0;
     this.bossStageTransitionTimer = 0;
     this.bossSummonedForRoom = false;
@@ -967,7 +973,7 @@ export class CombatEngine {
 
     this.clearDungeonEntities();
     this.arena.removeHappyVendor();
-    this.arena.loadRoom(roomType as any, this.currentDungeonMap, this.getDoorLabels());
+    this.arena.loadRoom(enteringBossArena ? 'boss_arena' : roomType as any, this.currentDungeonMap, enteringBossArena ? undefined : this.getDoorLabels());
     this.nearbyDungeonInteractable = null;
     this.nearbyShopItemIndex = null;
     if (roomType === 'shop' && !stage.happyProvokedRoomIndices.includes(stage.currentRoomIndex)) {
@@ -981,7 +987,7 @@ export class CombatEngine {
       south: { x: 0, z: 5.2 },
       west: { x: -12.5, z: 0 },
     };
-    const spawn = stage.entrySide ? spawnByEntry[stage.entrySide] : { x: 0, z: 5.2 };
+    const spawn = enteringBossArena ? { x: 0, z: 5.2 } : stage.entrySide ? spawnByEntry[stage.entrySide] : { x: 0, z: 5.2 };
     this.playerX = spawn.x;
     this.playerZ = spawn.z;
     this.playerVx = 0;
@@ -2351,26 +2357,26 @@ export class CombatEngine {
   private summonLevelBossAtAltar() {
     const run = levelSystem.run;
     const roomType = levelSystem.getCurrentRoomType();
-    if (!this.isLevelRun || !run || this.bossSummonedForRoom || this.waveState === 'fighting' && roomType !== 'boss') return;
+    if (!this.isLevelRun || !run || this.bossSummonedForRoom) return;
+    if (roomType !== 'altar' && roomType !== 'boss') return;
+    if (roomType === 'altar' && this.waveState === 'fighting') return;
 
-    if (roomType === 'altar') {
-      this.bossSummonedForRoom = true;
-      this.nearbyDungeonInteractable = null;
-      if (!run.stage.clearedRoomIndices.includes(run.stage.currentRoomIndex)) {
-        run.stage.clearedRoomIndices.push(run.stage.currentRoomIndex);
-      }
-      this.pendingBossStageTransition = true;
-      this.bossStageTransitionTimer = 0.85;
-      this.arena.setPortalActive(false);
-      this.arena.spawnSkillBurst(-4.8, 0.9, -2.5, 0x6ee7e8, 28, 6.4, 0.8);
-      this.arena.addCameraShake(0.55);
-      soundEngine.playBossGong();
-      this.onStateChange?.();
-      return;
+    this.bossSummonedForRoom = true;
+    this.nearbyDungeonInteractable = null;
+    if (roomType === 'altar' && !run.stage.clearedRoomIndices.includes(run.stage.currentRoomIndex)) {
+      run.stage.clearedRoomIndices.push(run.stage.currentRoomIndex);
     }
 
-    if (roomType !== 'boss' || this.waveState === 'cleared') return;
-    this.spawnLevelBossAtCurrentAltar();
+    // Fade to black, move into the dedicated boss realm, then begin the boss reveal.
+    this.pendingBossStageTransition = true;
+    this.bossStageTransitionTimer = 0.9;
+    this.waveState = 'spawning';
+    this.arena.setPortalActive(false);
+    this.arena.spawnSkillBurst(-4.8, 0.9, -2.5, 0xa855f7, 32, 7.5, 0.9);
+    this.arena.addCameraShake(0.55);
+    soundEngine.playBossGong();
+    this.onCinematicTransition?.('มิติอสูรกำลังเปิดออก', 'เจ้ากำลังถูกส่งเข้าสู่สนามประลองผู้พิทักษ์', 2600);
+    this.onStateChange?.();
   }
 
   private spawnLevelBossAtCurrentAltar() {
@@ -2385,7 +2391,7 @@ export class CombatEngine {
     this.arena.setPortalActive(false);
 
     const bossHp = Math.round(550 * run.hpMultiplier);
-    this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, -4.8, -2.5);
+    this.spawnBoss(biome.bossId, bossHp, 22, biome.bossNameTh, 0, -1.5);
     if (this.currentBoss) {
       this.currentBoss.mesh.scale.setScalar(0.03);
       const bossMaterial = this.currentBoss.mesh.material;
@@ -2834,8 +2840,13 @@ export class CombatEngine {
         if (currentRoomType === 'combat' || currentRoomType === 'elite') {
           this.spawnRoomRewardChest();
         } else if (currentRoomType === 'boss') {
+          // Boss clear is a short victory cutscene, then the next stage loads automatically.
           soundEngine.playBossGong();
-          this.spawnRoomRewardChest('gold');
+          this.playerStats.gold += 100;
+          this.arena.addCameraShake(0.7);
+          this.arena.spawnSkillBurst(0, 0.9, -1.5, 0xfbbf24, 34, 7.2, 0.9);
+          this.stageAdvanceTransitionTimer = 2.0;
+          this.onCinematicTransition?.('ผู้พิทักษ์พ่ายแพ้', 'มิติถัดไปกำลังปรากฏขึ้น · ได้รับ 100 G', 2600);
         } else if (currentRoomType === 'secret' && run.stage.hasSecretBoss) {
           run.stage.secretBossDefeated = true;
           soundEngine.playBossGong();
@@ -2885,9 +2896,36 @@ export class CombatEngine {
   // 60FPS SIMULATION TICK
   // ----------------------------------------------------------------------
   public update(dt: number, moveX: number, moveZ: number) {
+    if (this.stageAdvanceTransitionTimer > 0) {
+      this.stageAdvanceTransitionTimer = Math.max(0, this.stageAdvanceTransitionTimer - dt);
+      if (this.stageAdvanceTransitionTimer === 0) this.advanceLevelStage();
+      return;
+    }
+
     if (this.bossStageTransitionTimer > 0) {
       this.bossStageTransitionTimer = Math.max(0, this.bossStageTransitionTimer - dt);
-      if (this.bossStageTransitionTimer === 0) this.advanceLevelRoom('south');
+      if (this.bossStageTransitionTimer === 0) {
+        const run = levelSystem.run;
+        if (!run) return;
+        const stage = run.stage;
+        const bossIndex = stage.roomGraph.findIndex((node) => node.type === 'boss');
+        if (bossIndex < 0) {
+          this.pendingBossStageTransition = false;
+          this.waveState = 'cleared';
+          return;
+        }
+        if (stage.currentRoomIndex !== bossIndex) {
+          if (!stage.clearedRoomIndices.includes(stage.currentRoomIndex)) {
+            stage.clearedRoomIndices.push(stage.currentRoomIndex);
+          }
+          stage.currentRoomIndex = bossIndex;
+          if (!stage.visitedRoomIndices.includes(bossIndex)) stage.visitedRoomIndices.push(bossIndex);
+        }
+        stage.entrySide = null;
+        this.pendingBossStageTransition = true;
+        this.loadLevelRoom('boss');
+        this.arena.addCameraShake(0.35);
+      }
       return;
     }
 
@@ -3128,10 +3166,8 @@ export class CombatEngine {
       }
 
       // The final room's gate is an E-only interaction that begins the next floor.
-      const atFinalBoss = roomType === 'boss' && stage.currentRoomIndex === stage.roomGraph.length - 1;
-      const finalBossChestOpened = Boolean(stage.chestStates['room-' + stage.currentRoomIndex]?.opened);
-      if ((roomType === 'exit' || (atFinalBoss && finalBossChestOpened)) && this.waveState === 'cleared' && this.arena.isPortalActive) {
-        const portalZ = atFinalBoss ? 7.5 : -2.8;
+      if (roomType === 'exit' && this.waveState === 'cleared' && this.arena.isPortalActive) {
+        const portalZ = -2.8;
         const distGate = Math.hypot(this.playerX, this.playerZ - portalZ);
         if (distGate < 3.4) {
           this.nearbyDungeonInteractable = 'portal';
@@ -3227,10 +3263,7 @@ export class CombatEngine {
 
   private checkDungeonPortal() {
     if (this.waveState === 'cleared' && this.arena.isPortalActive) {
-      const isFinalBoss = this.isLevelRun && levelSystem.run &&
-        levelSystem.getCurrentRoomType() === 'boss' &&
-        levelSystem.run.stage.currentRoomIndex === levelSystem.run.stage.roomGraph.length - 1;
-      const portalZ = isFinalBoss ? 7.5 : this.isLevelRun ? -2.8 : -7.2;
+      const portalZ = this.isLevelRun ? -2.8 : -7.2;
       const dist = Math.hypot(this.playerX, this.playerZ - portalZ);
       if (dist < 3.4) this.nearbyDungeonInteractable = 'portal';
     }
@@ -3238,12 +3271,8 @@ export class CombatEngine {
 
   private useDungeonPortal() {
     if (this.isLevelRun && levelSystem.run) {
-      const stage = levelSystem.run.stage;
       const currentRoom = levelSystem.getCurrentRoomType();
-      const finalBoss = currentRoom === 'boss' &&
-        stage.currentRoomIndex === stage.roomGraph.length - 1 &&
-        Boolean(stage.chestStates['room-' + stage.currentRoomIndex]?.opened);
-      if ((currentRoom === 'exit' || finalBoss) && this.waveState === 'cleared') this.advanceLevelStage();
+      if (currentRoom === 'exit' && this.waveState === 'cleared') this.advanceLevelStage();
       return;
     }
     if (this.waveState !== 'cleared' || !this.arena.isPortalActive) return;
