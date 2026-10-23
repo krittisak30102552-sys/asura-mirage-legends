@@ -46,7 +46,7 @@ export const DungeonSelectModal: React.FC<DungeonSelectModalProps> = ({
           </div>
           <div>
             <h3 className="font-pixel text-violet-300 text-sm">ดันเจี้ยนทดสอบ</h3>
-            <p className="text-xs font-rajdhani text-zinc-400">สุ่มเส้นทางใหม่ทุกชั้น · 20 ชั้น · ชั้นละ 6 ห้อง</p>
+            <p className="text-xs font-rajdhani text-zinc-400">สุ่มผัง 5×5 ทุกชั้น · 20 ชั้น · ชั้นละ 7–10 ห้อง</p>
           </div>
         </div>
 
@@ -99,7 +99,7 @@ export const DungeonSelectModal: React.FC<DungeonSelectModalProps> = ({
               <Dices size={15} /> ทางเดินสุ่มทุกชั้น
             </div>
             <p className="text-xs font-rajdhani text-zinc-300 leading-relaxed">
-              ห้องกลางทางสุ่มเป็นห้องมอนสเตอร์ อีลิท ร้านอุปกรณ์ ห้องสมบัติ หรือบอส พร้อมทางแยกซ้าย ขวา ตรง และวกกลับ
+              ผังสุ่มจากช่องกลาง มี 7–10 ห้อง เชื่อมด้วยประตูจริง ห้องต่อสู้ อีลิท ร้านค้า สมบัติ และบอสอยู่ลึกสุด
             </p>
           </div>
           <div className="p-3.5 rounded-xl bg-emerald-950/25 border border-emerald-500/35">
@@ -117,7 +117,7 @@ export const DungeonSelectModal: React.FC<DungeonSelectModalProps> = ({
             <Sparkles size={23} className="text-amber-300 shrink-0" />
             <div>
               <div className="font-pixel text-[11px] text-amber-200">ห้องสุดท้ายคือประตูไปชั้นถัดไป</div>
-              <div className="text-[11px] font-rajdhani text-zinc-400">เคลียร์ห้องแล้วเลือกเส้นทางต่อจนถึงทางออก</div>
+              <div className="text-[11px] font-rajdhani text-zinc-400">สำรวจห้องที่เชื่อมถึงกัน มินิแมพค่อย ๆ เปิดเผยห้องข้างเคียง</div>
             </div>
           </div>
           <DoorOpen size={19} className="text-violet-300 shrink-0" />
