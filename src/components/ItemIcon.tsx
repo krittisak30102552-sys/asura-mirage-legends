@@ -74,9 +74,8 @@ export const ItemIcon: React.FC<Props> = ({itemId,rarity='common',color,size=40,
  const accent = color || RARITY[rarity] || RARITY.common;
  const type = kindOf(itemId,kind);
  return <svg className={className} width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={itemId.replace(/[_-]/g,' ')} style={{display:'inline-block',flex:'0 0 auto',overflow:'visible'}}>
-  <defs><linearGradient id="custom-item-icon-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={accent} stopOpacity=".34"/><stop offset="100%" stopColor="#100d18" stopOpacity=".97"/></linearGradient></defs>
   <path d="M32 2 L52 10 L62 28 L56 49 L32 62 L8 52 L2 31 L11 10Z" fill="#100d18" stroke="#0b0910" strokeWidth="2"/>
-  <path d="M32 5 L49 12 L58 29 L52 46 L32 57 L12 48 L6 31 L13 13Z" fill="url(#custom-item-icon-bg)" stroke={accent} strokeWidth="1.5"/>
+  <path d="M32 5 L49 12 L58 29 L52 46 L32 57 L12 48 L6 31 L13 13Z" fill={accent} fillOpacity=".22" stroke={accent} strokeWidth="1.5"/>
   <circle cx="32" cy="32" r="23" fill="#100d18" fillOpacity=".3" stroke={accent} strokeOpacity=".28"/>
   <Art type={type} color={accent}/>
  </svg>;
