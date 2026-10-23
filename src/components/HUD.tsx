@@ -24,10 +24,10 @@ interface StageMapInfo {
   visitedRoomIndices: number[];
 }
 
-const MAP_SLOTS = [
-  { x: 50, y: 8 }, { x: 50, y: 25 }, { x: 50, y: 42 },
-  { x: 50, y: 59 }, { x: 50, y: 76 }, { x: 50, y: 93 },
-];
+const MAP_SLOTS = Array.from({ length: 25 }, (_, index) => ({
+  x: 10 + (index % 5) * 20,
+  y: 10 + Math.floor(index / 5) * 20,
+}));
 
 const ROOM_DOT: Record<StageRoomType, { icon: string; color: string }> = {
   start: { icon: '⌂', color: '#67e8f9' },
@@ -44,7 +44,7 @@ const ROOM_DOT: Record<StageRoomType, { icon: string; color: string }> = {
 
 const DungeonMiniMap: React.FC<{ map: StageMapInfo }> = ({ map }) => {
   const visited = new Set(map.visitedRoomIndices);
-  const pointFor = (node: StageRoomNode) => MAP_SLOTS[node.mapPosition] ?? MAP_SLOTS[0];
+  const pointFor = (node: StageRoomNode) => MAP_SLOTS[node.mapPosition] ?? MAP_SLOTS[12];
   const edges: Array<{ from: StageRoomNode; to: StageRoomNode }> = [];
   map.rooms.forEach((node) => {
     Object.values(node.connections).forEach((targetId) => {
@@ -57,21 +57,21 @@ const DungeonMiniMap: React.FC<{ map: StageMapInfo }> = ({ map }) => {
     <div className="w-[148px] rounded-sm border-2 border-[#82705d] bg-[#09090b]/90 p-1 shadow-[0_4px_16px_rgba(0,0,0,.65)] sm:w-[164px]">
       <div className="flex items-center justify-between border-b border-[#51463b] px-1 pb-0.5 font-pixel text-[8px] text-zinc-300">
         <span>ดันเจี้ยน {map.stageNumber}</span>
-        <span>{map.currentRoomIndex + 1}-6</span>
+        <span>{map.currentRoomIndex + 1}-{map.rooms.length}</span>
       </div>
       <div className="relative h-[118px]">
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {edges.map(({ from, to }) => {
             const a = pointFor(from);
             const b = pointFor(to);
-            const discovered = visited.has(from.id) && visited.has(to.id);
+            const discovered = visited.has(from.id) || visited.has(to.id);
             return <line key={`${from.id}-${to.id}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={discovered ? '#c8a66b' : '#6b6258'} strokeOpacity={discovered ? 0.9 : 0.38} strokeWidth="2.5" />;
           })}
         </svg>
         {map.rooms.map((room) => {
           const point = pointFor(room);
           const current = room.id === map.currentRoomIndex;
-          const discovered = visited.has(room.id);
+          const discovered = visited.has(room.id) || map.rooms.some((neighbor) => visited.has(neighbor.id) && Object.values(neighbor.connections).includes(room.id));
           const details = ROOM_DOT[room.type];
           return (
             <div
