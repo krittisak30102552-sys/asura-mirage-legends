@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, Check } from 'lucide-react';
 import { EquipmentItem } from '../types/game';
 import { EQUIPMENT_STAT_DEFINITIONS, formatEquipmentStatSummary } from '../game/equipmentStats';
+import { ItemIcon } from './ItemIcon';
 
 interface ChestRewardModalProps {
   isOpen: boolean;
@@ -130,14 +131,14 @@ export const ChestRewardModal: React.FC<ChestRewardModalProps> = ({
               onClick={handleOpenChest}
               className="group cursor-pointer flex flex-col items-center p-6 rounded-2xl bg-zinc-900/80 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-amber-400 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-black"
             >
-              <div className="text-6xl mb-2 animate-bounce">{rarityMeta.icon}</div>
+              <div className="mb-2 animate-bounce"><ItemIcon itemId={"chest_" + rarity} rarity={rarity === "white" ? "common" : rarity === "blue" ? "rare" : rarity === "gold" ? "legendary" : "epic"} size={88} kind="reward" /></div>
               <span className="font-pixel text-xs text-amber-300 font-bold group-hover:text-amber-200">
                 [ คลิกเพื่อเปิดหีบ ]
               </span>
             </button>
           ) : (
             <div className="flex flex-col items-center animate-fade-in text-center p-5 rounded-2xl bg-zinc-900/90 border border-zinc-700 w-full shadow-inner">
-              <div className="text-5xl mb-3 animate-pulse">{reward.icon}</div>
+              <div className="mb-3 animate-pulse"><ItemIcon itemId={reward.rawItem?.id ?? (reward.type === "gold" ? "gold_coin" : reward.type === "relic" ? "relic_core" : "mystic_chest")} rarity={reward.rawItem?.rarity ?? (reward.type === "gold" ? "legendary" : "epic")} size={72} kind="reward" /></div>
               <h4 className="font-rajdhani font-bold text-lg text-amber-300 mb-1">
                 {reward.titleTh}
               </h4>
