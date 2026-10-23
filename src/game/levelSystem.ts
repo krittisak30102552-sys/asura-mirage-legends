@@ -355,79 +355,91 @@ export class LevelSystem {
   }
 
   private generateRoomGraph(rooms: StageRoomType[], rng: SeededRNG): StageRoomNode[] {
-    const mapSlots = [0, 1, 2, 3, 4, 5];
-    const slotPositions = [
-      { x: 150, y: 8 },
-      { x: 150, y: 25 },
-      { x: 150, y: 42 },
-      { x: 150, y: 59 },
-      { x: 150, y: 76 },
-      { x: 150, y: 93 },
+    // Grow a connected cluster in a 5x5 grid from the center. Every new room
+    // is attached to an existing room, so there can never be an unreachable room.
+    const size = 5;
+    const center = { x: 2, y: 2 };
+    const positions: Array<{ x: number; y: number }> = [center];
+    const occupied = new Set<string>([`${center.x},${center.y}`]);
+    const directions: Array<{ dx: number; dy: number }> = [
+      { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 },
     ];
-    const nodes: StageRoomNode[] = rooms.map((type, id) => {
-      const mapPosition = mapSlots[id];
-      const slot = slotPositions[mapPosition];
-      return {
-        id,
-        type,
-        depth: mapPosition === 0 ? 0 : mapPosition === 5 ? 3 : mapPosition <= 2 ? 1 : 2,
-        lane: slot.x < 150 ? 0 : slot.x > 150 ? 2 : 1,
-        mapPosition,
-        connections: {},
-      };
-    });
 
-    const connect = (a: number, b: number) => {
-      nodes[a].connections.south = b;
-      nodes[b].connections.north = a;
-    };
+    while (positions.length < rooms.length) {
+      const frontier: Array<{ x: number; y: number }> = [];
+      for (const p of positions) {
+        for (const d of directions) {
+          const x = p.x + d.dx;
+          const y = p.y + d.dy;
+          if (x < 0 || y < 0 || x >= size || y >= size || occupied.has(`${x},${y}`)) continue;
+          frontier.push({ x, y });
+        }
+      }
+      if (!frontier.length) break;
+      const next = rng.choice(frontier);
+      occupied.add(`${next.x},${next.y}`);
+      positions.push(next);
+    }
 
-    // Give every room one guaranteed route from the start to the exit, with a
-    // newly shuffled order on each stage. Then add a few optional branches.
-    const spine = [0, 1, 2, 3, 4, 5];
-    for (let index = 0; index < spine.length - 1; index++) connect(spine[index], spine[index + 1]);
-
-    const existingEdges = new Set<string>();
-    nodes.forEach((node) => Object.values(node.connections).forEach((target) => {
-      if (target !== undefined) existingEdges.add([node.id, target].sort((a, b) => a - b).join(':'));
+    const nodes: StageRoomNode[] = rooms.map((type, id) => ({
+      id,
+      type,
+      depth: 0,
+      lane: positions[id].x,
+      mapPosition: positions[id].y * size + positions[id].x,
+      connections: {},
     }));
-    const optionalEdges: Array<[number, number]> = [];
-    for (let a = 0; a < nodes.length; a++) {
-      for (let b = a + 1; b < nodes.length; b++) {
-        if (!existingEdges.has(`${a}:${b}`)) optionalEdges.push([a, b]);
+
+    const dirPairs: Array<{ dx: number; dy: number; from: RoomDirection; to: RoomDirection }> = [
+      { dx: 0, dy: -1, from: 'north', to: 'south' },
+      { dx: 1, dy: 0, from: 'east', to: 'west' },
+      { dx: 0, dy: 1, from: 'south', to: 'north' },
+      { dx: -1, dy: 0, from: 'west', to: 'east' },
+    ];
+    for (const node of nodes) {
+      const p = positions[node.id];
+      for (const d of dirPairs) {
+        const neighborIndex = positions.findIndex((q) => q.x === p.x + d.dx && q.y === p.y + d.dy);
+        if (neighborIndex >= 0) node.connections[d.from] = neighborIndex;
       }
-    }
-    const targetExtraEdges = 0;
-    let addedEdges = 0;
-    for (const [a, b] of rng.shuffle(optionalEdges)) {
-      if (addedEdges >= targetExtraEdges) break;
-      if (Object.keys(nodes[a].connections).length >= 4 || Object.keys(nodes[b].connections).length >= 4) continue;
-      connect(a, b);
-      addedEdges++;
     }
 
-    // Rotate every door socket together so the same seed always recreates the
-    // same orientation while room layouts still feel different from stage to stage.
-    const directionOrder = ROOM_DIRECTIONS;
-    const rotationSteps = 0;
-    for (const node of nodes) {
-      const rotated: StageRoomNode['connections'] = {};
-      for (const [direction, target] of Object.entries(node.connections) as [RoomDirection, number][]) {
-        const directionIndex = directionOrder.indexOf(direction);
-        rotated[directionOrder[(directionIndex + rotationSteps) % directionOrder.length]] = target;
+    // Compute true shortest-path depth from the starting room.
+    const queue = [0];
+    const depths = new Map<number, number>([[0, 0]]);
+    while (queue.length) {
+      const id = queue.shift()!;
+      const node = nodes[id];
+      for (const next of Object.values(node.connections)) {
+        if (next === undefined || depths.has(next)) continue;
+        depths.set(next, (depths.get(id) ?? 0) + 1);
+        queue.push(next);
       }
-      node.connections = rotated;
+    }
+    for (const node of nodes) node.depth = depths.get(node.id) ?? 0;
+
+    // Keep the boss at the farthest room, not necessarily the last generated one.
+    const bossNode = nodes.reduce((farthest, node) => node.depth > farthest.depth ? node : farthest, nodes[0]);
+    if (bossNode && bossNode.id !== nodes.length - 1) {
+      const last = nodes[nodes.length - 1];
+      const oldType = bossNode.type;
+      bossNode.type = 'boss';
+      last.type = oldType === 'boss' ? 'combat' : oldType;
     }
     return nodes;
   }
 
   private generateStage(stageNumber: number, rng: SeededRNG): StageData {
-    const rooms: StageRoomType[] = ['start', 'combat', 'combat', 'combat', 'altar', 'boss'];
-    for (let index = 1; index <= 3; index++) rooms[index] = this.rollRoomType(rng);
-    if (!rooms.slice(1, 5).some((type) => type === 'combat' || type === 'elite')) {
-      rooms[rng.range(1, 3)] = 'combat';
-    }
+    // Room count rises from 7 to 10, then repeats for the 20-floor run.
+    const roomCount = 7 + ((stageNumber - 1) % 4);
+    const rooms: StageRoomType[] = ['start'];
+    for (let index = 1; index < roomCount - 1; index++) rooms.push(this.rollRoomType(rng));
+    if (!rooms.slice(1).some((type) => type === 'combat' || type === 'elite')) rooms[1] = 'combat';
+    rooms.push('boss');
+
     const roomGraph = this.generateRoomGraph(rooms, rng);
+    // Sync the room list with the farthest-room boss assignment made by the graph builder.
+    rooms.splice(0, rooms.length, ...roomGraph.map((node) => node.type));
     const mapRotation = 0 as StageData['mapRotation'];
     const shopOffersByRoom: Record<number, ShopOfferItem[]> = {};
     rooms.forEach((type, index) => {
