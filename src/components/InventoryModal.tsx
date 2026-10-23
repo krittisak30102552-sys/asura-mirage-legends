@@ -3,6 +3,7 @@ import { Check, Heart, Minus, Shield, Sparkles, Wind, X, Zap } from 'lucide-reac
 import { EquipmentItem, MAX_EQUIPPED_ITEMS, PlayerStats } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import { EQUIPMENT_STAT_DEFINITIONS } from '../game/equipmentStats';
+import { ItemIcon } from './ItemIcon';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -110,7 +111,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     {item ? (
                       <>
                         <button onClick={() => setSelectedItemId(item.id)} className="flex h-full w-full flex-col items-center justify-center gap-1 text-center">
-                          <span className="text-2xl">{item.icon}</span>
+                          <ItemIcon itemId={item.id} rarity={item.rarity} size={36} />
                           <span className="line-clamp-2 text-[10px] leading-tight text-zinc-200">{item.nameTh}</span>
                         </button>
                         <button onClick={() => handleUnequip(item.id)} title="ถอดอุปกรณ์" className="absolute right-1 top-1 rounded-md bg-black/60 p-1 text-zinc-300 hover:text-rose-300">
@@ -168,7 +169,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     className={`rounded-xl border p-3 text-left transition ${rarity.border} ${rarity.bg} ${isSelected ? 'ring-2 ring-amber-300' : 'hover:brightness-125'}`}
                   >
                     <div className="flex items-start gap-2">
-                      <span className="text-2xl">{item.icon}</span>
+                      <ItemIcon itemId={item.id} rarity={item.rarity} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`text-xs font-bold ${rarity.text}`}>{item.nameTh}</span>
@@ -187,7 +188,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             {selectedItem && (
               <div className="mt-3 rounded-xl border border-amber-700/50 bg-zinc-950 p-3">
                 <div className="flex items-start gap-3">
-                  <span className="text-3xl">{selectedItem.icon}</span>
+                  <ItemIcon itemId={selectedItem.id} rarity={selectedItem.rarity} size={48} />
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-amber-100">{selectedItem.nameTh}</div>
                     <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">{selectedItem.descTh}</p>
