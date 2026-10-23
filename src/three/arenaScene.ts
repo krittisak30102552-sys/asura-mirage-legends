@@ -12,6 +12,7 @@ import { DungeonMapId, DungeonRoomId, DungeonRoomType } from '../types/game';
 import { generateHappyTexture, generateHitFlashTexture, generateShockwaveRingTexture, generateSparkTexture } from '../graphics/pixelSprites';
 import { generateChestTexture, generateDistortedWallTexture } from '../graphics/biomeSprites';
 import type { ShopOfferItem } from '../game/levelSystem';
+import { drawItemIconCanvas } from '../graphics/itemIconCanvas';
 
 export interface ArenaBounds {
   minX: number;
@@ -1386,17 +1387,7 @@ export class ArenaScene {
     itemCanvas.width = 192;
     itemCanvas.height = 192;
     const iconCtx = itemCanvas.getContext('2d')!;
-    iconCtx.fillStyle = 'rgba(24, 12, 30, 0.92)';
-    iconCtx.beginPath();
-    iconCtx.arc(96, 96, 82, 0, Math.PI * 2);
-    iconCtx.fill();
-    iconCtx.strokeStyle = `#${color.toString(16).padStart(6, '0')}`;
-    iconCtx.lineWidth = 8;
-    iconCtx.stroke();
-    iconCtx.font = '88px sans-serif';
-    iconCtx.textAlign = 'center';
-    iconCtx.textBaseline = 'middle';
-    iconCtx.fillText(offer.icon || '✨', 96, 100);
+    drawItemIconCanvas(iconCtx, offer.itemData.id, offer.itemData.rarity, 96, 96, 86, color);
     const iconTexture = new THREE.CanvasTexture(itemCanvas);
     iconTexture.colorSpace = THREE.SRGBColorSpace;
     const icon = new THREE.Mesh(
@@ -1408,7 +1399,7 @@ export class ArenaScene {
     group.add(icon);
 
     const rarityNames: Record<string, string> = { common: 'ธรรมดา', rare: 'หายาก', epic: 'มหากาพย์', legendary: 'ตำนาน' };
-    group.add(this.createVendorSign(`${offer.icon || '✨'} ${offer.nameTh}  ·  ${rarityNames[offer.itemData.rarity] ?? 'พิเศษ'}  ·  ${offer.cost} G  [E]`, `#${color.toString(16).padStart(6, '0')}`, 0, 2.1, 0, 4.7));
+    group.add(this.createVendorSign(`${offer.nameTh}  ·  ${rarityNames[offer.itemData.rarity] ?? 'พิเศษ'}  ·  ${offer.cost} G  [E]`, `#${color.toString(16).padStart(6, '0')}`, 0, 2.1, 0, 4.7));
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.1, 1.35, 32),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false })
