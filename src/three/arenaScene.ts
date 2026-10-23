@@ -2828,22 +2828,58 @@ export class ArenaScene {
 
   // 4. Sakura Storm (Ginzo Skill 3): 8 criss-crossing razor slashes & cherry blossom explosion
   public spawnSakuraStormVFX(x: number, z: number) {
-    this.spawnSkillRing(x, z, 0xf472b6, 6.2, 0.8);
-    this.spawnSkillBurst(x, 1.0, z, 0xf9a8d4, 30, 5.2, 0.9);
-    const slashesCount = 8;
-    for (let i = 0; i < slashesCount; i++) {
+    // A flurry of visible katana cuts and sakura petals; no magic floor circle.
+    this.spawnSkillBurst(x, 1.0, z, 0xf9a8d4, 20, 4.6, 0.68);
+    const slashCount = 8;
+    for (let i = 0; i < slashCount; i++) {
       setTimeout(() => {
-        const angle = (i / slashesCount) * Math.PI + (Math.random() - 0.5) * 0.4;
+        if (this.disposed) return;
+        const angle = (i / slashCount) * Math.PI + (Math.random() - 0.5) * 0.36;
         const offX = (Math.random() - 0.5) * 2.5;
         const offZ = (Math.random() - 0.5) * 2.5;
-        this.spawnDimensionalSlashVFX(x + offX, z + offZ, angle);
-        this.spawnSkillBurst(x + offX, 1.4, z + offZ, 0xf9a8d4, 6, 3.4, 0.55);
-        this.addCameraShake(0.18);
-      }, i * 75);
+        this.spawnKatanaArcVFX(x + offX, z + offZ, angle, 0.78 + Math.random() * 0.24, i % 2 ? 0xfda4af : 0xf472b6);
+        this.spawnSkillBurst(x + offX, 1.3, z + offZ, 0xf9a8d4, 4, 2.6, 0.32);
+      }, i * 65);
     }
   }
 
   // 5. Dimensional Slash (Ginzo Skill 1): Hypersonic dimensional rift
+  public spawnKatanaArcVFX(x: number, z: number, angle: number, strength: number = 1, color: number = 0xe2e8f0) {
+    const group = new THREE.Group();
+    group.position.set(x + Math.cos(angle) * 0.45, 1.15, z + Math.sin(angle) * 0.45);
+    group.rotation.y = -angle;
+    this.vfxGroup.add(group);
+    const outerShape = new THREE.Shape();
+    outerShape.moveTo(-0.28, -0.82 * strength);
+    outerShape.quadraticCurveTo(0.55, 0.24 * strength, 2.4 * strength, 0.72 * strength);
+    outerShape.quadraticCurveTo(1.35 * strength, -0.58 * strength, -0.28, -0.82 * strength);
+    outerShape.closePath();
+    const innerShape = new THREE.Shape();
+    innerShape.moveTo(-0.05, -0.52 * strength);
+    innerShape.quadraticCurveTo(0.75, 0.2 * strength, 2.12 * strength, 0.5 * strength);
+    innerShape.quadraticCurveTo(1.25 * strength, -0.36 * strength, -0.05, -0.52 * strength);
+    innerShape.closePath();
+    const outerGeo = new THREE.ShapeGeometry(outerShape, 16);
+    const innerGeo = new THREE.ShapeGeometry(innerShape, 16);
+    const outerMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.74, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.94, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    group.add(new THREE.Mesh(outerGeo, outerMat), new THREE.Mesh(innerGeo, innerMat));
+    const started = performance.now();
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - started) / 210);
+      group.scale.set(0.82 + progress * 0.32, 0.82 + progress * 0.32, 1);
+      group.rotation.z += 0.025;
+      outerMat.opacity = 0.74 * (1 - progress);
+      innerMat.opacity = 0.94 * (1 - progress);
+      if (progress < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else {
+        group.removeFromParent();
+        outerGeo.dispose(); innerGeo.dispose(); outerMat.dispose(); innerMat.dispose();
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
   public spawnDimensionalSlashVFX(x: number, z: number, angle: number) {
     const slashGroup = new THREE.Group();
     slashGroup.position.set(x, 1.2, z);
@@ -2904,7 +2940,6 @@ export class ArenaScene {
 
   // 6. Dragon Ascension (Quan Skill 3): Spiraling celestial golden vortex
   public spawnDragonAscensionVFX(x: number, z: number) {
-    this.spawnSkillRing(x, z, 0xfbbf24, 5.4, 0.72);
     this.spawnSkillBurst(x, 1.0, z, 0xfbbf24, 28, 6.2, 0.82);
     const group = new THREE.Group();
     group.position.set(x, 0.1, z);
@@ -3184,7 +3219,7 @@ export class ArenaScene {
 
     this.spawnSkillBurst(startX, 1.0, startZ, 0xffffff, 14, 5.2, 0.45);
     this.spawnSkillBurst(endX, 1.0, endZ, 0xf43f5e, 26, 7.8, 0.65);
-    this.spawnSkillRing(endX, endZ, 0xf472b6, 4.6, 0.55);
+    this.spawnSkillBurst(endX, 1.0, endZ, 0xf472b6, 14, 5.6, 0.45);
 
     let life = 0.28;
     const fade = () => {
@@ -3267,7 +3302,7 @@ export class ArenaScene {
    * Orbiting jade dragon energy helix circling around Quan with vacuum spiral rings
    */
   public spawnJadeDragonSpiralVFX(x: number, z: number, radius: number = 4.8) {
-    this.spawnSkillRing(x, z, 0x34d399, radius, 0.65);
+    // The moving jade-dragon helix carries the attack; no generic floor rune.
     const group = new THREE.Group();
     group.position.set(x, 0.35, z);
     this.vfxGroup.add(group);
@@ -3331,49 +3366,39 @@ export class ArenaScene {
   public spawnHeroComboVFX(heroId: 'ginzo' | 'quan' | 'katherine', step: number, x: number, z: number, angle: number) {
     if (heroId === 'ginzo') {
       if (step === 1) {
-        // Combo 1: Silver Moon — silver crescent slash & pink sparks
-        this.spawnSkillBurst(x, 1.1, z, 0xf1f5f9, 7, 3.4, 0.26);
-        this.spawnSkillBurst(x, 1.1, z, 0xf472b6, 4, 2.2, 0.22);
+        this.spawnKatanaArcVFX(x, z, angle, 0.9, 0xe2e8f0);
+        this.spawnSkillBurst(x, 1.0, z, 0xf1f5f9, 5, 2.8, 0.2);
       } else if (step === 2) {
-        // Combo 2: Rose Cross Rift — dual intersecting cross rift
-        this.spawnSkillBurst(x, 1.1, z, 0xf43f5e, 10, 3.8, 0.3);
-        this.spawnGroundShockwaveVFX(x, z, 2.2);
+        this.spawnKatanaArcVFX(x, z, angle - 0.55, 1.05, 0xf43f5e);
+        this.spawnKatanaArcVFX(x, z, angle + 0.55, 0.82, 0xfda4af);
+        this.spawnSkillBurst(x, 1.05, z, 0xf43f5e, 7, 3.6, 0.26);
       } else {
-        // Combo 3: Abyssal Crescent — deep dimensional rift, ground shockwave, sakura storm petals
+        this.spawnKatanaArcVFX(x, z, angle, 1.42, 0xfda4af);
         this.spawnDimensionalSlashVFX(x, z, angle);
-        this.spawnGroundShockwaveVFX(x, z, 3.6);
-        this.spawnSkillBurst(x, 1.2, z, 0xf9a8d4, 18, 4.6, 0.48);
+        this.spawnSkillBurst(x, 1.15, z, 0xf9a8d4, 12, 4.2, 0.38);
         this.addCameraShake(0.32);
       }
     } else if (heroId === 'quan') {
       if (step === 1) {
-        // Combo 1: Jade Pulse — cyan/gold punch burst
         this.spawnSkillBurst(x, 1.0, z, 0x38bdf8, 8, 3.2, 0.28);
         this.spawnSkillBurst(x, 1.0, z, 0xfacc15, 6, 2.8, 0.25);
       } else if (step === 2) {
-        // Combo 2: Azure Dragon Orbit — surrounding dragon swirl ring
         this.spawnWhirlwindVFX(x, z, 2.6);
-        this.spawnSkillBurst(x, 1.0, z, 0x22d3ee, 12, 3.6, 0.32);
+        this.spawnSkillBurst(x, 1.0, z, 0x22d3ee, 10, 3.4, 0.3);
       } else {
-        // Combo 3: Sky-Rising Dragon — golden ascension dragon silhouette & shockwave
         this.spawnDragonAscensionVFX(x, z);
-        this.spawnGroundShockwaveVFX(x, z, 4.2);
         this.addCameraShake(0.38);
       }
     } else if (heroId === 'katherine') {
       if (step === 1) {
-        // Combo 1: Frost Shard — crystalline ice projectile trail
         this.spawnSkillBurst(x, 1.2, z, 0x7dd3fc, 9, 3.8, 0.32);
         this.spawnSkillBurst(x, 1.2, z, 0xffffff, 6, 2.5, 0.24);
       } else if (step === 2) {
-        // Combo 2: Storm Relay — branching electric storm discharge
         this.spawnThunderBoltVFX(x - Math.cos(angle) * 0.8, z - Math.sin(angle) * 0.8, x + Math.cos(angle) * 3.2, z + Math.sin(angle) * 3.2);
         this.spawnSkillBurst(x, 1.2, z, 0xa78bfa, 12, 4.5, 0.35);
       } else {
-        // Combo 3: Astral Convergence — crystal flare & violet thunder burst
         this.spawnFrostNovaVFX(x, z);
-        this.spawnSkillRing(x, z, 0xa855f7, 4.8, 0.55);
-        this.spawnSkillBurst(x, 1.3, z, 0xc084fc, 22, 5.8, 0.55);
+        this.spawnSkillBurst(x, 1.3, z, 0xc084fc, 17, 5.0, 0.48);
         this.addCameraShake(0.36);
       }
     }
