@@ -491,6 +491,8 @@ export default function App() {
       if (cinematicTransitionTimeoutRef.current !== null) window.clearTimeout(cinematicTransitionTimeoutRef.current);
       const id = ++cinematicSequenceRef.current;
       setCinematicTransition({ title, subtitle, id });
+      if (title === 'มิติอสูรกำลังเปิดออก') soundEngine.startMusic('boss');
+      if (title === 'ผู้พิทักษ์พ่ายแพ้') soundEngine.startMusic('dungeon');
       cinematicTransitionTimeoutRef.current = window.setTimeout(() => {
         setCinematicTransition(null);
         cinematicTransitionTimeoutRef.current = null;
@@ -621,9 +623,9 @@ export default function App() {
       // Combat actions (only when active)
       if (gameModeRef.current === 'playing' || gameModeRef.current === 'lobby') {
         if (e.code === 'Space') engine.handleDash();
-        if (e.code === 'Digit1' || e.code === 'Numpad1') engine.castSkill(1);
-        if (e.code === 'Digit2' || e.code === 'Numpad2') engine.castSkill(2);
-        if (e.code === 'Digit3' || e.code === 'Numpad3') engine.castSkill(3);
+        if (e.code === 'Digit1' || e.code === 'Numpad1') soundEngine.castSkillWithSound(engine.activeHeroId, 1, () => engine.castSkill(1));
+        if (e.code === 'Digit2' || e.code === 'Numpad2') soundEngine.castSkillWithSound(engine.activeHeroId, 2, () => engine.castSkill(2));
+        if (e.code === 'Digit3' || e.code === 'Numpad3') soundEngine.castSkillWithSound(engine.activeHeroId, 3, () => engine.castSkill(3));
       }
     };
 
@@ -964,7 +966,7 @@ export default function App() {
           onOpenInventory={() => setIsInventoryOpen(true)}
           onAttack={() => engineRef.current?.handleAttack()}
           onDash={() => engineRef.current?.handleDash()}
-          onSkill={(slot) => engineRef.current?.castSkill(slot)}
+          onSkill={(slot) => { const engine = engineRef.current; if (engine) soundEngine.castSkillWithSound(engine.activeHeroId, slot, () => engine.castSkill(slot)); }}
           skillCooldowns={skillCooldowns}
           onInteract={() => engineRef.current?.triggerInteraction()}
           onRunCommand={handleRunCommand}
