@@ -6,6 +6,7 @@
 import React from 'react';
 import { Sparkles, Check } from 'lucide-react';
 import { RelicItem } from '../types/game';
+import { ItemIcon } from './ItemIcon';
 
 interface RelicRewardModalProps {
   isOpen: boolean;
@@ -57,12 +58,7 @@ export const RelicRewardModal: React.FC<RelicRewardModalProps> = ({
                 <div>
                   {/* Badge */}
                   <div className="flex items-center justify-between mb-3">
-                    <span
-                      className="text-3xl p-2.5 rounded-lg border bg-zinc-950 shadow-inner"
-                      style={{ borderColor: relic.iconColor }}
-                    >
-                      {relic.iconSymbol}
-                    </span>
+                    <span className="flex items-center justify-center rounded-lg border bg-zinc-950 p-2.5 shadow-inner" style={{ borderColor: relic.iconColor }}><ItemIcon itemId={relic.id} rarity={relic.rarity} color={relic.iconColor} size={44} kind="relic" /></span>
                     <span
                       className={`text-[9px] font-pixel font-bold px-2 py-0.5 rounded uppercase border ${
                         isLegendary
