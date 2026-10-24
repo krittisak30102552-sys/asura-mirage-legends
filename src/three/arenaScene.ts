@@ -631,9 +631,8 @@ export class ArenaScene {
       this.createFloatingBadge('การต่อสู้ครั้งสุดท้ายเริ่มต้นขึ้น', '#67e8f9', 0, 2.5, -1.4);
     } else if (room === 'boss') {
       this.createBossArenaAltar(0, -1.2);
-      this.buildDungeonPortalGate(0, 7.5);
+      // Boss arenas advance through the victory transition; no extra warp gate belongs here.
       this.createFloatingBadge('👑 ศึกประจัญบอสใหญ่ (BOSS ARENA)', '#a855f7', 0, 4.4, -7.5);
-      this.createFloatingBadge('🌀 [E] ประตูสู่ด่านถัดไป', '#38d9e8', 0, 5.7, 7.4);
     } else if (room === 'exit') {
       // Exit Room
       this.buildDungeonPortalGate(0, -2.8);
