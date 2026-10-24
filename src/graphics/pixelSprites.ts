@@ -49,7 +49,9 @@ export function generateHeroTexture(
   heroId: HeroId,
   state: HeroAnimationState,
   frameIndex: number = 0,
-  isGinzoEvolved: boolean = false
+  isGinzoEvolved: boolean = false,
+  aimAngle: number = 0,
+  facing: number = 1
 ): THREE.CanvasTexture {
   const W = 256;
   const H = 320;
@@ -67,6 +69,10 @@ export function generateHeroTexture(
   const isAttackingPose = state.startsWith('attack');
   const isHeavyAttack = state === 'attack3';
   const awakenedGinzo = heroId === 'ginzo' && isGinzoEvolved;
+  // Convert world X/Z aim into the sprite's isometric screen direction. The facing
+  // value compensates for the mesh's horizontal mirror so the weapon still lines up.
+  const screenAimAngle = Math.atan2(Math.sin(aimAngle) * 0.58, Math.cos(aimAngle));
+  const directedAimAngle = facing < 0 ? Math.PI - screenAimAngle : screenAimAngle;
   const cx = 128;
   let cy = 175; // ground/center reference
 
@@ -267,6 +273,7 @@ export function generateHeroTexture(
     ctx.translate(cx, cy + 34);
     ctx.rotate(bodyTilt);
     ctx.translate(-cx, -(cy + 34));
+    const localAimAngle = directedAimAngle - bodyTilt;
 
     // Torso: Crimson Red Haori Coat with White Kimono V-neck
     const haoriGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
@@ -417,12 +424,13 @@ export function generateHeroTexture(
     ], haoriGrad, '#09090b', 2);
     drawCircle(leftArmX, cy + 26, 7, '#ffedd5', '#d97706', 1.5);
 
-    // Right arm bends at the elbow and leads the sword swing rather than snapping at the wrist.
+    // Shoulder-to-hand reach follows the same locked direction as the ground slash VFX.
+    // The small secondary movement is elbow follow-through, not a wrist-only swing.
     const rightArmReach = isAttackingPose
-      ? (isHeavyAttack ? 24 : 20) + Math.sin(phase + 0.25) * (isHeavyAttack ? 12 : 9)
-      : Math.sin(phase) * 3.5;
-    const rightArmX = cx + 32 + rightArmReach;
-    const rightArmY = cy + (isAttackingPose ? -6 + Math.sin(phase + 0.55) * 13 : 15 + Math.sin(phase) * 2.5);
+      ? (isHeavyAttack ? 39 : 35) + Math.sin(phase + 0.25) * (isHeavyAttack ? 5 : 3)
+      : 3.5;
+    const rightArmX = cx + (isAttackingPose ? 22 + Math.cos(localAimAngle) * rightArmReach : 32 + Math.sin(phase) * 3.5);
+    const rightArmY = cy + (isAttackingPose ? -11 + Math.sin(localAimAngle) * rightArmReach + Math.sin(phase + 0.55) * 2 : 15 + Math.sin(phase) * 2.5);
     fillPoly([
       [cx + 16, cy - 18],
       [cx + 32, cy - 18],
@@ -434,7 +442,11 @@ export function generateHeroTexture(
     // KATANA: Steel Blade with Metallic Gleam
     ctx.save();
     ctx.translate(rightArmX, rightArmY + 12);
-    ctx.rotate(weaponAngle || 0.4);
+    // Blade length points along the precise aim direction used by the slash effect.
+    // The tiny sweep is only visual follow-through and never reverses the intended hit direction.
+    ctx.rotate(isAttackingPose
+      ? localAimAngle + 0.265 + Math.sin(phase) * 0.045
+      : weaponAngle || 0.4);
 
     // Tsuka (Hilt)
     ctx.strokeStyle = '#18181b';
@@ -540,6 +552,7 @@ export function generateHeroTexture(
     ctx.translate(cx, cy + 34);
     ctx.rotate(bodyTilt);
     ctx.translate(-cx, -(cy + 34));
+    const localAimAngle = directedAimAngle - bodyTilt;
 
     // Torso: Emerald Changshan Tunic with Gold Trim
     const tunicGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
@@ -661,10 +674,14 @@ export function generateHeroTexture(
     ctx.restore();
 
     // Toned Arms with Golden Dragon Gauntlets & Chi Flames
-    // The shoulders and elbows wind up before the fists extend.
+    // The rear fist guards while the lead shoulder, elbow and fist drive toward the aim.
     const punchWave = Math.sin(phase + 0.25);
-    const lHandX = cx - 38 - (isAttackingPose ? 12 + punchWave * 7 : Math.sin(phase) * 4);
-    const lHandY = cy + 5 + Math.sin(phase + Math.PI) * (isAttackingPose ? 4 : 2);
+    const lHandX = isAttackingPose
+      ? cx - 20 + Math.cos(localAimAngle + Math.PI) * (20 + punchWave * 3)
+      : cx - 38 - Math.sin(phase) * 4;
+    const lHandY = isAttackingPose
+      ? cy + 6 + Math.sin(localAimAngle + Math.PI) * (20 + punchWave * 3)
+      : cy + 5 + Math.sin(phase + Math.PI) * 2;
     fillPoly([
       [cx - 26, cy - 18],
       [lHandX - 10, lHandY - 4],
@@ -676,8 +693,13 @@ export function generateHeroTexture(
     drawCircle(lHandX, lHandY + 18, 9, '#fed7aa', '#09090b', 2);
 
     // Right Arm (Pounding Fist)
-    const rHandX = cx + 38 + (isAttackingPose ? 25 + Math.sin(phase + 0.3) * 14 : Math.sin(phase + Math.PI) * 4);
-    const rHandY = cy + (isAttackingPose ? -7 + Math.sin(phase + 0.55) * 16 : 12 + Math.sin(phase + 0.6) * 2.5);
+    const punchReach = isHeavyAttack ? 51 : 43;
+    const rHandX = isAttackingPose
+      ? cx + 20 + Math.cos(localAimAngle) * (punchReach + Math.sin(phase + 0.3) * 4)
+      : cx + 38 + Math.sin(phase + Math.PI) * 4;
+    const rHandY = isAttackingPose
+      ? cy - 8 + Math.sin(localAimAngle) * (punchReach + Math.sin(phase + 0.55) * 4)
+      : cy + 12 + Math.sin(phase + 0.6) * 2.5;
     fillPoly([
       [cx + 16, cy - 18],
       [cx + 28, cy - 18],
@@ -731,6 +753,7 @@ export function generateHeroTexture(
     ctx.translate(cx, cy + 26);
     ctx.rotate(bodyTilt * 0.78);
     ctx.translate(-cx, -(cy + 26));
+    const localAimAngle = directedAimAngle - bodyTilt * 0.78;
 
     // Flowing Sorceress Robe / Dress
     const robeGrad = ctx.createLinearGradient(cx - 45, cy - 20, cx + 45, 260);
@@ -907,7 +930,10 @@ export function generateHeroTexture(
     // STARLIGHT ARCHMAGE STAFF
     ctx.save();
     ctx.translate(staffX, cy);
-    ctx.rotate(Math.sin(phase + 0.3) * (isAttackingPose ? 0.2 : 0.1));
+    // The staff shaft points along the same direction as the cast's targeting line.
+    ctx.rotate(isAttackingPose
+      ? localAimAngle + Math.PI / 2 + Math.sin(phase) * 0.035
+      : Math.sin(phase + 0.3) * 0.1);
 
     // Shaft: Polished Ebony with Gold Rings
     ctx.strokeStyle = '#1e1b4b';
