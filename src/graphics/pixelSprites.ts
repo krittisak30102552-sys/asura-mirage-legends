@@ -142,6 +142,31 @@ export function generateHeroTexture(
     }
   };
 
+  // Draw a limb as a tapered segment between shoulder/elbow/hand points. Using its
+  // own direction keeps the forearm aligned instead of stretching a horizontal sleeve.
+  const fillLimb = (
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    halfWidth: number,
+    fill: string | CanvasGradient,
+    stroke = '#09090b',
+    lineWidth = 2
+  ) => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    const nx = (-dy / length) * halfWidth;
+    const ny = (dx / length) * halfWidth;
+    fillPoly([
+      [startX + nx, startY + ny],
+      [startX - nx, startY - ny],
+      [endX - nx, endY - ny],
+      [endX + nx, endY + ny],
+    ], fill, stroke, lineWidth);
+  };
+
   const drawCircle = (x: number, y: number, r: number, fill: string | CanvasGradient, stroke?: string, lw = 2) => {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -425,18 +450,29 @@ export function generateHeroTexture(
     drawCircle(leftArmX, cy + 26, 7, '#ffedd5', '#d97706', 1.5);
 
     // Shoulder-to-hand reach follows the same locked direction as the ground slash VFX.
-    // The small secondary movement is elbow follow-through, not a wrist-only swing.
+    // The small secondary movement is a shoulder/elbow follow-through, not a wrist-only swing.
     const rightArmReach = isAttackingPose
-      ? (isHeavyAttack ? 39 : 35) + Math.sin(phase + 0.25) * (isHeavyAttack ? 5 : 3)
+      ? (isHeavyAttack ? 39 : 35) + Math.sin(phase + 0.25) * (isHeavyAttack ? 3 : 2)
       : 3.5;
-    const rightArmX = cx + (isAttackingPose ? 22 + Math.cos(localAimAngle) * rightArmReach : 32 + Math.sin(phase) * 3.5);
-    const rightArmY = cy + (isAttackingPose ? -11 + Math.sin(localAimAngle) * rightArmReach + Math.sin(phase + 0.55) * 2 : 15 + Math.sin(phase) * 2.5);
-    fillPoly([
-      [cx + 16, cy - 18],
-      [cx + 32, cy - 18],
-      [rightArmX + 10, rightArmY + 8],
-      [rightArmX - 10, rightArmY + 8],
-    ], haoriGrad, '#09090b', 2);
+    const shoulderX = cx + 24;
+    const shoulderY = cy - 18;
+    const elbowFollow = isAttackingPose ? Math.sin(phase + 0.55) * 2 : 0;
+    const rightArmX = isAttackingPose
+      ? shoulderX + Math.cos(localAimAngle) * rightArmReach - Math.sin(localAimAngle) * elbowFollow
+      : cx + 32 + Math.sin(phase) * 3.5;
+    const rightArmY = isAttackingPose
+      ? shoulderY + Math.sin(localAimAngle) * rightArmReach + Math.cos(localAimAngle) * elbowFollow - 12
+      : cy + 15 + Math.sin(phase) * 2.5;
+    if (isAttackingPose) {
+      fillLimb(shoulderX, shoulderY, rightArmX, rightArmY + 8, 9, haoriGrad, '#09090b', 2);
+    } else {
+      fillPoly([
+        [cx - 28, cy - 18],
+        [cx - 35 - armSwing * 12, cy + 18],
+        [cx - 35 - armSwing * 12 + 12, cy + 22],
+        [cx - 16, cy + 10],
+      ], haoriGrad, '#09090b', 2);
+    }
     drawCircle(rightArmX, rightArmY + 12, 7, '#ffedd5', '#d97706', 1.5);
 
     // KATANA: Steel Blade with Metallic Gleam
@@ -682,14 +718,22 @@ export function generateHeroTexture(
     const lHandY = isAttackingPose
       ? cy + 6 + Math.sin(localAimAngle + Math.PI) * (20 + punchWave * 3)
       : cy + 5 + Math.sin(phase + Math.PI) * 2;
-    fillPoly([
-      [cx - 26, cy - 18],
-      [lHandX - 10, lHandY - 4],
-      [lHandX + 12, lHandY + 14],
-      [cx - 16, cy + 8],
-    ], '#fed7aa', '#09090b', 2);
-    // Golden Dragon Bracer
-    fillPoly([[lHandX - 8, lHandY - 2], [lHandX + 8, lHandY + 2], [lHandX + 4, lHandY + 16], [lHandX - 10, lHandY + 12]], '#fbbf24', '#b45309', 2);
+    if (isAttackingPose) {
+      fillLimb(cx - 20, cy - 10, lHandX, lHandY + 9, 10, '#fed7aa');
+      ctx.save();
+      ctx.translate(lHandX, lHandY + 8);
+      ctx.rotate(localAimAngle + Math.PI);
+      fillPoly([[-8, -8], [8, -4], [7, 8], [-8, 5]], '#fbbf24', '#b45309', 2);
+      ctx.restore();
+    } else {
+      fillPoly([
+        [cx - 26, cy - 18],
+        [lHandX - 10, lHandY - 4],
+        [lHandX + 12, lHandY + 14],
+        [cx - 16, cy + 8],
+      ], '#fed7aa', '#09090b', 2);
+      fillPoly([[lHandX - 8, lHandY - 2], [lHandX + 8, lHandY + 2], [lHandX + 4, lHandY + 16], [lHandX - 10, lHandY + 12]], '#fbbf24', '#b45309', 2);
+    }
     drawCircle(lHandX, lHandY + 18, 9, '#fed7aa', '#09090b', 2);
 
     // Right Arm (Pounding Fist)
@@ -700,14 +744,22 @@ export function generateHeroTexture(
     const rHandY = isAttackingPose
       ? cy - 8 + Math.sin(localAimAngle) * (punchReach + Math.sin(phase + 0.55) * 4)
       : cy + 12 + Math.sin(phase + 0.6) * 2.5;
-    fillPoly([
-      [cx + 16, cy - 18],
-      [cx + 28, cy - 18],
-      [rHandX + 12, rHandY + 4],
-      [rHandX - 8, rHandY + 8],
-    ], '#fed7aa', '#09090b', 2);
-    // Golden Dragon Bracer
-    fillPoly([[rHandX - 6, rHandY], [rHandX + 10, rHandY + 2], [rHandX + 6, rHandY + 16], [rHandX - 8, rHandY + 14]], '#fbbf24', '#b45309', 2);
+    if (isAttackingPose) {
+      fillLimb(cx + 22, cy - 10, rHandX, rHandY + 9, 10, '#fed7aa');
+      ctx.save();
+      ctx.translate(rHandX, rHandY + 8);
+      ctx.rotate(localAimAngle);
+      fillPoly([[-8, -8], [8, -4], [7, 8], [-8, 5]], '#fbbf24', '#b45309', 2);
+      ctx.restore();
+    } else {
+      fillPoly([
+        [cx + 16, cy - 18],
+        [cx + 28, cy - 18],
+        [rHandX + 12, rHandY + 4],
+        [rHandX - 8, rHandY + 8],
+      ], '#fed7aa', '#09090b', 2);
+      fillPoly([[rHandX - 6, rHandY], [rHandX + 10, rHandY + 2], [rHandX + 6, rHandY + 16], [rHandX - 8, rHandY + 14]], '#fbbf24', '#b45309', 2);
+    }
     drawCircle(rHandX, rHandY + 18, 9, '#fed7aa', '#09090b', 2);
 
     // Glowing Golden Chi Flames on Fists
@@ -909,7 +961,10 @@ export function generateHeroTexture(
 
     // Left arm swings naturally from the shoulder, with a small delayed wrist movement.
     const leftArmSway = Math.sin(phase + 0.8) * (isAttackingPose ? 5 : 3.5);
-    const staffX = cx + 38 + Math.sin(phase + 0.25) * 4.2;
+    const staffX = isAttackingPose
+      ? cx + Math.cos(localAimAngle) * 38
+      : cx + 38 + Math.sin(phase + 0.25) * 4.2;
+    const staffY = isAttackingPose ? cy + Math.sin(localAimAngle) * 38 : cy;
     fillPoly([
       [cx - 20, cy - 18],
       [cx - 34 + leftArmSway, cy + 4],
@@ -918,18 +973,24 @@ export function generateHeroTexture(
     ], robeGrad, '#09090b', 2);
     drawCircle(cx - 22 + leftArmSway, cy + 18 + Math.sin(phase + 0.5) * 2, 6, '#ffedd5', '#d97706', 1.5);
 
-    // Right Arm holding Starlight Staff
-    fillPoly([
-      [cx + 14, cy - 18],
-      [staffX - 10, cy + 8],
-      [staffX + 6, cy + 12],
-      [cx + 24, cy - 8],
-    ], robeGrad, '#09090b', 2);
-    drawCircle(staffX - 2, cy + 10, 6, '#ffedd5', '#d97706', 1.5);
+    // Right hand sits on the shaft even as it rotates to match the cast direction.
+    const staffHandX = isAttackingPose ? staffX - Math.cos(localAimAngle) * 10 : staffX - 2;
+    const staffHandY = isAttackingPose ? staffY - Math.sin(localAimAngle) * 10 : cy + 10;
+    if (isAttackingPose) {
+      fillLimb(cx + 20, cy - 12, staffHandX, staffHandY, 9, robeGrad);
+    } else {
+      fillPoly([
+        [cx + 14, cy - 18],
+        [staffX - 10, cy + 8],
+        [staffX + 6, cy + 12],
+        [cx + 24, cy - 8],
+      ], robeGrad, '#09090b', 2);
+    }
+    drawCircle(staffHandX, staffHandY, 6, '#ffedd5', '#d97706', 1.5);
 
     // STARLIGHT ARCHMAGE STAFF
     ctx.save();
-    ctx.translate(staffX, cy);
+    ctx.translate(staffX, staffY);
     // The staff shaft points along the same direction as the cast's targeting line.
     ctx.rotate(isAttackingPose
       ? localAimAngle + Math.PI / 2 + Math.sin(phase) * 0.035
