@@ -248,6 +248,7 @@ export class CombatEngine {
   public skillCooldowns: Record<1 | 2 | 3 | 4, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   public ginzoUltimateFlashTimer: number = 0;
   public ginzoUltimateTimer: number = 0;
+  public ginzoUltimatePath: { startX: number; startZ: number; endX: number; endZ: number } | null = null;
   private ginzoUltimateSequence: {
     startX: number;
     startZ: number;
@@ -2027,6 +2028,7 @@ export class CombatEngine {
       );
 
       this.ginzoUltimateTimer = 0;
+      this.ginzoUltimatePath = { startX: pX, startZ: pZ, endX: targetX, endZ: targetZ };
       this.ginzoUltimateSequence = {
         startX: pX, startZ: pZ, endX: targetX, endZ: targetZ,
         angle, rawDamage, elapsed: 0, hits: 0, dashed: false,
@@ -2877,21 +2879,24 @@ export class CombatEngine {
     requestAnimationFrame(fade);
   }
 
-  private spawnGhostTrail() {
+  private spawnGhostTrail(x?: number, z?: number, opacity: number = 0.48, facing?: number) {
     const geo = new THREE.PlaneGeometry(2.4, 2.8);
     const mat = new THREE.MeshBasicMaterial({
       map: (this.heroMesh.material as THREE.MeshBasicMaterial).map,
       transparent: true,
-      opacity: 0.48,
+      opacity,
       color: 0xffd9e9,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
     const ghost = new THREE.Mesh(geo, mat);
     ghost.position.copy(this.heroMesh.position);
+    if (x !== undefined) ghost.position.x = x;
+    if (z !== undefined) ghost.position.z = z;
     ghost.scale.copy(this.heroMesh.scale);
+    if (facing !== undefined) ghost.scale.x = Math.abs(ghost.scale.x) * (facing >= 0 ? 1 : -1);
     this.arena.vfxGroup.add(ghost);
-    this.ghostTrails.push({ mesh: ghost, opacity: 0.48 });
+    this.ghostTrails.push({ mesh: ghost, opacity });
   }
 
   // ----------------------------------------------------------------------
@@ -3229,6 +3234,7 @@ export class CombatEngine {
     }
     if (this.currentMode !== 'dungeon' || this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved) {
       this.ginzoUltimateSequence = null;
+      this.ginzoUltimatePath = null;
       this.ginzoUltimateTimer = 0;
       this.actionAnimationState = null;
       this.actionAnimationTimer = 0;
@@ -3245,6 +3251,15 @@ export class CombatEngine {
       sequence.dashed = true;
       this.playerX = sequence.endX;
       this.playerZ = sequence.endZ;
+      for (let ghostIndex = 0; ghostIndex < 7; ghostIndex++) {
+        const ghostT = ghostIndex / 6;
+        this.spawnGhostTrail(
+          THREE.MathUtils.lerp(sequence.startX, sequence.endX, ghostT),
+          THREE.MathUtils.lerp(sequence.startZ, sequence.endZ, ghostT),
+          0.42 - ghostT * 0.16,
+          this.heroActionFacing
+        );
+      }
       this.playerVx = 0;
       this.playerVz = 0;
       this.ginzoUltimateFlashTimer = 0.3;
@@ -3326,6 +3341,7 @@ export class CombatEngine {
 
     if (sequence.elapsed >= 2.5) {
       this.ginzoUltimateSequence = null;
+      this.ginzoUltimatePath = null;
       this.ginzoUltimateTimer = 0;
       this.actionAnimationState = null;
       this.actionAnimationTimer = 0;
@@ -3446,10 +3462,14 @@ export class CombatEngine {
       this.playerStats.shield = Math.min(this.playerStats.maxShield, this.playerStats.shield + 8 * dt);
     }
 
-    this.playerCombat.update(dt, this.getCombatTargets());
-    this.comboStep = this.playerCombat.comboStep;
-    this.comboWindowTimer = this.playerCombat.comboWindowLeft;
-    this.isAttacking = this.playerCombat.isAttacking;
+    if (!this.ginzoUltimateSequence) {
+      this.playerCombat.update(dt, this.getCombatTargets());
+      this.comboStep = this.playerCombat.comboStep;
+      this.comboWindowTimer = this.playerCombat.comboWindowLeft;
+      this.isAttacking = this.playerCombat.isAttacking;
+    } else {
+      this.isAttacking = false;
+    }
 
     // Keep directional skill poses alive long enough for the full arm/weapon follow-through.
     if (this.actionAnimationTimer > 0) {
