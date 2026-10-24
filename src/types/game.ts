@@ -10,7 +10,7 @@ export type DungeonRoomId = 'center' | 'north' | 'west' | 'east';
 
 export type StatUpgradeType = 'hp' | 'shield' | 'attack' | 'attackSpeed' | 'moveSpeed' | 'crit';
 
-export type HeroId = 'quan' | 'ginzo' | 'katherine';
+export type HeroId = 'quan' | 'ginzo' | 'katherine' | 'bamdee';
 
 export interface HeroConfig {
   id: HeroId;
