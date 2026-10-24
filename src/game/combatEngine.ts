@@ -245,7 +245,8 @@ export class CombatEngine {
   public attackTimer: number = 0;
   public playerCombat!: PlayerCombat;
   private combatTargets = new WeakMap<object, CombatTarget>();
-  public skillCooldowns: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 };
+  public skillCooldowns: Record<1 | 2 | 3 | 4, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  public ginzoUltimateFlashTimer: number = 0;
 
   // Dash & Dodge
   public isDashing: boolean = false;
@@ -770,7 +771,7 @@ export class CombatEngine {
     if (previousTexture && previousTexture !== nextTexture) previousTexture.dispose();
   }
 
-  private beginDirectionalActionAnimation(slot: 1 | 2 | 3, angle: number, duration = 0.48) {
+  private beginDirectionalActionAnimation(slot: 1 | 2 | 3 | 4, angle: number, duration = 0.48) {
     this.heroActionAimAngle = angle;
     if (Math.abs(Math.cos(angle)) > 0.1) {
       this.heroActionFacing = Math.cos(angle) >= 0 ? 1 : -1;
@@ -1988,12 +1989,115 @@ export class CombatEngine {
   }
 
   private castGinzoEvolvedSkill(
-    slot: 1 | 2 | 3,
+    slot: 1 | 2 | 3 | 4,
     pX: number,
     pZ: number,
     angle: number,
     rawDamage: number
   ) {
+    if (slot === 4) {
+      // Crimson Severance: high-speed multi-hit dash and a huge red finishing cut.
+      const dashDist = 10.8;
+      const targetX = THREE.MathUtils.clamp(
+        pX + Math.cos(angle) * dashDist,
+        this.arena.bounds.minX + 1.2,
+        this.arena.bounds.maxX - 1.2
+      );
+      const targetZ = THREE.MathUtils.clamp(
+        pZ + Math.sin(angle) * dashDist,
+        this.arena.bounds.minZ + 1.2,
+        this.arena.bounds.maxZ - 1.2
+      );
+      const dx = targetX - pX;
+      const dz = targetZ - pZ;
+      const lengthSq = Math.max(0.001, dx * dx + dz * dz);
+
+      this.ginzoUltimateFlashTimer = Math.max(this.ginzoUltimateFlashTimer, 0.42);
+      this.isInvulnerable = true;
+      this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.88);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.11);
+      this.arena.spawnGroundTelegraph(pX, pZ, 2.3, 0.24, 0xf43f5e, 'line', angle, dashDist);
+      this.arena.spawnZeroFrameSeveranceVFX(pX, pZ, targetX, targetZ);
+      this.arena.spawnSkillBurst(pX, 1.0, pZ, 0xf43f5e, 18, 6.2, 0.48);
+      this.arena.addCameraShake(0.62);
+
+      // Move instantly like an iaido cut; the delayed slices sell the impossible-speed combo.
+      this.playerX = targetX;
+      this.playerZ = targetZ;
+
+      for (let hit = 0; hit < 12; hit++) {
+        const hitIndex = hit;
+        window.setTimeout(() => {
+          if (this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved || this.currentMode !== 'dungeon') return;
+
+          const finalCut = hitIndex === 11;
+          const t = (hitIndex + 1) / 12;
+          const fx = THREE.MathUtils.lerp(pX, targetX, t);
+          const fz = THREE.MathUtils.lerp(pZ, targetZ, t);
+          const slashAngle = angle + (hitIndex % 2 === 0 ? -0.58 : 0.58);
+
+          this.arena.spawnKatanaArcVFX(
+            fx,
+            fz,
+            slashAngle,
+            finalCut ? 4.0 : 1.28 + hitIndex * 0.035,
+            finalCut ? 0xfef2f2 : (hitIndex % 2 === 0 ? 0xf43f5e : 0x991b1b)
+          );
+          if (hitIndex % 3 === 0 || finalCut) {
+            this.arena.spawnDimensionalSlashVFX(fx, fz, angle);
+          }
+
+          if (finalCut) {
+            this.ginzoUltimateFlashTimer = Math.max(this.ginzoUltimateFlashTimer, 0.38);
+            this.arena.spawnZeroFrameSeveranceVFX(
+              fx - Math.cos(angle) * 2.8,
+              fz - Math.sin(angle) * 2.8,
+              fx + Math.cos(angle) * 2.8,
+              fz + Math.sin(angle) * 2.8
+            );
+            this.arena.spawnSkillBurst(fx, 1.05, fz, 0xf43f5e, 36, 8.6, 0.78);
+            this.arena.spawnSkillBurst(fx, 1.05, fz, 0xffffff, 20, 7.5, 0.52);
+            this.arena.addCameraShake(0.82);
+            this.hitstopTimer = Math.max(this.hitstopTimer, 0.12);
+            soundEngine.playBossGong();
+          } else {
+            this.hitstopTimer = Math.max(this.hitstopTimer, 0.02);
+          }
+
+          for (const enemy of this.enemies) {
+            if (enemy.state === 'dead') continue;
+            const projectedT = THREE.MathUtils.clamp(
+              ((enemy.x - pX) * dx + (enemy.z - pZ) * dz) / lengthSq,
+              0,
+              1
+            );
+            const projectedX = pX + dx * projectedT;
+            const projectedZ = pZ + dz * projectedT;
+            const distanceFromCut = Math.hypot(enemy.x - projectedX, enemy.z - projectedZ);
+            if (distanceFromCut > (finalCut ? 3.25 : 2.85)) continue;
+
+            const isFinalCrit = finalCut && Math.random() < this.playerStats.critChance + 0.35;
+            this.damageEnemy(
+              enemy,
+              Math.max(1, Math.round(rawDamage * (finalCut ? 3.0 : 0.25))),
+              isFinalCrit,
+              true
+            );
+            if (finalCut) {
+              this.applyStatusEffect(enemy, 'bleed', 4.5, 45);
+              this.applyStatusEffect(enemy, 'stun', 0.85);
+              enemy.vx += Math.cos(angle) * 12;
+              enemy.vz += Math.sin(angle) * 12;
+            }
+          }
+
+          if (hitIndex === 3 || hitIndex === 7) soundEngine.playKatanaSlash();
+          if (this.onStateChange) this.onStateChange();
+        }, hitIndex * 54);
+      }
+      return;
+    }
+
     if (slot === 1) {
       // Shooting Stars: dash through a line of enemies with several chained sword trails.
       const dashDist = 8.5;
@@ -2151,7 +2255,7 @@ export class CombatEngine {
     }
   }
 
-  public castSkill(slot: 1 | 2 | 3): boolean {
+  public castSkill(slot: 1 | 2 | 3 | 4): boolean {
     if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.playerStats.hp <= 0) {
       return false;
     }
@@ -2177,7 +2281,7 @@ export class CombatEngine {
     const rawDamage = this.playerStats.attackPower * skillDef.damageMultiplier;
 
     // All skills share the same locked aim as their slash, projectile or cast VFX.
-    this.beginDirectionalActionAnimation(slot, angle, slot === 3 ? 0.76 : 0.48);
+    this.beginDirectionalActionAnimation(slot, angle, slot === 4 ? 0.96 : slot === 3 ? 0.76 : 0.48);
 
     if (heroId === 'ginzo' && this.isGinzoEvolved) {
       this.castGinzoEvolvedSkill(slot, pX, pZ, angle, rawDamage);
@@ -3228,6 +3332,8 @@ export class CombatEngine {
     this.skillCooldowns[1] = Math.max(0, (this.skillCooldowns[1] ?? 0) - dt);
     this.skillCooldowns[2] = Math.max(0, (this.skillCooldowns[2] ?? 0) - dt);
     this.skillCooldowns[3] = Math.max(0, (this.skillCooldowns[3] ?? 0) - dt);
+    this.skillCooldowns[4] = Math.max(0, (this.skillCooldowns[4] ?? 0) - dt);
+    this.ginzoUltimateFlashTimer = Math.max(0, this.ginzoUltimateFlashTimer - dt);
     if (this.temporaryAttackSpeedTimer > 0) {
       this.temporaryAttackSpeedTimer = Math.max(0, this.temporaryAttackSpeedTimer - dt);
       if (this.temporaryAttackSpeedTimer === 0) this.temporaryAttackSpeedBonus = 0;
