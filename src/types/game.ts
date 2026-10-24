@@ -32,7 +32,7 @@ export interface HeroConfig {
 
 export interface ActiveSkillDef {
   id: string;
-  slot: 1 | 2 | 3;
+  slot: 1 | 2 | 3 | 4;
   name: string;
   nameTh: string;
   descTh: string;
@@ -187,6 +187,7 @@ export type HeroAnimationState =
   | 'attack1'
   | 'attack2'
   | 'attack3'
+  | 'attack4'
   | 'dash'
   | 'hurt'
   | 'dead';
