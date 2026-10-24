@@ -27,6 +27,7 @@ import {
 import { DUNGEON_MAPS, HERO_CONFIGS } from './data/gameData';
 import { HUD } from './components/HUD';
 import { TitleScreen } from './components/TitleScreen';
+import { YouTubeMusicPlayer } from './components/YouTubeMusicPlayer';
 import { ControlsGuideModal } from './components/ControlsGuideModal';
 import { GameOverModal } from './components/GameOverModal';
 import { VictoryModal } from './components/VictoryModal';
@@ -914,6 +915,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* User-requested YouTube soundtrack: stays mounted across title, lobby, and dungeon. */}
+      <YouTubeMusicPlayer isMuted={isMuted} />
 
       {/* TITLE SCREEN */}
       {gameMode === 'title' && (
