@@ -467,10 +467,10 @@ export function generateHeroTexture(
       fillLimb(shoulderX, shoulderY, rightArmX, rightArmY + 8, 9, haoriGrad, '#09090b', 2);
     } else {
       fillPoly([
-        [cx - 28, cy - 18],
-        [cx - 35 - armSwing * 12, cy + 18],
-        [cx - 35 - armSwing * 12 + 12, cy + 22],
-        [cx - 16, cy + 10],
+        [cx + 16, cy - 18],
+        [cx + 32, cy - 18],
+        [rightArmX + 10, rightArmY + 8],
+        [rightArmX - 10, rightArmY + 8],
       ], haoriGrad, '#09090b', 2);
     }
     drawCircle(rightArmX, rightArmY + 12, 7, '#ffedd5', '#d97706', 1.5);
