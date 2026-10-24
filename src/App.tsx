@@ -1057,10 +1057,28 @@ export default function App() {
   const currentMapConfig = DUNGEON_MAPS.find((m) => m.id === currentDungeonMap);
 
   const handleRunCommand = useCallback((command: string) => {
-    if (command.trim().replace(/\s+/g, '') !== '1คิว' || !engineRef.current) return false;
-    engineRef.current.oneHitMode = true;
-    setOneHitMode(true);
-    return true;
+    const normalizedCommand = command.trim().replace(/\s+/g, '');
+    const engine = engineRef.current;
+    if (!engine) return false;
+
+    if (normalizedCommand === '1คิว') {
+      engine.oneHitMode = true;
+      setOneHitMode(true);
+      return true;
+    }
+
+    if (normalizedCommand === 'นค.') {
+      engine.noSkillCooldown = !engine.noSkillCooldown;
+      if (engine.noSkillCooldown) {
+        engine.skillCooldowns[1] = 0;
+        engine.skillCooldowns[2] = 0;
+        engine.skillCooldowns[3] = 0;
+        engine.skillCooldowns[4] = 0;
+      }
+      return true;
+    }
+
+    return false;
   }, []);
 
   return (
