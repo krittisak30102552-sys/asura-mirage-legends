@@ -2037,6 +2037,9 @@ export class CombatEngine {
         });
         if (threats.length === 0) return;
 
+        // A crisp cyan-gold ring appears only when the guard catches a nearby threat.
+        this.arena.spawnGroundTelegraph(cx, cz, 2.85, 0.12, 0xa5f3fc, 'circle');
+        this.arena.spawnSkillBurst(cx, 0.75, cz, 0xa5f3fc, 12, 2.6, 0.32);
         this.arena.spawnKatanaArcVFX(cx, cz, angle - 0.42, 1.8, 0xfef3c7);
         this.arena.spawnKatanaArcVFX(cx, cz, angle + 0.42, 1.8, 0xfda4af);
         this.arena.spawnDimensionalSlashVFX(cx + Math.cos(angle) * 1.3, cz + Math.sin(angle) * 1.3, angle);
