@@ -175,6 +175,45 @@ export const HERO_SKILLS: Record<HeroId, [ActiveSkillDef, ActiveSkillDef, Active
   ],
 };
 
+export const GINZO_AWAKENED_SKILLS: [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef] = [
+  {
+    id: 'ginzo_shooting_stars',
+    slot: 1,
+    name: 'Hiken – Shooting Stars',
+    nameTh: 'ดาบดาวตก',
+    descTh: 'พุ่งฟันทะลุแนวศัตรูด้วยคมดาบต่อเนื่อง ทิ้งรอยฟันสีเงินทองและหยุดศัตรูชั่วขณะ',
+    icon: '🌠',
+    color: '#fde68a',
+    badgeBg: 'bg-amber-500/20 border-amber-300/60 text-amber-200',
+    cooldown: 5.0,
+    damageMultiplier: 3.2,
+  },
+  {
+    id: 'ginzo_tsubame_gaeshi',
+    slot: 2,
+    name: 'Hiken – Tsubame Gaeshi',
+    nameTh: 'ดาบโต้กลับ',
+    descTh: 'ตั้งท่าป้องกันด้วยดาบชั่วครู่ แล้วสวนกลับด้วยรอยฟันรูปกากบาทที่ชะงักศัตรู',
+    icon: '🛡️',
+    color: '#a5f3fc',
+    badgeBg: 'bg-cyan-500/20 border-cyan-300/60 text-cyan-200',
+    cooldown: 7.5,
+    damageMultiplier: 2.8,
+  },
+  {
+    id: 'ginzo_heirloom_katana',
+    slot: 3,
+    name: 'Hiken – Heirloom Katana',
+    nameTh: 'คาตานะสืบทอด',
+    descTh: 'ฟันรัว 9 จังหวะ แล้วปิดท้ายด้วยคลื่นดาบขนาดใหญ่ สร้างแรงสะเทือนและภาพค้างจังหวะฟัน',
+    icon: '⚔️',
+    color: '#fda4af',
+    badgeBg: 'bg-rose-500/20 border-rose-300/60 text-rose-200',
+    cooldown: 13.5,
+    damageMultiplier: 5.8,
+  },
+];
+
 export const INITIAL_WEAPONS: WeaponItem[] = [
   {
     id: 'training_katana',
