@@ -56,9 +56,26 @@ export const HERO_CONFIGS: Record<string, HeroConfig> = {
     cost: 120,
     icon: '🧙‍♀️',
   },
+  bamdee: {
+    id: 'bamdee',
+    name: 'Bamdee Vivo',
+    nameTh: 'แบมดี Vivo',
+    titleTh: 'นักดาบทดลอง · นักล่าบอส',
+    descTh: 'นักดาบผมขาวในชุดโทน Vivo ถือคาตานะ พร้อมใช้ชุดสกิลร่างตื่นของ Ginzo รวมอัลติพิฆาตโลหิตที่พุ่งทะลวงและฟันต่อเนื่อง',
+    maxHp: 110,
+    maxShield: 55,
+    attackPower: 13,
+    attackSpeed: 1.46,
+    moveSpeed: 8.7,
+    critChance: 0.43,
+    critMultiplier: 2.0,
+    unlocked: true,
+    cost: 0,
+    icon: '🩸',
+  },
 };
 
-export const HERO_SKILLS: Record<HeroId, [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef]> = {
+export const HERO_SKILLS: Record<Exclude<HeroId, 'bamdee'>, [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef]> = {
   ginzo: [
     {
       id: 'dimensional_rift',
@@ -225,6 +242,20 @@ export const GINZO_AWAKENED_SKILLS: [ActiveSkillDef, ActiveSkillDef, ActiveSkill
     damageMultiplier: 2.5,
   },
 ];
+
+/**
+ * Ginzo (awakened) and Bamdee share the same four-slot active skill kit.
+ * Keep this selector as the single source of truth for both the HUD and combat engine.
+ */
+export function usesAwakenedKit(heroId: HeroId, isGinzoEvolved: boolean): boolean {
+  return heroId === 'bamdee' || (heroId === 'ginzo' && isGinzoEvolved);
+}
+
+export function getHeroSkills(heroId: HeroId, isGinzoEvolved: boolean): readonly ActiveSkillDef[] {
+  return usesAwakenedKit(heroId, isGinzoEvolved)
+    ? GINZO_AWAKENED_SKILLS
+    : HERO_SKILLS[heroId as Exclude<HeroId, 'bamdee'>];
+}
 
 export const INITIAL_WEAPONS: WeaponItem[] = [
   {
