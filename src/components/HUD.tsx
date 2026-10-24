@@ -10,7 +10,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerStats, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
-import { HERO_CONFIGS, HERO_SKILLS } from '../data/gameData';
+import { HERO_CONFIGS, HERO_SKILLS, GINZO_AWAKENED_SKILLS } from '../data/gameData';
 import { ItemIcon } from './ItemIcon';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
 import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
@@ -94,6 +94,7 @@ interface HUDProps {
   mode: 'lobby' | 'dungeon';
   stats: PlayerStats;
   activeHeroId: HeroId;
+  isGinzoEvolved?: boolean;
   relics: RelicItem[];
   dashCooldown: number;
   dashMaxCooldown: number;
@@ -136,6 +137,7 @@ export const HUD: React.FC<HUDProps> = ({
   mode,
   stats,
   activeHeroId,
+  isGinzoEvolved = false,
   relics,
   dashCooldown,
   dashMaxCooldown,
@@ -243,11 +245,12 @@ export const HUD: React.FC<HUDProps> = ({
   };
 
   const heroCfg = HERO_CONFIGS[activeHeroId] || HERO_CONFIGS.ginzo;
+  const heroDisplayName = activeHeroId === 'ginzo' && isGinzoEvolved ? 'กินอิ่ม (Ginzo Awakened)' : heroCfg.nameTh;
   const hpPercent = Math.max(0, Math.min(100, (stats.hp / stats.maxHp) * 100));
   const shieldPercent = Math.max(0, Math.min(100, (stats.shield / stats.maxShield) * 100));
   const referenceDungeonHud = mode === 'dungeon' && isLevelRun;
   const heroPortrait = useMemo(() => {
-    const sprite = generateHeroTexture(activeHeroId, 'idle', 0);
+    const sprite = generateHeroTexture(activeHeroId, 'idle', 0, isGinzoEvolved);
     const source = sprite.image as HTMLCanvasElement;
     const crop = document.createElement('canvas');
     crop.width = 128;
@@ -259,7 +262,7 @@ export const HUD: React.FC<HUDProps> = ({
     }
     sprite.dispose();
     return crop.toDataURL('image/png');
-  }, [activeHeroId]);
+  }, [activeHeroId, isGinzoEvolved]);
 
   return (
     <div className="pixel-rpg-hud absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between p-2 sm:p-3 md:p-6 pt-[max(env(safe-area-inset-top),0.5rem)] pb-[max(env(safe-area-inset-bottom),0.5rem)]">
@@ -330,13 +333,13 @@ export const HUD: React.FC<HUDProps> = ({
           <div className={`pointer-events-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 shadow-xl shadow-black/80 ${referenceDungeonHud ? 'border-[3px] border-[#b98a4d] rounded-sm bg-[#171416]/95' : 'bg-zinc-950/90 border-2 border-amber-600/70 rounded-xl backdrop-blur-xs'}`}>
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={`${referenceDungeonHud ? 'w-12 h-12 sm:w-16 sm:h-16 border-[3px] border-[#d0a65e] rounded-sm bg-[#3a2423]' : 'w-10 h-10 sm:w-12 sm:h-12 bg-zinc-900 border-2 border-amber-500 rounded-lg'} flex items-center justify-center font-pixel text-amber-200 shadow-inner shrink-0 overflow-hidden`}>
-                <img src={heroPortrait} alt={heroCfg.nameTh} className="h-full w-full object-cover object-top" />
+                <img src={heroPortrait} alt={heroDisplayName} className="h-full w-full object-cover object-top" />
               </div>
 
               <div className="flex flex-col space-y-1 w-32 sm:w-44 lg:w-56">
                 <div className="flex items-center justify-between text-xs font-rajdhani font-bold tracking-wider text-amber-300">
                   <div className="flex items-center gap-1.5">
-                    <span>{heroCfg.nameTh}</span>
+                    <span>{heroDisplayName}</span>
                     <span
                       className="text-[9px] font-pixel px-1.5 py-0.2 rounded font-bold"
                       style={{
@@ -728,7 +731,7 @@ export const HUD: React.FC<HUDProps> = ({
             </button>
 
             {/* Active Skills Slots 1, 2, 3 */}
-            {HERO_SKILLS[activeHeroId]?.map((skill) => {
+            {(activeHeroId === 'ginzo' && isGinzoEvolved ? GINZO_AWAKENED_SKILLS : HERO_SKILLS[activeHeroId])?.map((skill) => {
               const cd = skillCooldowns?.[skill.slot as (1 | 2 | 3)] ?? 0;
               const isOnCd = cd > 0;
               return (
