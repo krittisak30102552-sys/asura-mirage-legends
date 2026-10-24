@@ -3,6 +3,8 @@
  * Provides crisp retro/arcade sound effects without external audio files.
  */
 
+import type { HeroId } from '../types/game';
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
@@ -54,7 +56,7 @@ class SoundEngine {
     // The YouTube player owns soundtrack playback and stops when its panel is closed.
   }
 
-  public castSkillWithSound(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3 | 4, action: () => boolean) {
+  public castSkillWithSound(heroId: HeroId, slot: 1 | 2 | 3 | 4, action: () => boolean) {
     this.suppressDuplicateSkillSfx = true;
     let succeeded = false;
     try { succeeded = action(); } finally { this.suppressDuplicateSkillSfx = false; }
@@ -62,8 +64,8 @@ class SoundEngine {
     return succeeded;
   }
 
-  public playSkillCast(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3 | 4) {
-    if (heroId === 'ginzo') {
+  public playSkillCast(heroId: HeroId, slot: 1 | 2 | 3 | 4) {
+    if (heroId === 'ginzo' || heroId === 'bamdee') {
       if (slot === 1) { this.playSwordSlash(1); this.playDimensionalSlash(); }
       else if (slot === 2) { this.playSwordSlash(2); this.playSwordSheath(); }
       else if (slot === 3) { this.playSwordSheath(); window.setTimeout(() => this.playDimensionalSlash(), 55); }
