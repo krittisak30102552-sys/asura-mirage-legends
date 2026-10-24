@@ -18,7 +18,7 @@ export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasText
 }
 
 /** Reduce only character art to a deliberate pixel grid; scene and HUD resolution stay untouched. */
-function createActorPixelTexture(source: HTMLCanvasElement): THREE.CanvasTexture {
+function createActorPixelTexture(source: HTMLCanvasElement, tintFilter?: string): THREE.CanvasTexture {
   const longestSide = Math.max(source.width, source.height);
   const scale = Math.min(1, 80 / longestSide);
   const canvas = document.createElement('canvas');
@@ -26,6 +26,7 @@ function createActorPixelTexture(source: HTMLCanvasElement): THREE.CanvasTexture
   canvas.height = Math.max(1, Math.round(source.height * scale));
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = true;
+  if (tintFilter) ctx.filter = tintFilter;
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   return createCanvasTexture(canvas);
 }
@@ -68,7 +69,7 @@ export function generateHeroTexture(
   const attackProgress = f / 11;
   const isAttackingPose = state.startsWith('attack');
   const isHeavyAttack = state === 'attack3' || state === 'attack4';
-  const awakenedGinzo = heroId === 'ginzo' && isGinzoEvolved;
+  const awakenedGinzo = (heroId === 'ginzo' && isGinzoEvolved) || heroId === 'bamdee';
   // Convert world X/Z aim into the sprite's isometric screen direction. The facing
   // value compensates for the mesh's horizontal mirror so the weapon still lines up.
   const screenAimAngle = Math.atan2(Math.sin(aimAngle) * 0.58, Math.cos(aimAngle));
@@ -183,7 +184,7 @@ export function generateHeroTexture(
   // 1. GINZO (Wandering Ronin Swordsman - Otherworld Legends)
   // Silver ponytail, red haori coat, black hakama, razor steel katana
   // ====================================================================
-  if (heroId === 'ginzo') {
+  if (heroId === 'ginzo' || heroId === 'bamdee') {
     // Ground Shadow
     const shadowGrad = ctx.createRadialGradient(cx, 290, 5, cx, 290, 48);
     shadowGrad.addColorStop(0, 'rgba(0,0,0,0.45)');
@@ -1036,7 +1037,7 @@ export function generateHeroTexture(
     ctx.restore();
   }
 
-  return createActorPixelTexture(canvas);
+  return createActorPixelTexture(canvas, heroId === 'bamdee' ? 'hue-rotate(200deg) saturate(1.1)' : undefined);
 }
 
 // ----------------------------------------------------------------------
