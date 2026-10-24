@@ -285,9 +285,11 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
                 {searchResults.map((item) => {
                   const id = item.videoId;
                   if (!id) return null;
-                  const thumb = item.videoThumbnails?.find((image) => image.quality === 'medium')?.url
-                    ?? item.videoThumbnails?.[0]?.url
-                    ?? 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+                  const rawThumb = item.videoThumbnails?.find((image) => image.quality === 'medium')?.url
+                    ?? item.videoThumbnails?.[0]?.url;
+                  const thumb = rawThumb
+                    ? (rawThumb.startsWith('//') ? 'https:' + rawThumb : rawThumb.startsWith('/') ? 'https://inv.nadeko.net' + rawThumb : rawThumb)
+                    : 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
                   const active = id === videoId;
                   const duration = formatDuration(item.lengthSeconds);
                   const views = formatViews(item.viewCount);
@@ -298,7 +300,19 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
                       onClick={() => selectSearchResult(item)}
                       className={'flex w-full items-center gap-2 border-b border-zinc-900 px-2 py-2 text-left transition hover:bg-zinc-800 ' + (active ? 'bg-red-950/60' : 'bg-zinc-950')}
                     >
-                      <img src={thumb} alt="" loading="lazy" className="h-11 w-[62px] shrink-0 rounded object-cover" />
+                      <img
+                        src={thumb}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          const image = event.currentTarget;
+                          const fallback = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+                          if (image.src !== fallback) image.src = fallback;
+                          else image.style.visibility = 'hidden';
+                        }}
+                        className="h-11 w-[62px] shrink-0 rounded object-cover bg-zinc-800"
+                      />
                       <span className="min-w-0 flex-1">
                         <span className="block line-clamp-2 text-[11px] font-semibold leading-snug text-zinc-100">{item.title}</span>
                         <span className="mt-0.5 block truncate text-[10px] text-zinc-400">{item.author || 'YouTube'}</span>
