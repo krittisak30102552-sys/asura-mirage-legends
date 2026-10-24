@@ -931,6 +931,10 @@ export class CombatEngine {
 
   public startLevelRun(seed?: number, difficulty?: DifficultyMode) {
     if (difficulty) this.difficulty = difficulty;
+    // Clear stale lobby interaction targets before entering the dungeon.
+    this.nearbyInteractable = null;
+    this.nearbyDungeonInteractable = null;
+    this.nearbyShopItemIndex = null;
     this.currentMode = 'dungeon';
     this.isLevelRun = true;
     this.bossStageTransitionTimer = 0;
