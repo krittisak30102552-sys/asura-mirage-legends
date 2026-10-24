@@ -246,6 +246,8 @@ export class CombatEngine {
   public playerCombat!: PlayerCombat;
   private combatTargets = new WeakMap<object, CombatTarget>();
   public skillCooldowns: Record<1 | 2 | 3 | 4, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  /** Debug command toggle: allow active skills to be cast without cooldowns. */
+  public noSkillCooldown: boolean = false;
   public ginzoUltimateFlashTimer: number = 0;
   public ginzoUltimateTimer: number = 0;
   public ginzoUltimatePath: { startX: number; startZ: number; endX: number; endZ: number } | null = null;
@@ -2039,7 +2041,7 @@ export class CombatEngine {
         angle, rawDamage, elapsed: 0, hits: 0, dashed: false,
       };
       // The cooldown runs after the 2.5s cinematic sequence instead of during it.
-      this.skillCooldowns[4] += 2.5;
+      if (!this.noSkillCooldown) this.skillCooldowns[4] += 2.5;
       this.playerVx = 0;
       this.playerVz = 0;
       this.playerAimAngle = angle;
@@ -2214,7 +2216,7 @@ export class CombatEngine {
     if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence || this.playerStats.hp <= 0) {
       return false;
     }
-    if ((this.skillCooldowns[slot] ?? 0) > 0) {
+    if (!this.noSkillCooldown && (this.skillCooldowns[slot] ?? 0) > 0) {
       return false;
     }
 
@@ -2225,7 +2227,7 @@ export class CombatEngine {
 
     // Set cooldown (accounting for cooldown reduction stat)
     const effectiveCooldown = skillDef.cooldown * (1 - Math.min(0.5, this.playerStats.cooldownReduction || 0));
-    this.skillCooldowns[slot] = effectiveCooldown;
+    this.skillCooldowns[slot] = this.noSkillCooldown ? 0 : effectiveCooldown;
 
     const heroId = this.activeHeroId;
     let angle = this.playerAimAngle;
@@ -3421,10 +3423,17 @@ export class CombatEngine {
     this.updateGinzoUltimate(dt);
 
     if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
-    this.skillCooldowns[1] = Math.max(0, (this.skillCooldowns[1] ?? 0) - dt);
+    if (this.noSkillCooldown) {
+      this.skillCooldowns[1] = 0;
+      this.skillCooldowns[2] = 0;
+      this.skillCooldowns[3] = 0;
+      this.skillCooldowns[4] = 0;
+    } else {
+      this.skillCooldowns[1] = Math.max(0, (this.skillCooldowns[1] ?? 0) - dt);
     this.skillCooldowns[2] = Math.max(0, (this.skillCooldowns[2] ?? 0) - dt);
     this.skillCooldowns[3] = Math.max(0, (this.skillCooldowns[3] ?? 0) - dt);
-    this.skillCooldowns[4] = Math.max(0, (this.skillCooldowns[4] ?? 0) - dt);
+      this.skillCooldowns[4] = Math.max(0, (this.skillCooldowns[4] ?? 0) - dt);
+    }
     if (this.temporaryAttackSpeedTimer > 0) {
       this.temporaryAttackSpeedTimer = Math.max(0, this.temporaryAttackSpeedTimer - dt);
       if (this.temporaryAttackSpeedTimer === 0) this.temporaryAttackSpeedBonus = 0;
