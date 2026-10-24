@@ -972,12 +972,13 @@ export class CombatEngine {
 
     this.clearDungeonEntities();
     this.arena.removeHappyVendor();
-    // Boss destinations are sealed arenas: hide any extra connected-door portals there.
-    const hideBossRoomRoutes = roomType === 'boss' || enteringBossArena;
+    // The altar sends the player directly into the boss realm, so hide the unusable
+    // route arches there and in the boss arena itself.
+    const hideBossEncounterRoutes = roomType === 'altar' || roomType === 'boss' || enteringBossArena;
     this.arena.loadRoom(
       enteringBossArena ? 'boss_arena' : roomType as any,
       this.currentDungeonMap,
-      hideBossRoomRoutes ? undefined : this.getDoorLabels()
+      hideBossEncounterRoutes ? undefined : this.getDoorLabels()
     );
     this.nearbyDungeonInteractable = null;
     this.nearbyShopItemIndex = null;
