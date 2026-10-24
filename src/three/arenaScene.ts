@@ -3305,11 +3305,106 @@ export class ArenaScene {
 
   /** Red gathering aura before Ginzo's awakened iaido ultimate. */
   public spawnCrimsonSeveranceChargeVFX(x: number, z: number, angle: number) {
-    this.spawnSkillRing(x, z, 0x991b1b, 2.5, 0.82);
+    this.spawnSkillRing(x, z, 0x991b1b, 2.5, 1.08);
     this.spawnSkillBurst(x, 0.9, z, 0xf43f5e, 22, 3.3, 0.58);
     this.spawnSkillBurst(x, 1.15, z, 0xfff1f2, 8, 2.2, 0.38);
     this.spawnKatanaArcVFX(x, z, angle - 0.8, 1.05, 0x991b1b);
     this.spawnKatanaArcVFX(x, z, angle + 0.8, 0.85, 0xf43f5e);
+
+    // Persistent, contracting crimson runes recreate the prototype's gathering charge.
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+    this.vfxGroup.add(group);
+    const geometries: THREE.BufferGeometry[] = [];
+    const materials: THREE.Material[] = [];
+    const makeMat = (color: number, opacity: number) => {
+      const material = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      materials.push(material);
+      return material;
+    };
+
+    const floorGeo = new THREE.RingGeometry(1.55, 1.78, 8);
+    geometries.push(floorGeo);
+    const floorMat = makeMat(0xf43f5e, 0.82);
+    const floorRing = new THREE.Mesh(floorGeo, floorMat);
+    floorRing.rotation.x = -Math.PI / 2;
+    floorRing.position.y = 0.045;
+    group.add(floorRing);
+
+    const haloGeo = new THREE.TorusGeometry(0.88, 0.055, 6, 20);
+    geometries.push(haloGeo);
+    const haloMat = makeMat(0xff3040, 0.88);
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.y = 1.05;
+    halo.rotation.x = Math.PI / 2;
+    group.add(halo);
+
+    const halo2Geo = new THREE.TorusGeometry(1.24, 0.035, 5, 18);
+    geometries.push(halo2Geo);
+    const halo2Mat = makeMat(0xfff1f2, 0.52);
+    const halo2 = new THREE.Mesh(halo2Geo, halo2Mat);
+    halo2.position.y = 0.64;
+    halo2.rotation.x = Math.PI / 2;
+    group.add(halo2);
+
+    const shardGeo = new THREE.BoxGeometry(0.14, 0.42, 0.08);
+    geometries.push(shardGeo);
+    const shards: Array<{ mesh: THREE.Mesh; phase: number; radius: number; y: number }> = [];
+    for (let i = 0; i < 8; i++) {
+      const shard = new THREE.Mesh(shardGeo, makeMat(i % 2 ? 0xf43f5e : 0xfff1f2, 0.92));
+      const phase = (i / 8) * Math.PI * 2;
+      const radius = 1.25 + (i % 3) * 0.34;
+      const y = 0.42 + (i % 2) * 0.52;
+      shard.position.set(Math.cos(phase) * radius, y, Math.sin(phase) * radius);
+      shard.rotation.set(0.3, phase, phase * 0.7);
+      group.add(shard);
+      shards.push({ mesh: shard, phase, radius, y });
+    }
+
+    const started = performance.now();
+    let previous = started;
+    const duration = 1080;
+    let particleClock = 0;
+    const animate = (now: number) => {
+      if (!group.parent || this.disposed) return;
+      const dt = Math.min(0.04, Math.max(0, (now - previous) / 1000));
+      previous = now;
+      const p = Math.min(1, (now - started) / duration);
+      const pulse = 0.76 + Math.sin(p * Math.PI * 11) * 0.14;
+      group.rotation.y += dt * (5.2 - p * 1.8);
+      floorRing.scale.setScalar((0.78 + p * 0.38) * pulse);
+      floorMat.opacity = 0.84 * (1 - p * 0.72);
+      halo.rotation.y += dt * 2.8;
+      halo.scale.setScalar(pulse);
+      haloMat.opacity = 0.86 * (1 - p * 0.76);
+      halo2.rotation.y -= dt * 3.6;
+      halo2.scale.setScalar(1.1 - p * 0.28);
+      halo2Mat.opacity = 0.55 * (1 - p * 0.78);
+      for (const shard of shards) {
+        const radius = shard.radius * (1 - p * 0.62);
+        const a = shard.phase + p * Math.PI * 3.2;
+        shard.mesh.position.set(Math.cos(a) * radius, shard.y * (1 - p * 0.22), Math.sin(a) * radius);
+        shard.mesh.rotation.y += dt * 4.5;
+        shard.mesh.rotation.z += dt * 2.6;
+        (shard.mesh.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - p * 0.72);
+      }
+      particleClock += dt;
+      if (particleClock >= 0.12 && p < 0.92) {
+        particleClock = 0;
+        this.spawnSkillBurst(x, 0.9, z, p < 0.55 ? 0xf43f5e : 0xfff1f2, 2, 1.5 + p, 0.22);
+      }
+      if (p < 1 && group.parent) {
+        this.scheduleVfxFrame(animate);
+      } else {
+        group.removeFromParent();
+        geometries.forEach((geometry) => geometry.dispose());
+        materials.forEach((material) => material.dispose());
+      }
+    };
+    this.scheduleVfxFrame(animate);
   }
 
   /** Crisp square crimson fragments plus a sharp katana wave for each rapid cut. */
