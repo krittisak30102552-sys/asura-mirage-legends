@@ -294,7 +294,7 @@ export const HUD: React.FC<HUDProps> = ({
                 const command = commandInput.trim().replace(/\s+/g, '');
                 if (!command) return;
                 const accepted = onRunCommand?.(command) ?? false;
-                setCommandMessage(accepted ? 'เปิดใช้ 1คิว แล้ว — โจมตีมอนสเตอร์ตายทันที' : `ไม่รู้จักคำสั่ง “${command}”`);
+                setCommandMessage(accepted ? (command === '1คิว' ? 'เปิดใช้ 1คิว แล้ว — โจมตีมอนสเตอร์ตายทันที' : command === 'นค.' ? 'เปิด/ปิดโหมดไม่มีคูลดาวน์สกิลแล้ว' : 'ใช้คำสั่งสำเร็จ') : `ไม่รู้จักคำสั่ง “${command}”`);
                 if (accepted) setCommandInput('');
               }}
             >
@@ -312,7 +312,7 @@ export const HUD: React.FC<HUDProps> = ({
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
-                placeholder="เช่น 1คิว"
+                placeholder="เช่น 1คิว หรือ นค."
                 aria-label="พิมพ์คำสั่งเกม"
                 className="min-w-0 flex-1 border-2 border-[#685846] bg-[#090a0d] px-3 py-2 font-pixel text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400 select-text"
               />
@@ -322,7 +322,7 @@ export const HUD: React.FC<HUDProps> = ({
             </form>
             <div className="mt-3 flex items-center justify-between gap-2 font-rajdhani text-xs">
               <span className={commandMessage.includes('ไม่รู้จัก') ? 'text-rose-300' : 'text-emerald-200'} aria-live="polite">
-                {commandMessage || (oneHitMode ? 'สถานะ: 1คิว เปิดอยู่' : 'คำสั่งที่ใช้ได้: 1คิว')}
+                {commandMessage || (oneHitMode ? 'สถานะ: 1คิว เปิดอยู่' : 'คำสั่งที่ใช้ได้: 1คิว · นค.')}
               </span>
               {oneHitMode && <span className="shrink-0 border border-emerald-400 px-1.5 py-1 font-pixel text-[8px] text-emerald-200">1คิว ON</span>}
             </div>
