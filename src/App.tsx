@@ -155,7 +155,7 @@ export default function App() {
   });
 
   const [dashCooldown, setDashCooldown] = useState<number>(0);
-  const [skillCooldowns, setSkillCooldowns] = useState<Record<1 | 2 | 3, number>>({ 1: 0, 2: 0, 3: 0 });
+  const [skillCooldowns, setSkillCooldowns] = useState<Record<1 | 2 | 3 | 4, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
   const [comboStep, setComboStep] = useState<number>(0);
   const [currentWave, setCurrentWave] = useState<number>(1);
   const [currentDungeonMap, setCurrentDungeonMap] = useState<DungeonMapId>('desert');
@@ -438,6 +438,43 @@ export default function App() {
         ctx.restore();
       }
     }
+
+    // Brief high-contrast screen slash for Ginzo's awakened fourth skill.
+    if (engine.ginzoUltimateFlashTimer > 0) {
+      const strength = Math.min(1, engine.ginzoUltimateFlashTimer / 0.34);
+      ctx.save();
+      ctx.globalAlpha = 0.08 + strength * 0.13;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const slashWidth = Math.max(7, canvas.width * 0.055) * (0.7 + strength);
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = slashWidth * 1.8;
+      ctx.globalAlpha = 0.82 * strength;
+      ctx.beginPath();
+      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
+      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#dc102f';
+      ctx.lineWidth = slashWidth;
+      ctx.globalAlpha = 0.98 * strength;
+      ctx.beginPath();
+      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
+      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fff7f7';
+      ctx.lineWidth = Math.max(2, slashWidth * 0.14);
+      ctx.globalAlpha = 0.96 * strength;
+      ctx.beginPath();
+      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
+      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.stroke();
+      ctx.restore();
+    }
   };
 
   // ----------------------------------------------------------------------
@@ -651,6 +688,7 @@ export default function App() {
         if (e.code === 'Digit1' || e.code === 'Numpad1') soundEngine.castSkillWithSound(engine.activeHeroId, 1, () => engine.castSkill(1));
         if (e.code === 'Digit2' || e.code === 'Numpad2') soundEngine.castSkillWithSound(engine.activeHeroId, 2, () => engine.castSkill(2));
         if (e.code === 'Digit3' || e.code === 'Numpad3') soundEngine.castSkillWithSound(engine.activeHeroId, 3, () => engine.castSkill(3));
+        if (e.code === 'Digit4' || e.code === 'Numpad4') soundEngine.castSkillWithSound(engine.activeHeroId, 4, () => engine.castSkill(4));
       }
     };
 
