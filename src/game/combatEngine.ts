@@ -44,8 +44,8 @@ import {
 } from './levelSystem';
 import {
   HERO_CONFIGS,
-  HERO_SKILLS,
-  GINZO_AWAKENED_SKILLS,
+  usesAwakenedKit,
+  getHeroSkills,
   INITIAL_WEAPONS,
   INITIAL_EQUIPMENT,
   DUNGEON_MAPS,
@@ -2001,6 +2001,11 @@ export class CombatEngine {
     this.playerCombat.pressM1();
   }
 
+  /** Ginzo Awakened and Bamdee use the same four active skills. */
+  private hasAwakenedKit(): boolean {
+    return usesAwakenedKit(this.activeHeroId, this.isGinzoEvolved);
+  }
+
   private castGinzoEvolvedSkill(
     slot: 1 | 2 | 3 | 4,
     pX: number,
@@ -2112,7 +2117,7 @@ export class CombatEngine {
       this.hitstopTimer = Math.max(this.hitstopTimer, 0.035);
 
       window.setTimeout(() => {
-        if (this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved || this.currentMode !== 'dungeon') return;
+        if (!this.hasAwakenedKit() || this.currentMode !== 'dungeon') return;
         const cx = this.playerX;
         const cz = this.playerZ;
         const threats = this.enemies.filter((enemy) => {
@@ -2152,7 +2157,7 @@ export class CombatEngine {
     for (let hit = 0; hit < 9; hit++) {
       const hitIndex = hit;
       window.setTimeout(() => {
-        if (this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved || this.currentMode !== 'dungeon') return;
+        if (!this.hasAwakenedKit() || this.currentMode !== 'dungeon') return;
 
         const finalCut = hitIndex === 8;
         const cx = this.playerX + Math.cos(angle) * (finalCut ? 1.25 : 0.85);
@@ -2213,9 +2218,7 @@ export class CombatEngine {
       return false;
     }
 
-    const heroSkills = this.activeHeroId === 'ginzo' && this.isGinzoEvolved
-      ? GINZO_AWAKENED_SKILLS
-      : HERO_SKILLS[this.activeHeroId];
+    const heroSkills = getHeroSkills(this.activeHeroId, this.isGinzoEvolved);
     if (!heroSkills) return false;
     const skillDef = heroSkills[slot - 1];
     if (!skillDef) return false;
@@ -2226,7 +2229,7 @@ export class CombatEngine {
 
     const heroId = this.activeHeroId;
     let angle = this.playerAimAngle;
-    if (heroId === 'ginzo' && this.isGinzoEvolved && slot === 4) {
+    if (this.hasAwakenedKit() && slot === 4) {
       const target = this.enemies
         .filter((enemy) => enemy.state !== 'dead')
         .sort((a, b) => Math.hypot(a.x - this.playerX, a.z - this.playerZ) - Math.hypot(b.x - this.playerX, b.z - this.playerZ))[0];
@@ -2240,7 +2243,7 @@ export class CombatEngine {
     // All skills share the same locked aim as their slash, projectile or cast VFX.
     this.beginDirectionalActionAnimation(slot, angle, slot === 4 ? 2.5 : slot === 3 ? 0.76 : 0.48);
 
-    if (heroId === 'ginzo' && this.isGinzoEvolved) {
+    if (this.hasAwakenedKit()) {
       this.castGinzoEvolvedSkill(slot, pX, pZ, angle, rawDamage);
     } else if (heroId === 'ginzo') {
       if (slot === 1) {
@@ -2493,7 +2496,7 @@ export class CombatEngine {
       const z = this.playerZ + Math.sin(swingAngle) * 1.1;
 
       // Hero-specific swing audio
-      if (this.activeHeroId === 'ginzo') {
+      if (this.activeHeroId === 'ginzo' || this.activeHeroId === 'bamdee') {
         soundEngine.playKatanaSlash();
       } else if (this.activeHeroId === 'quan') {
         soundEngine.playKiExplosion();
@@ -2503,7 +2506,7 @@ export class CombatEngine {
 
       this.spawnSlashVfx(x, z, swingAngle);
       this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
-      if (this.activeHeroId === 'ginzo' && this.isGinzoEvolved) {
+      if (this.hasAwakenedKit()) {
         const finisher = event.step === 2;
         this.arena.spawnKatanaArcVFX(x, z, swingAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
         this.arena.spawnKatanaArcVFX(x - Math.cos(swingAngle) * 0.45, z - Math.sin(swingAngle) * 0.45, swingAngle + 0.35, finisher ? 1.7 : 0.9, 0xfda4af);
@@ -3232,7 +3235,7 @@ export class CombatEngine {
       this.ginzoUltimateTimer = 0;
       return;
     }
-    if (this.currentMode !== 'dungeon' || this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved) {
+    if (this.currentMode !== 'dungeon' || !this.hasAwakenedKit()) {
       this.ginzoUltimateSequence = null;
       this.ginzoUltimatePath = null;
       this.ginzoUltimateTimer = 0;
