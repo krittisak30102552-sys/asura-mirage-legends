@@ -54,7 +54,7 @@ class SoundEngine {
     // The YouTube player owns soundtrack playback and stops when its panel is closed.
   }
 
-  public castSkillWithSound(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3, action: () => boolean) {
+  public castSkillWithSound(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3 | 4, action: () => boolean) {
     this.suppressDuplicateSkillSfx = true;
     let succeeded = false;
     try { succeeded = action(); } finally { this.suppressDuplicateSkillSfx = false; }
@@ -62,11 +62,12 @@ class SoundEngine {
     return succeeded;
   }
 
-  public playSkillCast(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3) {
+  public playSkillCast(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3 | 4) {
     if (heroId === 'ginzo') {
       if (slot === 1) { this.playSwordSlash(1); this.playDimensionalSlash(); }
       else if (slot === 2) { this.playSwordSlash(2); this.playSwordSheath(); }
-      else { this.playSwordSheath(); window.setTimeout(() => this.playDimensionalSlash(), 55); }
+      else if (slot === 3) { this.playSwordSheath(); window.setTimeout(() => this.playDimensionalSlash(), 55); }
+      else { this.playBossGong(); this.playSwordSlash(3); window.setTimeout(() => this.playDimensionalSlash(), 110); }
       return;
     }
     if (heroId === 'quan') {
