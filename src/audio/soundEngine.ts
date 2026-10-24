@@ -7,10 +7,6 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
   private masterGain: GainNode | null = null;
-  private musicGain: GainNode | null = null;
-  private musicTimer: number | null = null;
-  private musicMode: 'lobby' | 'dungeon' | 'boss' | null = null;
-  private musicStep = 0;
   private suppressDuplicateSkillSfx = false;
 
   constructor() {
@@ -48,69 +44,14 @@ class SoundEngine {
     return this.isMuted;
   }
 
-  // All music and SFX are synthesized in code; no recordings or external assets are loaded.
-  public startMusic(mode: 'lobby' | 'dungeon' | 'boss') {
-    this.initContext();
-    if (!this.ctx || !this.masterGain) return;
-    if (this.musicMode === mode && this.musicTimer !== null) return;
-    if (this.musicTimer !== null) window.clearTimeout(this.musicTimer);
-    this.musicMode = mode;
-    this.musicStep = 0;
-    if (!this.musicGain) {
-      this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.value = 0.58;
-      this.musicGain.connect(this.masterGain);
-    }
-    this.scheduleMusicStep();
+  // The requested soundtrack is streamed through the official YouTube embed in the UI.
+  // Do not run the old procedural melody underneath it.
+  public startMusic(_mode: 'lobby' | 'dungeon' | 'boss') {
+    // Scene changes keep the same selected soundtrack playing.
   }
 
   public stopMusic() {
-    if (this.musicTimer !== null) window.clearTimeout(this.musicTimer);
-    this.musicTimer = null;
-    this.musicMode = null;
-  }
-
-  private scheduleMusicStep() {
-    if (!this.ctx || !this.musicGain || !this.musicMode || this.isMuted) {
-      this.musicTimer = window.setTimeout(() => this.scheduleMusicStep(), 280);
-      return;
-    }
-    const mode = this.musicMode;
-    const patterns: Record<'lobby' | 'dungeon' | 'boss', number[]> = {
-      lobby:   [0, 2, 3, 5, 3, 2, 1, 0, 2, 3, 5, 7, 5, 3, 2, 1],
-      dungeon: [0, 2, 3, 5, 4, 3, 2, 0, 2, 3, 5, 7, 5, 4, 3, 2],
-      boss:    [0, 3, 5, 7, 5, 3, 2, 0, 3, 5, 7, 10, 7, 5, 3, 2],
-    };
-    const scale = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24];
-    const beatMs = mode === 'lobby' ? 610 : mode === 'boss' ? 350 : 445;
-    const step = this.musicStep % patterns[mode].length;
-    const semitone = scale[patterns[mode][step]];
-    const root = mode === 'boss' ? 146.83 : mode === 'dungeon' ? 164.81 : 196;
-    const freq = root * Math.pow(2, semitone / 12);
-    this.playMusicTone(freq, mode === 'lobby' ? 0.34 : 0.25, mode === 'lobby' ? 0.085 : 0.10, mode === 'boss' ? 'triangle' : 'sine');
-    if (step % 4 === 0) {
-      this.playMusicTone(root / 2, mode === 'boss' ? 0.27 : 0.32, mode === 'boss' ? 0.12 : 0.06, 'triangle');
-      if (mode !== 'lobby') this.playMusicTone(freq * 2, 0.12, 0.025, 'sine');
-    }
-    if (mode === 'boss' && step % 2 === 0) this.playMusicTone(root / 2, 0.19, 0.055, 'sawtooth');
-    this.musicStep++;
-    this.musicTimer = window.setTimeout(() => this.scheduleMusicStep(), beatMs);
-  }
-
-  private playMusicTone(frequency: number, duration: number, volume: number, waveform: OscillatorType) {
-    if (!this.ctx || !this.musicGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    const oscillator = this.ctx.createOscillator();
-    const envelope = this.ctx.createGain();
-    oscillator.type = waveform;
-    oscillator.frequency.setValueAtTime(frequency, now);
-    envelope.gain.setValueAtTime(0.0001, now);
-    envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), now + 0.02);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    oscillator.connect(envelope);
-    envelope.connect(this.musicGain);
-    oscillator.start(now);
-    oscillator.stop(now + duration + 0.025);
+    // The YouTube player owns soundtrack playback and stops when its panel is closed.
   }
 
   public castSkillWithSound(heroId: 'ginzo' | 'quan' | 'katherine', slot: 1 | 2 | 3, action: () => boolean) {
