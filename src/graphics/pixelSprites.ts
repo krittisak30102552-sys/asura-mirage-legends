@@ -48,7 +48,8 @@ function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): T
 export function generateHeroTexture(
   heroId: HeroId,
   state: HeroAnimationState,
-  frameIndex: number = 0
+  frameIndex: number = 0,
+  isGinzoEvolved: boolean = false
 ): THREE.CanvasTexture {
   const W = 256;
   const H = 320;
@@ -59,6 +60,7 @@ export function generateHeroTexture(
   ctx.imageSmoothingEnabled = true;
 
   const f = frameIndex % 4;
+  const awakenedGinzo = heroId === 'ginzo' && isGinzoEvolved;
   const cx = 128;
   let cy = 175; // ground/center reference
 
@@ -145,6 +147,38 @@ export function generateHeroTexture(
       ctx.fill();
     }
 
+    if (awakenedGinzo) {
+      // Golden awakening halo and speed-rune streaks: drawn behind the ronin silhouette.
+      const awakeningAura = ctx.createRadialGradient(cx, cy, 26, cx, cy, 124);
+      awakeningAura.addColorStop(0, 'rgba(253, 230, 138, 0.25)');
+      awakeningAura.addColorStop(0.56, 'rgba(251, 191, 36, 0.16)');
+      awakeningAura.addColorStop(1, 'rgba(217, 119, 6, 0)');
+      ctx.fillStyle = awakeningAura;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 124, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      ctx.strokeStyle = '#fde68a';
+      ctx.globalAlpha = state.startsWith('attack') || state === 'dash' ? 0.95 : 0.68;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([9, 7]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 4, 62, 108, -0.18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let ray = 0; ray < 10; ray++) {
+        const a = (ray / 10) * Math.PI * 2 + f * 0.09;
+        const inner = 79 + (ray % 3) * 5;
+        const outer = inner + 12 + (ray % 2) * 7;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+        ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Legs: Black pleated Hakama with smooth fabric folds
     const leftLegX = cx - 18 + legCycle * 14;
     const rightLegX = cx + 18 - legCycle * 14;
@@ -198,14 +232,14 @@ export function generateHeroTexture(
     ctx.stroke();
 
     // Hair ribbon
-    drawCircle(cx - 16, cy - 40, 5, '#ef4444', '#7f1d1d', 1.5);
+    drawCircle(cx - 16, cy - 40, 5, awakenedGinzo ? '#facc15' : '#ef4444', awakenedGinzo ? '#fef3c7' : '#7f1d1d', 1.5);
     ctx.restore();
 
     // Torso: Crimson Red Haori Coat with White Kimono V-neck
     const haoriGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
-    haoriGrad.addColorStop(0, '#ef4444');
-    haoriGrad.addColorStop(0.4, '#dc2626');
-    haoriGrad.addColorStop(1, '#991b1b');
+    haoriGrad.addColorStop(0, awakenedGinzo ? '#fef3c7' : '#ef4444');
+    haoriGrad.addColorStop(0.4, awakenedGinzo ? '#f59e0b' : '#dc2626');
+    haoriGrad.addColorStop(1, awakenedGinzo ? '#92400e' : '#991b1b');
 
     // Haori Back / Body
     fillPoly([
@@ -213,7 +247,20 @@ export function generateHeroTexture(
       [cx + 32, cy - 20],
       [cx + 28, cy + 48],
       [cx - 28, cy + 48],
-    ], haoriGrad, '#09090b', 2.5);
+    ], haoriGrad, awakenedGinzo ? '#fde68a' : '#09090b', awakenedGinzo ? 3.5 : 2.5);
+
+    if (awakenedGinzo) {
+      ctx.save();
+      ctx.strokeStyle = '#fef3c7';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - 25, cy - 13);
+      ctx.lineTo(cx - 15, cy + 26);
+      ctx.moveTo(cx + 25, cy - 13);
+      ctx.lineTo(cx + 15, cy + 26);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Inner White Kimono V-Neck
     fillPoly([
@@ -361,7 +408,7 @@ export function generateHeroTexture(
     bladeGrad.addColorStop(0, '#f8fafc');
     bladeGrad.addColorStop(0.5, '#ffffff');
     bladeGrad.addColorStop(0.8, '#cbd5e1');
-    bladeGrad.addColorStop(1, '#67e8f9');
+    bladeGrad.addColorStop(1, awakenedGinzo ? '#facc15' : '#67e8f9');
 
     ctx.beginPath();
     ctx.moveTo(2, -2);
