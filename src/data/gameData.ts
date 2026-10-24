@@ -175,7 +175,7 @@ export const HERO_SKILLS: Record<HeroId, [ActiveSkillDef, ActiveSkillDef, Active
   ],
 };
 
-export const GINZO_AWAKENED_SKILLS: [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef] = [
+export const GINZO_AWAKENED_SKILLS: [ActiveSkillDef, ActiveSkillDef, ActiveSkillDef, ActiveSkillDef] = [
   {
     id: 'ginzo_shooting_stars',
     slot: 1,
@@ -211,6 +211,18 @@ export const GINZO_AWAKENED_SKILLS: [ActiveSkillDef, ActiveSkillDef, ActiveSkill
     badgeBg: 'bg-rose-500/20 border-rose-300/60 text-rose-200',
     cooldown: 13.5,
     damageMultiplier: 5.8,
+  },
+  {
+    id: 'ginzo_crimson_severance',
+    slot: 4,
+    name: 'Hiken – Crimson Severance',
+    nameTh: 'พิฆาตโลหิต',
+    descTh: 'อัลติเมตอิไอพุ่งทะลวง ฟันรัวเป็นชุดพร้อมรอยดาบสีชาด ก่อนปิดฉากด้วยคมดาบยักษ์ สร้างความเสียหายมหาศาลแก่บอส',
+    icon: '🩸',
+    color: '#ef4444',
+    badgeBg: 'bg-red-500/20 border-red-300/60 text-red-200',
+    cooldown: 24.0,
+    damageMultiplier: 2.5,
   },
 ];
 
