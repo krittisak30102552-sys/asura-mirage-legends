@@ -45,6 +45,7 @@ import {
 import {
   HERO_CONFIGS,
   HERO_SKILLS,
+  GINZO_AWAKENED_SKILLS,
   INITIAL_WEAPONS,
   INITIAL_EQUIPMENT,
   DUNGEON_MAPS,
@@ -167,6 +168,7 @@ export class CombatEngine {
 
   // Hero & Inventory
   public activeHeroId: HeroId = 'ginzo';
+  public isGinzoEvolved: boolean = false;
   public weapons: WeaponItem[] = [INITIAL_WEAPONS.find((weapon) => weapon.id === 'training_katana') || INITIAL_WEAPONS[0]];
   public equippedWeaponId: string = 'training_katana';
 
@@ -371,7 +373,20 @@ export class CombatEngine {
   }
 
   public recalcHeroStats() {
-    const heroCfg = HERO_CONFIGS[this.activeHeroId] || HERO_CONFIGS.ginzo;
+    const baseHeroCfg = HERO_CONFIGS[this.activeHeroId] || HERO_CONFIGS.ginzo;
+    const awakenedGinzo = this.activeHeroId === 'ginzo' && this.isGinzoEvolved;
+    const heroCfg = awakenedGinzo
+      ? {
+          ...baseHeroCfg,
+          maxHp: baseHeroCfg.maxHp + 15,
+          maxShield: baseHeroCfg.maxShield + 15,
+          attackPower: Math.round(baseHeroCfg.attackPower * 1.22),
+          attackSpeed: Number((baseHeroCfg.attackSpeed * 1.12).toFixed(2)),
+          moveSpeed: Number((baseHeroCfg.moveSpeed + 0.5).toFixed(2)),
+          critChance: Math.min(0.75, baseHeroCfg.critChance + 0.08),
+          critMultiplier: baseHeroCfg.critMultiplier + 0.2,
+        }
+      : baseHeroCfg;
     const weapon = this.weapons.find((w) => w.id === this.equippedWeaponId);
 
     const bonusAtk = weapon ? weapon.attackBonus : 0;
@@ -606,6 +621,24 @@ export class CombatEngine {
     if (this.onStateChange) this.onStateChange();
   }
 
+  public setGinzoEvolved(enabled: boolean) {
+    this.isGinzoEvolved = enabled;
+    if (this.activeHeroId === 'ginzo') {
+      this.recalcHeroStats();
+      this.playerStats.hp = this.playerStats.maxHp;
+      this.playerStats.shield = this.playerStats.maxShield;
+      this.updateHeroTexture();
+      if (enabled) {
+        this.arena.spawnSkillBurst(this.playerX, 1.2, this.playerZ, 0xfbbf24, 26, 4.2, 0.85);
+        this.arena.addCameraShake(0.24);
+        soundEngine.playBossGong();
+      } else {
+        this.arena.spawnSkillBurst(this.playerX, 0.9, this.playerZ, 0xf1f5f9, 10, 2.3, 0.38);
+      }
+    }
+    if (this.onStateChange) this.onStateChange();
+  }
+
   public addRelic(relic: RelicItem) {
     this.relics.push(relic);
     this.recalcHeroStats();
@@ -688,7 +721,7 @@ export class CombatEngine {
   private initHero() {
     const geo = new THREE.PlaneGeometry(2.4, 2.8);
     const mat = new THREE.MeshBasicMaterial({
-      map: generateHeroTexture(this.activeHeroId, 'idle', 0),
+      map: generateHeroTexture(this.activeHeroId, 'idle', 0, this.isGinzoEvolved),
       transparent: true,
       alphaTest: 0.05,
       side: THREE.DoubleSide,
@@ -716,7 +749,8 @@ export class CombatEngine {
     (this.heroMesh.material as THREE.MeshBasicMaterial).map = generateHeroTexture(
       this.activeHeroId,
       this.animState,
-      this.animFrame
+      this.animFrame,
+      this.isGinzoEvolved
     );
   }
 
@@ -1917,6 +1951,167 @@ export class CombatEngine {
     this.playerCombat.pressM1();
   }
 
+  private castGinzoEvolvedSkill(
+    slot: 1 | 2 | 3,
+    pX: number,
+    pZ: number,
+    angle: number,
+    rawDamage: number
+  ) {
+    if (slot === 1) {
+      // Shooting Stars: dash through a line of enemies with several chained sword trails.
+      const dashDist = 8.5;
+      const targetX = THREE.MathUtils.clamp(
+        pX + Math.cos(angle) * dashDist,
+        this.arena.bounds.minX + 1.2,
+        this.arena.bounds.maxX - 1.2
+      );
+      const targetZ = THREE.MathUtils.clamp(
+        pZ + Math.sin(angle) * dashDist,
+        this.arena.bounds.minZ + 1.2,
+        this.arena.bounds.maxZ - 1.2
+      );
+      const dx = targetX - pX;
+      const dz = targetZ - pZ;
+      const lengthSq = Math.max(0.001, dx * dx + dz * dz);
+
+      this.arena.spawnGroundTelegraph(pX, pZ, 1.2, 0.12, 0xfacc15, 'line', angle, dashDist);
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 7;
+        const trailX = pX + dx * t;
+        const trailZ = pZ + dz * t;
+        const offset = i % 2 ? 0.22 : -0.22;
+        this.arena.spawnKatanaArcVFX(trailX, trailZ, angle + offset, 1.05 + t * 0.35, i % 2 ? 0xfef3c7 : 0xfacc15);
+      }
+      this.arena.spawnDimensionalSlashVFX(targetX, targetZ, angle);
+      this.arena.addCameraShake(0.32);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.065);
+      this.playerX = targetX;
+      this.playerZ = targetZ;
+      this.isInvulnerable = true;
+      this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.32);
+
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'dead') continue;
+        const t = THREE.MathUtils.clamp(
+          ((enemy.x - pX) * dx + (enemy.z - pZ) * dz) / lengthSq,
+          0,
+          1
+        );
+        const projectedX = pX + t * dx;
+        const projectedZ = pZ + t * dz;
+        const distance = Math.hypot(enemy.x - projectedX, enemy.z - projectedZ);
+        if (distance > 2.0) continue;
+        this.applyStatusEffect(enemy, 'stun', 0.85);
+        this.applyStatusEffect(enemy, 'bleed', 3.2, 20);
+        this.damageEnemy(enemy, Math.round(rawDamage), Math.random() < this.playerStats.critChance + 0.12, true);
+        enemy.vx += Math.cos(angle) * 13;
+        enemy.vz += Math.sin(angle) * 13;
+      }
+      soundEngine.playKatanaSlash();
+      return;
+    }
+
+    if (slot === 2) {
+      // Tsubame Gaeshi: guarded stance, then a counter only if a threat is within the blade's reach.
+      this.arena.spawnKatanaArcVFX(pX, pZ, angle, 1.5, 0xa5f3fc);
+      this.arena.spawnGroundTelegraph(pX, pZ, 2.0, 0.1, 0xa5f3fc, 'line', angle, 3.2);
+      this.arena.addCameraShake(0.12);
+      this.isInvulnerable = true;
+      this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.72);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.035);
+
+      window.setTimeout(() => {
+        if (this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved || this.currentMode !== 'dungeon') return;
+        const cx = this.playerX;
+        const cz = this.playerZ;
+        const threats = this.enemies.filter((enemy) => {
+          if (enemy.state === 'dead') return false;
+          const dx = enemy.x - cx;
+          const dz = enemy.z - cz;
+          const distance = Math.hypot(dx, dz);
+          const enemyAngle = Math.atan2(dz, dx);
+          let diff = Math.abs(enemyAngle - angle);
+          while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+          return distance <= 5.2 && (diff <= 1.45 || distance <= 1.6);
+        });
+        if (threats.length === 0) return;
+
+        this.arena.spawnKatanaArcVFX(cx, cz, angle - 0.42, 1.8, 0xfef3c7);
+        this.arena.spawnKatanaArcVFX(cx, cz, angle + 0.42, 1.8, 0xfda4af);
+        this.arena.spawnDimensionalSlashVFX(cx + Math.cos(angle) * 1.3, cz + Math.sin(angle) * 1.3, angle);
+        for (const enemy of threats) {
+          this.applyStatusEffect(enemy, 'stun', 1.0);
+          this.applyStatusEffect(enemy, 'bleed', 2.5, 16);
+          this.damageEnemy(enemy, Math.round(rawDamage * 1.35), Math.random() < this.playerStats.critChance + 0.1, true);
+          enemy.vx += Math.cos(angle) * 10;
+          enemy.vz += Math.sin(angle) * 10;
+        }
+        this.arena.addCameraShake(0.36);
+        this.hitstopTimer = Math.max(this.hitstopTimer, 0.075);
+        soundEngine.playKatanaSlash();
+        if (this.onStateChange) this.onStateChange();
+      }, 190);
+      return;
+    }
+
+    // Heirloom Katana: eight fast cuts into a dramatic ninth finishing slash.
+    for (let hit = 0; hit < 9; hit++) {
+      const hitIndex = hit;
+      window.setTimeout(() => {
+        if (this.activeHeroId !== 'ginzo' || !this.isGinzoEvolved || this.currentMode !== 'dungeon') return;
+
+        const finalCut = hitIndex === 8;
+        const cx = this.playerX + Math.cos(angle) * (finalCut ? 1.25 : 0.85);
+        const cz = this.playerZ + Math.sin(angle) * (finalCut ? 1.25 : 0.85);
+        const slashAngle = angle + (finalCut ? 0 : (hitIndex % 2 === 0 ? 0.26 : -0.26));
+        this.arena.spawnKatanaArcVFX(
+          cx,
+          cz,
+          slashAngle,
+          finalCut ? 2.25 : 0.92 + hitIndex * 0.055,
+          finalCut ? 0xfacc15 : (hitIndex % 2 === 0 ? 0xfef3c7 : 0xfda4af)
+        );
+
+        if (finalCut) {
+          this.arena.spawnDimensionalSlashVFX(cx + Math.cos(angle) * 1.2, cz + Math.sin(angle) * 1.2, angle);
+          this.arena.spawnSkillBurst(cx, 1.0, cz, 0xfbbf24, 28, 5.5, 0.72);
+          this.arena.addCameraShake(0.48);
+          this.hitstopTimer = Math.max(this.hitstopTimer, 0.11);
+          soundEngine.playBossGong();
+        } else {
+          this.hitstopTimer = Math.max(this.hitstopTimer, 0.018);
+        }
+
+        for (const enemy of this.enemies) {
+          if (enemy.state === 'dead') continue;
+          const dx = enemy.x - this.playerX;
+          const dz = enemy.z - this.playerZ;
+          const distance = Math.hypot(dx, dz);
+          if (distance > (finalCut ? 5.7 : 4.8)) continue;
+          const enemyAngle = Math.atan2(dz, dx);
+          let diff = Math.abs(enemyAngle - angle);
+          while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+          if (!finalCut && diff > 1.0 && distance > 1.35) continue;
+          if (finalCut && diff > 1.35 && distance > 1.6) continue;
+
+          this.damageEnemy(
+            enemy,
+            Math.max(1, Math.round(rawDamage * (finalCut ? 1.15 : 0.14))),
+            finalCut && Math.random() < this.playerStats.critChance + 0.15,
+            true
+          );
+          if (finalCut) {
+            this.applyStatusEffect(enemy, 'bleed', 3.5, 24);
+            enemy.vx += Math.cos(angle) * 12;
+            enemy.vz += Math.sin(angle) * 12;
+          }
+        }
+        if (this.onStateChange) this.onStateChange();
+      }, hitIndex * 78);
+    }
+  }
+
   public castSkill(slot: 1 | 2 | 3): boolean {
     if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.playerStats.hp <= 0) {
       return false;
@@ -1925,7 +2120,9 @@ export class CombatEngine {
       return false;
     }
 
-    const heroSkills = HERO_SKILLS[this.activeHeroId];
+    const heroSkills = this.activeHeroId === 'ginzo' && this.isGinzoEvolved
+      ? GINZO_AWAKENED_SKILLS
+      : HERO_SKILLS[this.activeHeroId];
     if (!heroSkills) return false;
     const skillDef = heroSkills[slot - 1];
     if (!skillDef) return false;
@@ -1940,7 +2137,9 @@ export class CombatEngine {
     const pZ = this.playerZ;
     const rawDamage = this.playerStats.attackPower * skillDef.damageMultiplier;
 
-    if (heroId === 'ginzo') {
+    if (heroId === 'ginzo' && this.isGinzoEvolved) {
+      this.castGinzoEvolvedSkill(slot, pX, pZ, angle, rawDamage);
+    } else if (heroId === 'ginzo') {
       if (slot === 1) {
         // Ginzo 1: Dimensional Rift (คมดาบตัดมิติ)
         soundEngine.playKatanaSlash();
@@ -2197,6 +2396,20 @@ export class CombatEngine {
 
       this.spawnSlashVfx(x, z, this.playerAimAngle);
       this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, this.playerAimAngle);
+      if (this.activeHeroId === 'ginzo' && this.isGinzoEvolved) {
+        const finisher = event.step === 2;
+        this.arena.spawnKatanaArcVFX(x, z, this.playerAimAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
+        this.arena.spawnKatanaArcVFX(x - Math.cos(this.playerAimAngle) * 0.45, z - Math.sin(this.playerAimAngle) * 0.45, this.playerAimAngle + 0.35, finisher ? 1.7 : 0.9, 0xfda4af);
+        if (finisher) {
+          this.arena.spawnDimensionalSlashVFX(x + Math.cos(this.playerAimAngle) * 1.2, z + Math.sin(this.playerAimAngle) * 1.2, this.playerAimAngle);
+          this.arena.spawnSkillBurst(x, 1.0, z, 0xfbbf24, 16, 3.6, 0.42);
+          this.arena.addCameraShake(0.34);
+          this.hitstopTimer = Math.max(this.hitstopTimer, 0.085);
+        } else {
+          this.arena.addCameraShake(0.1);
+          this.hitstopTimer = Math.max(this.hitstopTimer, 0.025);
+        }
+      }
     } else if (event.type === 'hit') {
       if (event.crit) this.arena.addCameraShake(0.2);
     }
