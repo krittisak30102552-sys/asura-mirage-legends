@@ -175,7 +175,7 @@ export const HUD: React.FC<HUDProps> = ({
 }) => {
   // Avoid stale lobby targets reopening the gate after the dungeon has started.
   const activeLobbyInteractable = mode === 'lobby' ? nearbyInteractable : null;
-  const activeDungeonInteractable = mode === 'playing' ? nearbyDungeonInteractable : null;
+  const activeDungeonInteractable = mode === 'dungeon' ? nearbyDungeonInteractable : null;
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
@@ -826,7 +826,7 @@ export const HUD: React.FC<HUDProps> = ({
               if (mode === 'lobby') {
                 if (activeLobbyInteractable === 'trainer') onOpenTrainer();
                 else if (activeLobbyInteractable === 'gate') onOpenGate();
-              } else if (mode === 'playing') {
+              } else if (mode === 'dungeon') {
                 onInteract?.();
               }
             }}
