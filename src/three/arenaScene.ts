@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { DungeonMapId, DungeonRoomId, DungeonRoomType } from '../types/game';
+import { DungeonMapId, DungeonRoomId, DungeonRoomType, HeroId } from '../types/game';
 import { generateHappyTexture, generateHitFlashTexture, generateShockwaveRingTexture, generateSparkTexture } from '../graphics/pixelSprites';
 import { generateChestTexture, generateDistortedWallTexture } from '../graphics/biomeSprites';
 import type { ShopOfferItem } from '../game/levelSystem';
@@ -3602,8 +3602,8 @@ export class ArenaScene {
    * Hero-Specific 3D Hybrid Combo VFX
    * Renders the distinctive Three.js 3D layers matching user prompt specifications
    */
-  public spawnHeroComboVFX(heroId: 'ginzo' | 'quan' | 'katherine', step: number, x: number, z: number, angle: number) {
-    if (heroId === 'ginzo') {
+  public spawnHeroComboVFX(heroId: HeroId, step: number, x: number, z: number, angle: number) {
+    if (heroId === 'ginzo' || heroId === 'bamdee') {
       if (step === 1) {
         this.spawnKatanaArcVFX(x, z, angle, 0.9, 0xe2e8f0);
         this.spawnSkillBurst(x, 1.0, z, 0xf1f5f9, 5, 2.8, 0.2);
