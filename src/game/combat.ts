@@ -22,7 +22,7 @@ export interface Owner {
   pos: Vec2;
   facing: 1 | -1;
   aim: Vec2;
-  heroId?: 'ginzo' | 'quan' | 'katherine';
+  heroId?: 'ginzo' | 'quan' | 'katherine' | 'bamdee';
   stats: Stats;
   heal(amount: number): void;
   moveBy(dx: number, dy: number): void; // ใช้ตอนพุ่ง (ควรเช็กชนกำแพงในนี้)
@@ -311,7 +311,7 @@ export class PlayerCombat {
         if (this.t >= def.windup) {
           this.m1 = 'active'; this.t = 0; this.hitSet.clear();
           const o = this.owner;
-          const hero = o.heroId || 'ginzo';
+          const hero = o.heroId === 'bamdee' ? 'ginzo' : (o.heroId || 'ginzo');
           const heavy = this.step === COMBO.length - 1;
           const aimAngle = Math.atan2(o.aim.y, o.aim.x);
 
