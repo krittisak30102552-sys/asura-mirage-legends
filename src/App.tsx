@@ -167,6 +167,8 @@ export default function App() {
   // (Directly matching the user's uploaded gameplay screenshot!)
   // ----------------------------------------------------------------------
   const renderOverlayVfx = (arena: ArenaScene, engine: CombatEngine) => {
+    const chargingUltimate = engine.ginzoUltimateTimer > 0.4 && engine.ginzoUltimateTimer < 1.05;
+    arena.renderer.domElement.style.filter = chargingUltimate ? 'grayscale(1) contrast(1.35) brightness(1.1)' : '';
     const canvas = damageCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -437,6 +439,20 @@ export default function App() {
 
         ctx.restore();
       }
+    }
+
+    // Dark vignette builds tension during the last part of the ultimate charge.
+    if (chargingUltimate) {
+      const vignette = ctx.createRadialGradient(
+        halfW, halfH, Math.min(canvas.width, canvas.height) * 0.18,
+        halfW, halfH, Math.max(canvas.width, canvas.height) * 0.72
+      );
+      vignette.addColorStop(0, 'rgba(0,0,0,0)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.58)');
+      ctx.save();
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
     }
 
     // Brief high-contrast screen slash for Ginzo's awakened fourth skill.
