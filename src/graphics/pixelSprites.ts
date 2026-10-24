@@ -772,6 +772,12 @@ export function generateHeroTexture(
     ctx.lineTo(cx - 8, cy + 6);
     ctx.stroke();
 
+    // Head, hair and hat rotate together; the wide robe follows with a slight delay.
+    ctx.save();
+    ctx.translate(cx, cy - 65);
+    ctx.rotate(headTilt);
+    ctx.translate(-cx, -(cy - 65));
+
     // Flowing Golden-Blonde Hair (Behind Head & Shoulders)
     const blondeGrad = ctx.createLinearGradient(cx - 45, cy - 70, cx + 45, cy + 20);
     blondeGrad.addColorStop(0, '#fef08a');
@@ -876,21 +882,18 @@ export function generateHeroTexture(
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
-    // Head and hat lag slightly behind the robe movement.
-    ctx.save();
-    ctx.translate(cx, cy - 65);
-    ctx.rotate(headTilt);
-    ctx.translate(-cx, -(cy - 65));
+    ctx.restore();
+
+    // Left arm swings naturally from the shoulder, with a small delayed wrist movement.
+    const leftArmSway = Math.sin(phase + 0.8) * (isAttackingPose ? 5 : 3.5);
     const staffX = cx + 38 + Math.sin(phase + 0.25) * 4.2;
     fillPoly([
       [cx - 20, cy - 18],
-      [cx - 34, cy + 4],
-      [cx - 20, cy + 18],
+      [cx - 34 + leftArmSway, cy + 4],
+      [cx - 20 + leftArmSway, cy + 18],
       [cx - 12, cy + 6],
     ], robeGrad, '#09090b', 2);
-    drawCircle(cx - 22, cy + 18, 6, '#ffedd5', '#d97706', 1.5);
-
-    ctx.restore();
+    drawCircle(cx - 22 + leftArmSway, cy + 18 + Math.sin(phase + 0.5) * 2, 6, '#ffedd5', '#d97706', 1.5);
 
     // Right Arm holding Starlight Staff
     fillPoly([
@@ -904,6 +907,7 @@ export function generateHeroTexture(
     // STARLIGHT ARCHMAGE STAFF
     ctx.save();
     ctx.translate(staffX, cy);
+    ctx.rotate(Math.sin(phase + 0.3) * (isAttackingPose ? 0.2 : 0.1));
 
     // Shaft: Polished Ebony with Gold Rings
     ctx.strokeStyle = '#1e1b4b';
