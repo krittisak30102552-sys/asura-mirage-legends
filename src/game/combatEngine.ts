@@ -2003,7 +2003,7 @@ export class CombatEngine {
     this.playerCombat.pressM1();
   }
 
-  /** Ginzo Awakened and Bamdee use the same four active skills. */
+  /** Ginzo Awakened uses four skills; Bamdee can cast only Crimson Severance. */
   private hasAwakenedKit(): boolean {
     return usesAwakenedKit(this.activeHeroId, this.isGinzoEvolved);
   }
@@ -2222,7 +2222,9 @@ export class CombatEngine {
 
     const heroSkills = getHeroSkills(this.activeHeroId, this.isGinzoEvolved);
     if (!heroSkills) return false;
-    const skillDef = heroSkills[slot - 1];
+    const skillDef = this.activeHeroId === 'bamdee'
+      ? heroSkills.find((skill) => skill.slot === slot)
+      : heroSkills[slot - 1];
     if (!skillDef) return false;
 
     // Set cooldown (accounting for cooldown reduction stat)

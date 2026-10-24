@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.0';
+export const UPDATE_VERSION = '1.1.1';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -38,19 +38,19 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-emerald-300"><Plus size={15} /> เพิ่มเข้ามา</h3>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
                 <li className="flex gap-2"><span className="text-emerald-300">•</span><span><strong>Bamdee Vivo</strong> ตัวละครนักดาบใหม่ ปลดล็อกได้ฟรี พร้อมรูปลักษณ์โทนสี Vivo</span></li>
-                <li className="flex gap-2"><span className="text-emerald-300">•</span><span>ใช้ชุดสกิลร่างตื่น 4 ช่องของ Ginzo รวม <strong>Hiken – Crimson Severance (พิฆาตโลหิต)</strong></span></li>
+                <li className="flex gap-2"><span className="text-emerald-300">•</span><span>Bamdee มีสกิลเพียงช่องเดียว คือ <strong>Hiken – Crimson Severance (พิฆาตโลหิต)</strong> ในช่อง 4 ตามไฟล์ต้นฉบับ</span></li>
               </ul>
             </section>
             <section className="rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4">
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-sky-300"><Wrench size={15} /> ปรับปรุง</h3>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
-                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>HUD แสดงชุดสกิลและปุ่มโจมตีของ Bamdee ให้ถูกต้อง</span></li>
-                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เชื่อมคอมโบดาบ เอฟเฟกต์ตัวละคร และเสียงสกิลให้ใช้แนวทางเดียวกับ Ginzo Awakened</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>HUD ของ Bamdee แสดงเฉพาะสกิลพิฆาตโลหิตหนึ่งสกิล</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>คงเอฟเฟกต์และระบบต่อสู้สำหรับ Hiken – Crimson Severance โดยไม่เปิดสกิลอื่นของ Ginzo ให้ Bamdee</span></li>
               </ul>
             </section>
             <section className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-zinc-300"><Trash2 size={15} /> นำออก</h3>
-              <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-emerald-300" /> ไม่มีการลบตัวละครหรือระบบเดิมในแพตช์นี้</p>
+              <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-emerald-300" /> นำสกิลอื่นของ Ginzo อีก 3 ช่องออกจาก Bamdee เหลือเฉพาะ Hiken – Crimson Severance</p>
             </section>
           </div>
           <button type="button" onClick={onClose} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-3 font-pixel text-[10px] text-zinc-950 shadow-lg shadow-cyan-900/30 transition hover:brightness-110 active:scale-[0.99]">
