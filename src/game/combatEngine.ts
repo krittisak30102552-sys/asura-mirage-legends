@@ -2173,7 +2173,7 @@ export class CombatEngine {
     const rawDamage = this.playerStats.attackPower * skillDef.damageMultiplier;
 
     // All skills share the same locked aim as their slash, projectile or cast VFX.
-    this.beginDirectionalActionAnimation(slot, angle, slot === 3 ? 0.6 : 0.48);
+    this.beginDirectionalActionAnimation(slot, angle, slot === 3 ? 0.76 : 0.48);
 
     if (heroId === 'ginzo' && this.isGinzoEvolved) {
       this.castGinzoEvolvedSkill(slot, pX, pZ, angle, rawDamage);
