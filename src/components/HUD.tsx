@@ -768,7 +768,7 @@ export const HUD: React.FC<HUDProps> = ({
                       <div
                         className="absolute inset-0 bg-zinc-950/85 flex items-center justify-center text-[10px] sm:text-xs font-pixel text-amber-300 font-bold"
                         style={{
-                          clipPath: `polygon(0 0, 100% 0, 100% ${100 - (cd / skill.cooldown) * 100}%, 0 ${100 - (cd / skill.cooldown) * 100}%)`,
+                          clipPath: `polygon(0 0, 100% 0, 100% ${100 - Math.min(100, Math.max(0, (cd / skill.cooldown) * 100))}%, 0 ${100 - Math.min(100, Math.max(0, (cd / skill.cooldown) * 100))}%)`,
                         }}
                       >
                         {cd.toFixed(1)}
