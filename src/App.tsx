@@ -45,6 +45,26 @@ import { ChestRewardModal } from './components/ChestRewardModal';
 import { levelSystem, ShopOfferItem } from './game/levelSystem';
 import { EquipmentPurchaseModal } from './components/EquipmentPurchaseModal';
 
+const GINZO_UPGRADE_LEVEL_KEY = 'asura-mirage-ginzo-upgrade-level';
+const GINZO_EVOLVED_FORM_KEY = 'asura-mirage-ginzo-evolved-form';
+
+function readGinzoUpgradeLevel(): number {
+  try {
+    const value = Number.parseInt(window.localStorage.getItem(GINZO_UPGRADE_LEVEL_KEY) ?? '0', 10);
+    return Number.isFinite(value) ? Math.max(0, Math.min(10, value)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function readGinzoEvolvedForm(): boolean {
+  try {
+    return readGinzoUpgradeLevel() >= 10 && window.localStorage.getItem(GINZO_EVOLVED_FORM_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
   const damageCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -102,6 +122,8 @@ export default function App() {
 
   // Reactive state mirrored from combat engine
   const [activeHeroId, setActiveHeroId] = useState<HeroId>('ginzo');
+  const [ginzoUpgradeLevel, setGinzoUpgradeLevel] = useState<number>(readGinzoUpgradeLevel);
+  const [isGinzoEvolved, setIsGinzoEvolved] = useState<boolean>(readGinzoEvolvedForm);
   const [relics, setRelics] = useState<RelicItem[]>([]);
   const [bossInfo, setBossInfo] = useState<{ name: string; hp: number; maxHp: number; action?: string } | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats>({
@@ -430,6 +452,7 @@ export default function App() {
 
     const arena = new ArenaScene(mountRef.current);
     const engine = new CombatEngine(arena);
+    engine.setGinzoEvolved(isGinzoEvolved);
 
     arenaRef.current = arena;
     engineRef.current = engine;
@@ -796,12 +819,63 @@ export default function App() {
 
   // Switch Character in Hero Shrine
   const handleSelectHero = useCallback((heroId: HeroId) => {
-    if (engineRef.current) {
-      engineRef.current.setHero(heroId);
-      setActiveHeroId(heroId);
-      soundEngine.playCoin();
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setHero(heroId);
+    if (heroId === 'ginzo') engine.setGinzoEvolved(isGinzoEvolved);
+    setActiveHeroId(heroId);
+    setPlayerStats({ ...engine.playerStats });
+    soundEngine.playCoin();
+  }, [isGinzoEvolved]);
+
+  const handleUpgradeGinzo = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine || ginzoUpgradeLevel >= 10 || !engine.deductGold(10)) return;
+
+    const nextLevel = Math.min(10, ginzoUpgradeLevel + 1);
+    setGinzoUpgradeLevel(nextLevel);
+    try {
+      window.localStorage.setItem(GINZO_UPGRADE_LEVEL_KEY, String(nextLevel));
+    } catch {
+      // The current session still keeps the progress if storage is unavailable.
     }
-  }, []);
+
+    soundEngine.playBuy();
+    if (nextLevel >= 10) {
+      // Final upgrade unlocks and immediately equips Ginzo's awakened form.
+      engine.setHero('ginzo');
+      engine.setGinzoEvolved(true);
+      setActiveHeroId('ginzo');
+      setIsGinzoEvolved(true);
+      try {
+        window.localStorage.setItem(GINZO_EVOLVED_FORM_KEY, 'true');
+      } catch {
+        // The form remains selected for this session if storage is unavailable.
+      }
+    }
+    setPlayerStats({ ...engine.playerStats });
+    setLevelTick((tick) => tick + 1);
+  }, [ginzoUpgradeLevel]);
+
+  const handleToggleGinzoForm = useCallback(() => {
+    if (ginzoUpgradeLevel < 10) return;
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    // The upgrade panel is also the form switch: always select Ginzo, then toggle his form.
+    const nextForm = !isGinzoEvolved;
+    engine.setHero('ginzo');
+    engine.setGinzoEvolved(nextForm);
+    setActiveHeroId('ginzo');
+    setIsGinzoEvolved(nextForm);
+    setPlayerStats({ ...engine.playerStats });
+    try {
+      window.localStorage.setItem(GINZO_EVOLVED_FORM_KEY, String(nextForm));
+    } catch {
+      // The form remains selected for this session if storage is unavailable.
+    }
+    soundEngine.playCoin();
+  }, [ginzoUpgradeLevel, isGinzoEvolved]);
 
   // Equip any stat item into one of the ten universal equipment slots
   const handleEquipGearItem = useCallback((item: EquipmentItem, replaceItemId?: string) => {
@@ -935,6 +1009,7 @@ export default function App() {
           mode={gameMode === 'lobby' ? 'lobby' : 'dungeon'}
           stats={playerStats}
           activeHeroId={activeHeroId}
+          isGinzoEvolved={activeHeroId === 'ginzo' && isGinzoEvolved}
           relics={relics}
           dashCooldown={dashCooldown}
           dashMaxCooldown={1.0}
@@ -1014,6 +1089,10 @@ export default function App() {
         activeHeroId={activeHeroId}
         onSelectHero={handleSelectHero}
         onUnlockHero={() => {}}
+        ginzoUpgradeLevel={ginzoUpgradeLevel}
+        isGinzoEvolved={isGinzoEvolved}
+        onUpgradeGinzo={handleUpgradeGinzo}
+        onToggleGinzoForm={handleToggleGinzoForm}
       />
 
       {/* LOBBY DUNGEON MAP SELECTION MODAL WITH DIFFICULTY MODES */}
