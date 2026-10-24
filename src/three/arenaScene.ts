@@ -3303,6 +3303,90 @@ export class ArenaScene {
     this.scheduleVfxFrame(fade);
   }
 
+  /** Red gathering aura before Ginzo's awakened iaido ultimate. */
+  public spawnCrimsonSeveranceChargeVFX(x: number, z: number, angle: number) {
+    this.spawnSkillRing(x, z, 0x991b1b, 2.5, 0.82);
+    this.spawnSkillBurst(x, 0.9, z, 0xf43f5e, 22, 3.3, 0.58);
+    this.spawnSkillBurst(x, 1.15, z, 0xfff1f2, 8, 2.2, 0.38);
+    this.spawnKatanaArcVFX(x, z, angle - 0.8, 1.05, 0x991b1b);
+    this.spawnKatanaArcVFX(x, z, angle + 0.8, 0.85, 0xf43f5e);
+  }
+
+  /** Crisp square crimson fragments plus a sharp katana wave for each rapid cut. */
+  public spawnCrimsonUltimateHitVFX(x: number, z: number, angle: number, finisher = false) {
+    this.spawnKatanaArcVFX(
+      x, z, angle, finisher ? 3.1 : 1.15 + Math.random() * 0.28,
+      finisher ? 0xfef2f2 : (Math.random() > 0.5 ? 0xf43f5e : 0x991b1b)
+    );
+    if (finisher) {
+      this.spawnSkillBurst(x, 1.05, z, 0xf43f5e, 30, 7.8, 0.68);
+      this.spawnSkillBurst(x, 1.05, z, 0xffffff, 18, 6.5, 0.5);
+    } else {
+      this.spawnSkillBurst(x, 0.95, z, 0xf43f5e, 5, 3.1, 0.24);
+    }
+
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+    this.vfxGroup.add(group);
+    const count = finisher ? 30 : 9;
+    const shards: Array<{ mesh: THREE.Mesh; vx: number; vy: number; vz: number; spin: number; material: THREE.MeshBasicMaterial }> = [];
+    const colors = [0xd0101c, 0xe01c28, 0xa00a14, 0xff3040, 0xfff1f2];
+    for (let i = 0; i < count; i++) {
+      const size = (finisher ? 0.12 : 0.08) + Math.random() * (finisher ? 0.18 : 0.1);
+      const geometry = new THREE.PlaneGeometry(size, size);
+      const material = new THREE.MeshBasicMaterial({
+        color: colors[Math.floor(Math.random() * colors.length)],
+        transparent: true,
+        opacity: 0.96,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.rotation.x = -Math.PI / 3;
+      mesh.position.set((Math.random() - 0.5) * 0.45, 0.3 + Math.random() * 1.1, (Math.random() - 0.5) * 0.45);
+      group.add(mesh);
+      const velocityAngle = Math.random() * Math.PI * 2;
+      const speed = finisher ? 2.2 + Math.random() * 5.0 : 1.1 + Math.random() * 2.8;
+      shards.push({
+        mesh, material,
+        vx: Math.cos(velocityAngle) * speed,
+        vy: finisher ? 1.2 + Math.random() * 4.2 : 0.7 + Math.random() * 2.0,
+        vz: Math.sin(velocityAngle) * speed,
+        spin: (Math.random() - 0.5) * 14,
+      });
+    }
+
+    const started = performance.now();
+    let previous = started;
+    const duration = finisher ? 620 : 300;
+    const animate = (now: number) => {
+      const dt = Math.min(0.04, Math.max(0, (now - previous) / 1000));
+      previous = now;
+      const progress = Math.min(1, (now - started) / duration);
+      for (const shard of shards) {
+        shard.mesh.position.x += shard.vx * dt;
+        shard.mesh.position.y = Math.max(0.06, shard.mesh.position.y + shard.vy * dt);
+        shard.mesh.position.z += shard.vz * dt;
+        shard.vy -= 7.5 * dt;
+        shard.vx *= Math.exp(-1.7 * dt);
+        shard.vz *= Math.exp(-1.7 * dt);
+        shard.mesh.rotation.z += shard.spin * dt;
+        shard.material.opacity = 0.96 * (1 - progress);
+      }
+      if (progress < 1 && group.parent && !this.disposed) {
+        this.scheduleVfxFrame(animate);
+      } else {
+        group.removeFromParent();
+        shards.forEach(({ mesh, material }) => {
+          mesh.geometry.dispose();
+          material.dispose();
+        });
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
   /**
    * Quan Skill 1: Heaven Drum Palm (ฝ่ามือกลองสวรรค์)
    * Concentrated cyan and gold sonic shockwave rings bursting forward
