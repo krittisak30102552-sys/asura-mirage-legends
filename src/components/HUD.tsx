@@ -740,7 +740,9 @@ export const HUD: React.FC<HUDProps> = ({
                   type="button"
                   onClick={() => onSkill?.(skill.slot as (1 | 2 | 3))}
                   disabled={isOnCd}
-                  className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60"
+                  className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60 touch-none select-none"
+                  style={{ touchAction: 'none' }}
+                  onPointerDown={(event) => { event.preventDefault(); }}
                   title={`${skill.name} (${skill.nameTh}) [กดเลข ${skill.slot}]`}
                 >
                   <div
