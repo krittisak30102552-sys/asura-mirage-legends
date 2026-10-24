@@ -746,12 +746,19 @@ export class CombatEngine {
 
   private updateHeroTexture() {
     if (!this.heroMesh) return;
-    (this.heroMesh.material as THREE.MeshBasicMaterial).map = generateHeroTexture(
+    const material = this.heroMesh.material as THREE.MeshBasicMaterial;
+    const previousTexture = material.map;
+    const nextTexture = generateHeroTexture(
       this.activeHeroId,
       this.animState,
       this.animFrame,
       this.isGinzoEvolved
     );
+    material.map = nextTexture;
+    material.needsUpdate = true;
+    // Every animation pose is a freshly drawn canvas texture; dispose the previous
+    // GPU texture so smoother animation does not gradually consume graphics memory.
+    if (previousTexture && previousTexture !== nextTexture) previousTexture.dispose();
   }
 
   private initAimCursor() {
@@ -3255,16 +3262,52 @@ export class CombatEngine {
     this.playerX = THREE.MathUtils.clamp(this.playerX, this.arena.bounds.minX + wallInset, this.arena.bounds.maxX - wallInset);
     this.playerZ = THREE.MathUtils.clamp(this.playerZ, this.arena.bounds.minZ + wallInset, this.arena.bounds.maxZ - wallInset);
 
-    this.heroMesh.position.set(this.playerX, 1.4, this.playerZ);
-    this.heroMesh.rotation.x = -0.58;
-    this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
-    this.heroMesh.scale.x = Math.abs(this.heroMesh.scale.x) * this.playerFacing;
+    // Add a little 3D body weight on top of the articulated drawing: idle breath,
+    // alternating run bounce, and a committed lean with squash/stretch on attacks.
+    const motionPhase = (this.animFrame / 12) * Math.PI * 2;
+    const runBob = Math.abs(Math.sin(motionPhase * 2));
+    const attackWave = Math.sin((this.animFrame / 11) * Math.PI * 2);
+    let bodyBobY = 0;
+    let bodyTilt = 0;
+    let bodyStretchY = 1;
+    let shadowSpread = 1;
 
-    // Animation frame cycling
+    if (this.isDashing || this.animState === 'dash') {
+      bodyBobY = 0.045 + Math.sin(motionPhase) * 0.025;
+      bodyTilt = -0.09 + Math.sin(motionPhase) * 0.025;
+      bodyStretchY = 1.045;
+      shadowSpread = 1.08;
+    } else if (this.animState === 'run') {
+      bodyBobY = runBob * 0.065;
+      bodyTilt = -0.028 + Math.sin(motionPhase) * 0.018;
+      bodyStretchY = 1 + runBob * 0.018;
+      shadowSpread = 1 + runBob * 0.045;
+    } else if (this.animState.startsWith('attack')) {
+      const heavySwing = this.animState === 'attack3';
+      bodyBobY = Math.sin((this.animFrame / 11) * Math.PI) * (heavySwing ? 0.055 : 0.03);
+      bodyTilt = (heavySwing ? -0.12 : -0.065) + attackWave * (heavySwing ? 0.09 : 0.06);
+      bodyStretchY = 1 + Math.sin((this.animFrame / 11) * Math.PI) * (heavySwing ? 0.035 : 0.02);
+      shadowSpread = 1.04;
+    } else {
+      bodyBobY = Math.sin(motionPhase * 0.5) * 0.018;
+      bodyTilt = Math.sin(motionPhase * 0.5 + 0.35) * 0.009;
+      shadowSpread = 1 + Math.sin(motionPhase * 0.5) * 0.015;
+    }
+
+    this.heroMesh.position.set(this.playerX, 1.4 + bodyBobY, this.playerZ);
+    this.heroMesh.rotation.x = -0.58;
+    this.heroMesh.rotation.y = THREE.MathUtils.clamp(Math.sin(this.playerAimAngle) * 0.075, -0.075, 0.075);
+    this.heroMesh.rotation.z = bodyTilt;
+    this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
+    this.heroShadowMesh.scale.set(shadowSpread, 1, shadowSpread);
+    this.heroMesh.scale.set(Math.abs(this.heroMesh.scale.x) * this.playerFacing, bodyStretchY, 1);
+
+    // Twelve pose drawings cycled at 25 FPS, giving the arms and legs a much
+    // smoother gait and sword follow-through than the old four-frame animation.
     this.animTimer += dt;
-    if (this.animTimer > 0.12) {
-      this.animTimer = 0;
-      this.animFrame = (this.animFrame + 1) % 4;
+    if (this.animTimer >= 1 / 25) {
+      this.animTimer %= 1 / 25;
+      this.animFrame = (this.animFrame + 1) % 12;
       this.updateHeroTexture();
     }
 
