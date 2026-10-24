@@ -972,7 +972,13 @@ export class CombatEngine {
 
     this.clearDungeonEntities();
     this.arena.removeHappyVendor();
-    this.arena.loadRoom(enteringBossArena ? 'boss_arena' : roomType as any, this.currentDungeonMap, enteringBossArena ? undefined : this.getDoorLabels());
+    // Boss destinations are sealed arenas: hide any extra connected-door portals there.
+    const hideBossRoomRoutes = roomType === 'boss' || enteringBossArena;
+    this.arena.loadRoom(
+      enteringBossArena ? 'boss_arena' : roomType as any,
+      this.currentDungeonMap,
+      hideBossRoomRoutes ? undefined : this.getDoorLabels()
+    );
     this.nearbyDungeonInteractable = null;
     this.nearbyShopItemIndex = null;
     if (roomType === 'shop' && !stage.happyProvokedRoomIndices.includes(stage.currentRoomIndex)) {
