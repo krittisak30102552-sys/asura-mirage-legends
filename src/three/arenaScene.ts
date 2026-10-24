@@ -2843,98 +2843,157 @@ export class ArenaScene {
   }
 
   // 5. Dimensional Slash (Ginzo Skill 1): Hypersonic dimensional rift
+  /**
+   * Ginzo blade wave: a fast, angular pixel-art crescent that visibly travels
+   * away from the sword. Straight stepped edges keep it readable at game scale.
+   */
   public spawnKatanaArcVFX(x: number, z: number, angle: number, strength: number = 1, color: number = 0xe2e8f0) {
     const group = new THREE.Group();
-    group.position.set(x + Math.cos(angle) * 0.45, 1.15, z + Math.sin(angle) * 0.45);
+    group.position.set(x + Math.cos(angle) * 0.55, 1.05, z + Math.sin(angle) * 0.55);
     group.rotation.y = -angle;
     this.vfxGroup.add(group);
-    const outerShape = new THREE.Shape();
-    outerShape.moveTo(-0.28, -0.82 * strength);
-    outerShape.quadraticCurveTo(0.55, 0.24 * strength, 2.4 * strength, 0.72 * strength);
-    outerShape.quadraticCurveTo(1.35 * strength, -0.58 * strength, -0.28, -0.82 * strength);
-    outerShape.closePath();
-    const innerShape = new THREE.Shape();
-    innerShape.moveTo(-0.05, -0.52 * strength);
-    innerShape.quadraticCurveTo(0.75, 0.2 * strength, 2.12 * strength, 0.5 * strength);
-    innerShape.quadraticCurveTo(1.25 * strength, -0.36 * strength, -0.05, -0.52 * strength);
-    innerShape.closePath();
-    const outerGeo = new THREE.ShapeGeometry(outerShape, 16);
-    const innerGeo = new THREE.ShapeGeometry(innerShape, 16);
-    const outerMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.74, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
-    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.94, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
-    group.add(new THREE.Mesh(outerGeo, outerMat), new THREE.Mesh(innerGeo, innerMat));
+
+    const makeSteppedWave = (scale: number, inset: number) => {
+      const shape = new THREE.Shape();
+      const points: [number, number][] = [
+        [0, -0.08], [0.24, 0.02], [0.46, 0.18], [0.72, 0.42],
+        [1.02, 0.62], [1.32, 0.68], [1.62, 0.55], [1.9, 0.34],
+        [2.18, 0.1], [2.28, -0.08], [2.04, -0.18], [1.78, -0.36],
+        [1.48, -0.49], [1.18, -0.48], [0.9, -0.35], [0.64, -0.2],
+        [0.38, -0.12], [0.15, -0.1],
+      ];
+      const adjusted = points.map(([px, py]) => [
+        (px - inset * 0.3) * scale,
+        py * scale * (1 - inset * 0.45),
+      ] as [number, number]);
+      shape.moveTo(adjusted[0][0], adjusted[0][1]);
+      for (let i = 1; i < adjusted.length; i++) shape.lineTo(adjusted[i][0], adjusted[i][1]);
+      shape.closePath();
+      return new THREE.ShapeGeometry(shape);
+    };
+
+    const outerGeo = makeSteppedWave(strength, 0);
+    const coreGeo = makeSteppedWave(Math.max(0.45, strength * 0.72), 0.22);
+    const outerMat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const outer = new THREE.Mesh(outerGeo, outerMat);
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.z = 0.035;
+    group.add(outer, core);
+
+    // Hard-edged square fragments trail the wave instead of round magic blobs.
+    const shardGeo = new THREE.PlaneGeometry(0.12, 0.12);
+    const shardMat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const shards: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const shard = new THREE.Mesh(shardGeo, shardMat);
+      shard.position.set(0.18 + i * 0.22, (i % 2 ? 1 : -1) * (0.18 + (i % 3) * 0.07), 0.06 + i * 0.002);
+      shard.scale.set(i % 2 ? 1.0 : 0.7, i % 3 ? 0.7 : 1.2, 1);
+      group.add(shard);
+      shards.push(shard);
+    }
+
     const started = performance.now();
+    const duration = 390;
+    const travel = 4.1 + strength * 0.8;
     const animate = (now: number) => {
-      const progress = Math.min(1, (now - started) / 210);
-      group.scale.set(0.82 + progress * 0.32, 0.82 + progress * 0.32, 1);
-      group.rotation.z += 0.025;
-      outerMat.opacity = 0.74 * (1 - progress);
-      innerMat.opacity = 0.94 * (1 - progress);
-      if (progress < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      const p = Math.min(1, (now - started) / duration);
+      group.position.x = x + Math.cos(angle) * (0.55 + p * travel);
+      group.position.z = z + Math.sin(angle) * (0.55 + p * travel);
+      group.scale.set(0.72 + p * 0.45, 0.82 + p * 0.22, 1);
+      outerMat.opacity = 0.88 * (1 - p);
+      coreMat.opacity = 0.95 * (1 - p);
+      shardMat.opacity = 0.9 * (1 - p);
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
       else {
         group.removeFromParent();
-        outerGeo.dispose(); innerGeo.dispose(); outerMat.dispose(); innerMat.dispose();
+        outerGeo.dispose(); coreGeo.dispose(); shardGeo.dispose();
+        outerMat.dispose(); coreMat.dispose(); shardMat.dispose();
       }
     };
     this.scheduleVfxFrame(animate);
   }
 
+  /**
+   * Awakened Ginzo's dimensional blade wave: larger, pink-gold stepped crescent
+   * with a bright pixel core and a travelling rift, not a static rounded slab.
+   */
   public spawnDimensionalSlashVFX(x: number, z: number, angle: number) {
-    const slashGroup = new THREE.Group();
-    slashGroup.position.set(x, 1.2, z);
-    slashGroup.rotation.y = -angle;
-    this.vfxGroup.add(slashGroup);
-    const crescent = new THREE.Shape();
-    crescent.moveTo(-2.8, -0.34);
-    crescent.quadraticCurveTo(-0.25, 0.78, 2.8, 0.28);
-    crescent.quadraticCurveTo(0.35, -0.72, -2.8, -0.34);
-    crescent.closePath();
-    const glowGeo = new THREE.ExtrudeGeometry(crescent, { depth: 0.22, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.14, bevelThickness: 0.1 });
-    glowGeo.translate(0, 0, -0.11);
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xbe185d, emissiveIntensity: 1.6, transparent: true, opacity: 0.7, metalness: 0.55, roughness: 0.2, side: THREE.DoubleSide });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    slashGroup.add(glow);
-    const inner = new THREE.Shape();
-    inner.moveTo(-2.55, -0.22);
-    inner.quadraticCurveTo(-0.1, 0.53, 2.5, 0.19);
-    inner.quadraticCurveTo(0.25, -0.38, -2.55, -0.22);
-    inner.closePath();
-    const coreGeo = new THREE.ExtrudeGeometry(inner, { depth: 0.08, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.04, bevelThickness: 0.04 });
-    coreGeo.translate(0, 0, -0.04);
-    const coreMat = new THREE.MeshStandardMaterial({ color: 0xfff7fb, emissive: 0xf9a8d4, emissiveIntensity: 2.3, transparent: true, opacity: 0.95, metalness: 0.65, roughness: 0.14, side: THREE.DoubleSide });
-    const rift = new THREE.Mesh(coreGeo, coreMat);
-    rift.position.z = 0.17;
-    slashGroup.add(rift);
-    const trailCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-2.7, -0.28, 0.28), new THREE.Vector3(-1.35, 0.18, 0.3),
-      new THREE.Vector3(0.25, 0.56, 0.3), new THREE.Vector3(2.65, 0.2, 0.28),
-    ]);
-    const trailGeo = new THREE.TubeGeometry(trailCurve, 24, 0.045, 6, false);
-    const trailMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
-    slashGroup.add(new THREE.Mesh(trailGeo, trailMat));
-    this.spawnSkillBurst(x, 1.0, z, 0xf472b6, 9, 3.2, 0.38);
+    const group = new THREE.Group();
+    group.position.set(x, 1.12, z);
+    group.rotation.y = -angle;
+    this.vfxGroup.add(group);
 
-    let life = 0.22;
-    const fade = () => {
-      life -= 0.03;
-      if (life > 0) {
-        slashGroup.scale.x *= 1.045;
-        slashGroup.rotation.z += 0.025;
-        coreMat.opacity = life / 0.22 * 0.95;
-        glowMat.opacity = life / 0.22 * 0.7;
-        trailMat.opacity = life / 0.22;
-        if (life < 0.12) {
-          coreMat.emissive.setHex(0xffffff);
-          glowMat.emissive.setHex(0x7c3aed);
-        }
-        this.scheduleVfxFrame(fade);
-      } else {
-        this.vfxGroup.remove(slashGroup);
-        [glowGeo, coreGeo, trailGeo].forEach((geo) => geo.dispose());
-        [glowMat, coreMat, trailMat].forEach((mat) => mat.dispose());
+    const makeRift = (scale: number) => {
+      const shape = new THREE.Shape();
+      const points: [number, number][] = [
+        [0, -0.12], [0.36, 0.02], [0.72, 0.26], [1.1, 0.54],
+        [1.52, 0.72], [1.92, 0.66], [2.32, 0.42], [2.7, 0.13],
+        [2.86, -0.1], [2.58, -0.22], [2.2, -0.45], [1.82, -0.62],
+        [1.42, -0.62], [1.04, -0.43], [0.7, -0.23], [0.34, -0.13],
+      ];
+      shape.moveTo(points[0][0] * scale, points[0][1] * scale);
+      for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0] * scale, points[i][1] * scale);
+      shape.closePath();
+      return new THREE.ShapeGeometry(shape);
+    };
+    const outerGeo = makeRift(1.24);
+    const coreGeo = makeRift(0.83);
+    const outerMat = new THREE.MeshBasicMaterial({
+      color: 0xf472b6, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xfff7fb, transparent: true, opacity: 0.98,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const outer = new THREE.Mesh(outerGeo, outerMat);
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.z = 0.04;
+    group.add(outer, core);
+
+    // Gold/pink square fragments sell the cut as a flying wave.
+    const shardGeo = new THREE.PlaneGeometry(0.15, 0.15);
+    const shardMat = new THREE.MeshBasicMaterial({
+      color: 0xfde68a, transparent: true, opacity: 0.95,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    for (let i = 0; i < 8; i++) {
+      const shard = new THREE.Mesh(shardGeo, shardMat);
+      shard.position.set(0.15 + i * 0.29, (i % 2 ? 1 : -1) * (0.28 + (i % 3) * 0.08), 0.07 + i * 0.002);
+      shard.scale.set(i % 3 === 0 ? 1.3 : 0.75, i % 2 ? 0.65 : 1.15, 1);
+      group.add(shard);
+    }
+
+    this.spawnSkillBurst(x, 1.0, z, 0xf472b6, 7, 2.8, 0.28);
+    const started = performance.now();
+    const duration = 470;
+    const travel = 5.8;
+    const animate = (now: number) => {
+      const p = Math.min(1, (now - started) / duration);
+      group.position.x = x + Math.cos(angle) * p * travel;
+      group.position.z = z + Math.sin(angle) * p * travel;
+      group.scale.set(0.76 + p * 0.54, 0.82 + p * 0.2, 1);
+      outerMat.opacity = 0.9 * (1 - p);
+      coreMat.opacity = 0.98 * (1 - p);
+      shardMat.opacity = 0.95 * (1 - p);
+      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      else {
+        group.removeFromParent();
+        outerGeo.dispose(); coreGeo.dispose(); shardGeo.dispose();
+        outerMat.dispose(); coreMat.dispose(); shardMat.dispose();
       }
     };
-    this.scheduleVfxFrame(fade);
+    this.scheduleVfxFrame(animate);
   }
 
   // 6. Dragon Ascension (Quan Skill 3): Spiraling celestial golden vortex
