@@ -59,35 +59,62 @@ export function generateHeroTexture(
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = true;
 
-  const f = frameIndex % 4;
+  // Twelve redraw poses per cycle, played at 25 FPS by the combat engine.
+  // More poses let knees, shoulders, elbows, head and weapon follow through smoothly.
+  const f = frameIndex % 12;
+  const phase = (f / 12) * Math.PI * 2;
+  const attackProgress = f / 11;
+  const isAttackingPose = state.startsWith('attack');
+  const isHeavyAttack = state === 'attack3';
   const awakenedGinzo = heroId === 'ginzo' && isGinzoEvolved;
   const cx = 128;
   let cy = 175; // ground/center reference
 
-  // Animation offsets
+  // Whole-body motion plus secondary follow-through for each limb.
   let bobY = 0;
   let leanX = 0;
   let legCycle = 0;
   let armSwing = 0;
   let weaponAngle = 0;
+  let bodyTilt = 0;
+  let headTilt = 0;
   let auraGlow = false;
 
   if (state === 'idle') {
-    bobY = Math.sin((f / 4) * Math.PI * 2) * 3;
+    const breath = Math.sin(phase * 0.5);
+    bobY = breath * 2.1;
+    legCycle = breath * 0.06;
+    armSwing = breath * 2.4;
+    bodyTilt = breath * 0.014;
+    headTilt = Math.sin(phase * 0.5 + 0.35) * 0.025;
+    weaponAngle = 0.34 + breath * 0.035;
   } else if (state === 'run') {
-    bobY = Math.abs(Math.sin((f / 4) * Math.PI * 2)) * 6;
-    leanX = 6;
-    legCycle = Math.sin((f / 4) * Math.PI * 2);
-    armSwing = Math.cos((f / 4) * Math.PI * 2);
+    const stride = Math.sin(phase);
+    bobY = Math.abs(Math.sin(phase * 2)) * 5.5;
+    leanX = 6 + stride * 1.8;
+    legCycle = stride;
+    armSwing = Math.cos(phase);
+    bodyTilt = -0.045 + stride * 0.025;
+    headTilt = -0.012 + Math.sin(phase + 0.5) * 0.026;
+    weaponAngle = 0.34 + Math.sin(phase + 0.4) * 0.2;
   } else if (state === 'dash') {
     leanX = 18;
-    bobY = 8;
+    bobY = 7.5 + Math.sin(phase) * 1.1;
+    legCycle = -0.62 + Math.sin(phase) * 0.16;
+    armSwing = 0.9 + Math.sin(phase) * 0.15;
+    bodyTilt = -0.15 + Math.sin(phase) * 0.035;
+    headTilt = 0.045 + Math.sin(phase + 0.4) * 0.02;
+    weaponAngle = -0.18 + Math.sin(phase) * 0.2;
     auraGlow = true;
-  } else if (state.startsWith('attack')) {
-    const isHeavy = state === 'attack3';
-    leanX = isHeavy ? 14 : 8;
-    bobY = 4;
-    weaponAngle = isHeavy ? 1.2 : 0.6;
+  } else if (isAttackingPose) {
+    const swing = Math.sin(attackProgress * Math.PI * 2);
+    leanX = isHeavyAttack ? 14 + swing * 2.5 : 8 + swing * 2;
+    bobY = 2.5 + Math.sin(attackProgress * Math.PI) * (isHeavyAttack ? 5 : 2.5);
+    legCycle = (isHeavyAttack ? -0.34 : 0.12) + Math.sin(phase) * 0.35;
+    armSwing = Math.sin(phase + 0.6) * 0.72;
+    bodyTilt = (isHeavyAttack ? -0.18 : -0.095) + swing * (isHeavyAttack ? 0.13 : 0.08);
+    headTilt = -bodyTilt * 0.42 + Math.sin(phase + 0.3) * 0.024;
+    weaponAngle = (isHeavyAttack ? 0.98 : 0.42) + swing * (isHeavyAttack ? 0.62 : 0.46);
     auraGlow = true;
   }
 
@@ -235,6 +262,12 @@ export function generateHeroTexture(
     drawCircle(cx - 16, cy - 40, 5, awakenedGinzo ? '#facc15' : '#ef4444', awakenedGinzo ? '#fef3c7' : '#7f1d1d', 1.5);
     ctx.restore();
 
+    // Rotate the upper body around the waist; head and weapon inherit the follow-through.
+    ctx.save();
+    ctx.translate(cx, cy + 34);
+    ctx.rotate(bodyTilt);
+    ctx.translate(-cx, -(cy + 34));
+
     // Torso: Crimson Red Haori Coat with White Kimono V-neck
     const haoriGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
     haoriGrad.addColorStop(0, awakenedGinzo ? '#fef3c7' : '#ef4444');
@@ -298,6 +331,12 @@ export function generateHeroTexture(
     ctx.strokeStyle = '#fbbf24';
     ctx.stroke();
     ctx.restore();
+
+    // The head counter-tilts slightly to preserve balance during each move.
+    ctx.save();
+    ctx.translate(cx, cy - 48);
+    ctx.rotate(headTilt);
+    ctx.translate(-cx, -(cy - 48));
 
     // Head: Proportioned Anime Face
     const faceGrad = ctx.createLinearGradient(cx, cy - 75, cx, cy - 25);
@@ -366,6 +405,8 @@ export function generateHeroTexture(
       [cx - 25, cy - 44],
     ], hairGrad, '#09090b', 2);
 
+    ctx.restore();
+
     // Left Arm (Sleeve)
     const leftArmX = cx - 35 - armSwing * 12;
     fillPoly([
@@ -376,9 +417,12 @@ export function generateHeroTexture(
     ], haoriGrad, '#09090b', 2);
     drawCircle(leftArmX, cy + 26, 7, '#ffedd5', '#d97706', 1.5);
 
-    // Right Arm wielding Katana
-    const rightArmX = cx + 32 + (state.startsWith('attack') ? 25 : 0);
-    const rightArmY = cy + (state.startsWith('attack') ? -10 : 15);
+    // Right arm bends at the elbow and leads the sword swing rather than snapping at the wrist.
+    const rightArmReach = isAttackingPose
+      ? (isHeavyAttack ? 24 : 20) + Math.sin(phase + 0.25) * (isHeavyAttack ? 12 : 9)
+      : Math.sin(phase) * 3.5;
+    const rightArmX = cx + 32 + rightArmReach;
+    const rightArmY = cy + (isAttackingPose ? -6 + Math.sin(phase + 0.55) * 13 : 15 + Math.sin(phase) * 2.5);
     fillPoly([
       [cx + 16, cy - 18],
       [cx + 32, cy - 18],
@@ -430,6 +474,7 @@ export function generateHeroTexture(
     ctx.lineTo(84, -23);
     ctx.stroke();
 
+    ctx.restore();
     ctx.restore();
   }
 
@@ -490,6 +535,12 @@ export function generateHeroTexture(
     drawCircle(leftLegX - 6, 278, 8, '#09090b', '#fbbf24', 1.5);
     drawCircle(rightLegX + 6, 278, 8, '#09090b', '#fbbf24', 1.5);
 
+    // Rotate from the waist so the martial artist's chest leads the strike.
+    ctx.save();
+    ctx.translate(cx, cy + 34);
+    ctx.rotate(bodyTilt);
+    ctx.translate(-cx, -(cy + 34));
+
     // Torso: Emerald Changshan Tunic with Gold Trim
     const tunicGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
     tunicGrad.addColorStop(0, '#059669');
@@ -529,6 +580,11 @@ export function generateHeroTexture(
     ], '#78350f', '#09090b', 2);
     // Tassel hanging down
     fillPoly([[cx - 8, cy + 38], [cx + 2, cy + 38], [cx - 2, cy + 62], [cx - 6, cy + 62]], '#fbbf24', '#b45309', 1.5);
+
+    ctx.save();
+    ctx.translate(cx, cy - 48);
+    ctx.rotate(headTilt);
+    ctx.translate(-cx, -(cy - 48));
 
     // Head: Anime Martial Artist Face with High Hair Bun
     const faceGrad = ctx.createLinearGradient(cx, cy - 75, cx, cy - 25);
@@ -602,10 +658,13 @@ export function generateHeroTexture(
     ctx.lineTo(cx + 4, cy - 51);
     ctx.stroke();
 
+    ctx.restore();
+
     // Toned Arms with Golden Dragon Gauntlets & Chi Flames
-    // Left Arm (Fist Stance)
-    const lHandX = cx - 38 - (state.startsWith('attack') ? 15 : 0);
-    const lHandY = cy + 5;
+    // The shoulders and elbows wind up before the fists extend.
+    const punchWave = Math.sin(phase + 0.25);
+    const lHandX = cx - 38 - (isAttackingPose ? 12 + punchWave * 7 : Math.sin(phase) * 4);
+    const lHandY = cy + 5 + Math.sin(phase + Math.PI) * (isAttackingPose ? 4 : 2);
     fillPoly([
       [cx - 26, cy - 18],
       [lHandX - 10, lHandY - 4],
@@ -617,8 +676,8 @@ export function generateHeroTexture(
     drawCircle(lHandX, lHandY + 18, 9, '#fed7aa', '#09090b', 2);
 
     // Right Arm (Pounding Fist)
-    const rHandX = cx + 38 + (state.startsWith('attack') ? 35 : 0);
-    const rHandY = cy + (state.startsWith('attack') ? -12 : 12);
+    const rHandX = cx + 38 + (isAttackingPose ? 25 + Math.sin(phase + 0.3) * 14 : Math.sin(phase + Math.PI) * 4);
+    const rHandY = cy + (isAttackingPose ? -7 + Math.sin(phase + 0.55) * 16 : 12 + Math.sin(phase + 0.6) * 2.5);
     fillPoly([
       [cx + 16, cy - 18],
       [cx + 28, cy - 18],
@@ -632,6 +691,7 @@ export function generateHeroTexture(
     // Glowing Golden Chi Flames on Fists
     drawCircle(lHandX, lHandY + 18, 14, 'rgba(251, 191, 36, 0.45)');
     drawCircle(rHandX, rHandY + 18, 14, 'rgba(251, 191, 36, 0.45)');
+    ctx.restore();
   }
 
   // ====================================================================
@@ -665,6 +725,12 @@ export function generateHeroTexture(
     fillPoly([[rightLegX - 8, 235], [rightLegX + 8, 235], [rightLegX + 6, 275], [rightLegX - 6, 275]], '#581c87', '#3b0764', 2);
     drawCircle(leftLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
     drawCircle(rightLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
+
+    // The robe, shoulders and staff sway together while the feet keep their gait cycle.
+    ctx.save();
+    ctx.translate(cx, cy + 26);
+    ctx.rotate(bodyTilt * 0.78);
+    ctx.translate(-cx, -(cy + 26));
 
     // Flowing Sorceress Robe / Dress
     const robeGrad = ctx.createLinearGradient(cx - 45, cy - 20, cx + 45, 260);
@@ -810,8 +876,12 @@ export function generateHeroTexture(
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
-    // Left Arm holding Staff
-    const staffX = cx + 38;
+    // Head and hat lag slightly behind the robe movement.
+    ctx.save();
+    ctx.translate(cx, cy - 65);
+    ctx.rotate(headTilt);
+    ctx.translate(-cx, -(cy - 65));
+    const staffX = cx + 38 + Math.sin(phase + 0.25) * 4.2;
     fillPoly([
       [cx - 20, cy - 18],
       [cx - 34, cy + 4],
@@ -819,6 +889,8 @@ export function generateHeroTexture(
       [cx - 12, cy + 6],
     ], robeGrad, '#09090b', 2);
     drawCircle(cx - 22, cy + 18, 6, '#ffedd5', '#d97706', 1.5);
+
+    ctx.restore();
 
     // Right Arm holding Starlight Staff
     fillPoly([
@@ -869,6 +941,7 @@ export function generateHeroTexture(
     ctx.arc(0, -98, 14, -Math.PI * 0.75, Math.PI * 0.75);
     ctx.stroke();
 
+    ctx.restore();
     ctx.restore();
   }
 
