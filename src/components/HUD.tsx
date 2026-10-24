@@ -173,6 +173,10 @@ export const HUD: React.FC<HUDProps> = ({
   onJoystickMove,
   onJoystickAim,
 }) => {
+  // Avoid stale lobby targets reopening the gate after the dungeon has started.
+  const activeLobbyInteractable = mode === 'lobby' ? nearbyInteractable : null;
+  const activeDungeonInteractable = mode === 'playing' ? nearbyDungeonInteractable : null;
+
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -815,23 +819,30 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* Touch-only contextual E action floats above the compact controls. */}
-        {forceTouchControls && (nearbyInteractable || nearbyDungeonInteractable) && (
+        {forceTouchControls && (activeLobbyInteractable || activeDungeonInteractable) && (
           <button
             type="button"
             onClick={() => {
-              if (nearbyInteractable === 'trainer') onOpenTrainer();
-              else if (nearbyInteractable === 'gate') onOpenGate();
-              else onInteract?.();
+              if (mode === 'lobby') {
+                if (activeLobbyInteractable === 'trainer') onOpenTrainer();
+                else if (activeLobbyInteractable === 'gate') onOpenGate();
+              } else if (mode === 'playing') {
+                onInteract?.();
+              }
             }}
             className="pointer-events-auto absolute right-1 bottom-full mb-2 px-3 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 text-zinc-950 font-pixel text-[10px] sm:text-xs rounded-xl font-bold shadow-xl border-2 border-yellow-200 active:scale-95 transition-transform animate-pulse cursor-pointer"
           >
-            {nearbyDungeonInteractable === 'happy_merchant'
+            {activeLobbyInteractable === 'gate'
+              ? '🌀 เข้าดัน [E]'
+              : activeLobbyInteractable === 'trainer'
+              ? '🥋 คุยครูฝึก [E]'
+              : activeDungeonInteractable === 'happy_merchant'
               ? '💬 คุย [E]'
-              : nearbyDungeonInteractable === 'boss_altar'
+              : activeDungeonInteractable === 'boss_altar'
               ? '🗿 ปลุกบอส [E]'
-              : nearbyDungeonInteractable === 'shop_item'
+              : activeDungeonInteractable === 'shop_item'
               ? '🔎 ดูของ [E]'
-              : nearbyDungeonInteractable?.startsWith('door_')
+              : activeDungeonInteractable?.startsWith('door_')
               ? '🚪 เข้า [E]'
               : '✨ ใช้ [E]'}
           </button>
