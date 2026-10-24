@@ -20,7 +20,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || touchIdRef.current !== null) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     touchIdRef.current = e.pointerId;
     setActive(true);
 
@@ -81,11 +82,30 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     onMove(0, 0);
   };
 
+  // Keep tracking the movement finger even while a second finger presses a skill button.
+  // Some mobile browsers retarget/cancel captured pointer events when another control is tapped.
   useEffect(() => {
-    return () => {
+    const handleWindowMove = (event: PointerEvent) => {
+      if (touchIdRef.current !== event.pointerId) return;
+      processPointer(event.clientX, event.clientY);
+    };
+    const handleWindowEnd = (event: PointerEvent) => {
+      if (touchIdRef.current !== event.pointerId) return;
+      touchIdRef.current = null;
+      setActive(false);
+      setKnobPos({ x: 0, y: 0 });
       onMove(0, 0);
     };
-  }, [onMove]);
+    window.addEventListener('pointermove', handleWindowMove);
+    window.addEventListener('pointerup', handleWindowEnd);
+    window.addEventListener('pointercancel', handleWindowEnd);
+    return () => {
+      window.removeEventListener('pointermove', handleWindowMove);
+      window.removeEventListener('pointerup', handleWindowEnd);
+      window.removeEventListener('pointercancel', handleWindowEnd);
+      onMove(0, 0);
+    };
+  }, [onMove, processPointer]);
 
   return (
     <div
