@@ -178,6 +178,20 @@ export default function App() {
     const halfW = canvas.width / 2;
     const halfH = canvas.height / 2;
     const _v = overlayVectorRef.current ?? (overlayVectorRef.current = new THREE.Vector3());
+    const getUltimateScreenLine = () => {
+      const path = engine.ginzoUltimatePath;
+      if (!path) return { x: halfW, y: halfH, ux: Math.SQRT1_2, uy: -Math.SQRT1_2 };
+      _v.set(path.startX, 1.1, path.startZ).project(arena.camera);
+      const x1 = (_v.x * halfW) + halfW;
+      const y1 = (-_v.y * halfH) + halfH;
+      _v.set(path.endX, 1.1, path.endZ).project(arena.camera);
+      const x2 = (_v.x * halfW) + halfW;
+      const y2 = (-_v.y * halfH) + halfH;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      return { x: (x1 + x2) / 2, y: (y1 + y2) / 2, ux: dx / len, uy: dy / len };
+    };
 
     // 1. Target Lock-On Yellow Brackets [ ] on closest targeted enemy
     if (engine.currentMode === 'dungeon' && engine.lockedTarget && engine.lockedTarget.state !== 'dead') {
@@ -455,6 +469,39 @@ export default function App() {
       ctx.restore();
     }
 
+    // The prototype's red streak grows along the actual dash route while the scene desaturates.
+    if (chargingUltimate && engine.ginzoUltimatePath) {
+      const line = getUltimateScreenLine();
+      const progress = Math.min(1, Math.max(0, (engine.ginzoUltimateTimer - 0.4) / 0.65));
+      const extent = Math.hypot(canvas.width, canvas.height) * (0.06 + progress * 0.57);
+      const width = 2 + (1 - progress) * 15;
+      ctx.save();
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      ctx.globalAlpha = 0.18 + progress * 0.56;
+      ctx.strokeStyle = '#13070a';
+      ctx.lineWidth = width * 2.1;
+      ctx.beginPath();
+      ctx.moveTo(line.x - line.ux * extent, line.y - line.uy * extent);
+      ctx.lineTo(line.x + line.ux * extent, line.y + line.uy * extent);
+      ctx.stroke();
+      ctx.strokeStyle = '#e8101e';
+      ctx.lineWidth = width;
+      ctx.globalAlpha = 0.25 + progress * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(line.x - line.ux * extent, line.y - line.uy * extent);
+      ctx.lineTo(line.x + line.ux * extent, line.y + line.uy * extent);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff7f7';
+      ctx.lineWidth = Math.max(1.25, width * 0.1);
+      ctx.globalAlpha = 0.9 * progress;
+      ctx.beginPath();
+      ctx.moveTo(line.x - line.ux * extent, line.y - line.uy * extent);
+      ctx.lineTo(line.x + line.ux * extent, line.y + line.uy * extent);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Brief high-contrast screen slash for Ginzo's awakened fourth skill.
     if (engine.ginzoUltimateFlashTimer > 0) {
       const strength = Math.min(1, engine.ginzoUltimateFlashTimer / 0.34);
@@ -464,30 +511,36 @@ export default function App() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const slashWidth = Math.max(7, canvas.width * 0.055) * (0.7 + strength);
+      const line = getUltimateScreenLine();
+      const extent = Math.hypot(canvas.width, canvas.height) * 0.62;
+      const x1 = line.x - line.ux * extent;
+      const y1 = line.y - line.uy * extent;
+      const x2 = line.x + line.ux * extent;
+      const y2 = line.y + line.uy * extent;
       ctx.lineCap = 'butt';
       ctx.lineJoin = 'miter';
       ctx.strokeStyle = '#111111';
       ctx.lineWidth = slashWidth * 1.8;
       ctx.globalAlpha = 0.82 * strength;
       ctx.beginPath();
-      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
-      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
 
       ctx.strokeStyle = '#dc102f';
       ctx.lineWidth = slashWidth;
       ctx.globalAlpha = 0.98 * strength;
       ctx.beginPath();
-      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
-      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
 
       ctx.strokeStyle = '#fff7f7';
       ctx.lineWidth = Math.max(2, slashWidth * 0.14);
       ctx.globalAlpha = 0.96 * strength;
       ctx.beginPath();
-      ctx.moveTo(-canvas.width * 0.08, canvas.height * 0.82);
-      ctx.lineTo(canvas.width * 1.08, canvas.height * 0.18);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
       ctx.restore();
     }
