@@ -239,7 +239,7 @@ export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({
                 onClick={onToggleGinzoForm}
                 className="w-full rounded-lg border-2 border-amber-200 bg-gradient-to-r from-amber-300 to-yellow-100 px-4 py-2.5 font-pixel text-[10px] font-bold text-zinc-950 shadow-[0_0_18px_rgba(251,191,36,.2)] transition-all hover:brightness-110 active:scale-95 sm:w-auto"
               >
-                {activeHeroId === 'ginzo' && isGinzoEvolved ? 'กลับเป็นกินโซ' : 'ใช้ร่างกินอิ่ม'}
+                {isGinzoEvolved ? 'กลับเป็นกินโซ' : 'ใช้ร่างกินอิ่ม'}
               </button>
             )}
           </div>
