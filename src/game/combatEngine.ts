@@ -231,6 +231,12 @@ export class CombatEngine {
   public animState: HeroAnimationState = 'idle';
   public animFrame: number = 0;
   public animTimer: number = 0;
+  // Freeze the exact direction for the duration of a swing/cast so the body pose,
+  // weapon direction and world-space VFX cannot drift apart if the mouse moves.
+  public heroActionAimAngle: number = 0;
+  public heroActionFacing: number = 1;
+  private actionAnimationTimer: number = 0;
+  private actionAnimationState: HeroAnimationState | null = null;
 
   // Combo system
   public comboStep: number = 0;
@@ -748,17 +754,36 @@ export class CombatEngine {
     if (!this.heroMesh) return;
     const material = this.heroMesh.material as THREE.MeshBasicMaterial;
     const previousTexture = material.map;
+    const isActionPose = this.animState.startsWith('attack');
     const nextTexture = generateHeroTexture(
       this.activeHeroId,
       this.animState,
       this.animFrame,
-      this.isGinzoEvolved
+      this.isGinzoEvolved,
+      isActionPose ? this.heroActionAimAngle : this.playerAimAngle,
+      isActionPose ? this.heroActionFacing : this.playerFacing
     );
     material.map = nextTexture;
     material.needsUpdate = true;
     // Every animation pose is a freshly drawn canvas texture; dispose the previous
     // GPU texture so smoother animation does not gradually consume graphics memory.
     if (previousTexture && previousTexture !== nextTexture) previousTexture.dispose();
+  }
+
+  private beginDirectionalActionAnimation(slot: 1 | 2 | 3, angle: number, duration = 0.48) {
+    this.heroActionAimAngle = angle;
+    if (Math.abs(Math.cos(angle)) > 0.1) {
+      this.heroActionFacing = Math.cos(angle) >= 0 ? 1 : -1;
+    } else {
+      this.heroActionFacing = this.playerFacing;
+    }
+    this.playerFacing = this.heroActionFacing;
+    this.actionAnimationState = `attack${slot}` as HeroAnimationState;
+    this.actionAnimationTimer = duration;
+    this.animState = this.actionAnimationState;
+    this.animFrame = 0;
+    this.animTimer = 0;
+    this.updateHeroTexture();
   }
 
   private initAimCursor() {
@@ -2147,6 +2172,9 @@ export class CombatEngine {
     const pZ = this.playerZ;
     const rawDamage = this.playerStats.attackPower * skillDef.damageMultiplier;
 
+    // All skills share the same locked aim as their slash, projectile or cast VFX.
+    this.beginDirectionalActionAnimation(slot, angle, slot === 3 ? 0.6 : 0.48);
+
     if (heroId === 'ginzo' && this.isGinzoEvolved) {
       this.castGinzoEvolvedSkill(slot, pX, pZ, angle, rawDamage);
     } else if (heroId === 'ginzo') {
@@ -2390,10 +2418,14 @@ export class CombatEngine {
     if (event.type === 'swing') {
       this.comboStep = event.step + 1;
       this.isAttacking = true;
-      this.animState = `attack${this.comboStep}` as HeroAnimationState;
-      this.animFrame = 0;
-      const x = this.playerX + Math.cos(this.playerAimAngle) * 1.1;
-      const z = this.playerZ + Math.sin(this.playerAimAngle) * 1.1;
+      const swingAngle = this.playerAimAngle;
+      this.beginDirectionalActionAnimation(
+        Math.min(3, this.comboStep) as 1 | 2 | 3,
+        swingAngle,
+        this.comboStep === 3 ? 0.48 : 0.38
+      );
+      const x = this.playerX + Math.cos(swingAngle) * 1.1;
+      const z = this.playerZ + Math.sin(swingAngle) * 1.1;
 
       // Hero-specific swing audio
       if (this.activeHeroId === 'ginzo') {
@@ -2404,14 +2436,14 @@ export class CombatEngine {
         soundEngine.playThunderBolt();
       }
 
-      this.spawnSlashVfx(x, z, this.playerAimAngle);
-      this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, this.playerAimAngle);
+      this.spawnSlashVfx(x, z, swingAngle);
+      this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
       if (this.activeHeroId === 'ginzo' && this.isGinzoEvolved) {
         const finisher = event.step === 2;
-        this.arena.spawnKatanaArcVFX(x, z, this.playerAimAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
-        this.arena.spawnKatanaArcVFX(x - Math.cos(this.playerAimAngle) * 0.45, z - Math.sin(this.playerAimAngle) * 0.45, this.playerAimAngle + 0.35, finisher ? 1.7 : 0.9, 0xfda4af);
+        this.arena.spawnKatanaArcVFX(x, z, swingAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
+        this.arena.spawnKatanaArcVFX(x - Math.cos(swingAngle) * 0.45, z - Math.sin(swingAngle) * 0.45, swingAngle + 0.35, finisher ? 1.7 : 0.9, 0xfda4af);
         if (finisher) {
-          this.arena.spawnDimensionalSlashVFX(x + Math.cos(this.playerAimAngle) * 1.2, z + Math.sin(this.playerAimAngle) * 1.2, this.playerAimAngle);
+          this.arena.spawnDimensionalSlashVFX(x + Math.cos(swingAngle) * 1.2, z + Math.sin(swingAngle) * 1.2, swingAngle);
           this.arena.spawnSkillBurst(x, 1.0, z, 0xfbbf24, 16, 3.6, 0.42);
           this.arena.addCameraShake(0.34);
           this.hitstopTimer = Math.max(this.hitstopTimer, 0.085);
@@ -3233,6 +3265,16 @@ export class CombatEngine {
     this.comboWindowTimer = this.playerCombat.comboWindowLeft;
     this.isAttacking = this.playerCombat.isAttacking;
 
+    // Keep directional skill poses alive long enough for the full arm/weapon follow-through.
+    if (this.actionAnimationTimer > 0) {
+      this.actionAnimationTimer = Math.max(0, this.actionAnimationTimer - dt);
+      if (this.actionAnimationTimer > 0 && this.actionAnimationState) {
+        this.animState = this.actionAnimationState;
+      } else {
+        this.actionAnimationState = null;
+      }
+    }
+
     // Player movement scaled by Movement Speed stat
     if (this.isDashing) {
       this.dashTimer -= dt;
@@ -3246,11 +3288,11 @@ export class CombatEngine {
         const len = Math.hypot(moveX, moveZ);
         this.playerVx = (moveX / len) * targetSpeed;
         this.playerVz = (moveZ / len) * targetSpeed;
-        if (!this.isAttacking) this.animState = 'run';
+        if (!this.isAttacking && !this.actionAnimationState) this.animState = 'run';
       } else {
         this.playerVx *= Math.exp(-14 * dt);
         this.playerVz *= Math.exp(-14 * dt);
-        if (!this.isAttacking && Math.abs(this.playerVx) < 0.2 && Math.abs(this.playerVz) < 0.2) {
+        if (!this.isAttacking && !this.actionAnimationState && Math.abs(this.playerVx) < 0.2 && Math.abs(this.playerVz) < 0.2) {
           this.animState = 'idle';
         }
       }
@@ -3295,12 +3337,15 @@ export class CombatEngine {
     }
 
     this.heroMesh.position.set(this.playerX, 1.4 + bodyBobY, this.playerZ);
+    const actionPose = this.animState.startsWith('attack');
+    const visualAimAngle = actionPose ? this.heroActionAimAngle : this.playerAimAngle;
+    const visualFacing = actionPose ? this.heroActionFacing : this.playerFacing;
     this.heroMesh.rotation.x = -0.58;
-    this.heroMesh.rotation.y = THREE.MathUtils.clamp(Math.sin(this.playerAimAngle) * 0.075, -0.075, 0.075);
+    this.heroMesh.rotation.y = THREE.MathUtils.clamp(Math.sin(visualAimAngle) * 0.075, -0.075, 0.075);
     this.heroMesh.rotation.z = bodyTilt;
     this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
     this.heroShadowMesh.scale.set(shadowSpread, 1, shadowSpread);
-    this.heroMesh.scale.set(Math.abs(this.heroMesh.scale.x) * this.playerFacing, bodyStretchY, 1);
+    this.heroMesh.scale.set(Math.abs(this.heroMesh.scale.x) * visualFacing, bodyStretchY, 1);
 
     // Twelve pose drawings cycled at 25 FPS, giving the arms and legs a much
     // smoother gait and sword follow-through than the old four-frame animation.
