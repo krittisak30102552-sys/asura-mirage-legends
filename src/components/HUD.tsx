@@ -123,8 +123,8 @@ interface HUDProps {
   // Combat Action handlers for touch & click
   onAttack?: () => void;
   onDash?: () => void;
-  onSkill?: (slot: 1 | 2 | 3) => void;
-  skillCooldowns?: Record<1 | 2 | 3, number>;
+  onSkill?: (slot: 1 | 2 | 3 | 4) => void;
+  skillCooldowns?: Record<1 | 2 | 3 | 4, number>;
   onInteract?: () => void;
   onRunCommand?: (command: string) => boolean;
   oneHitMode?: boolean;
@@ -734,15 +734,15 @@ export const HUD: React.FC<HUDProps> = ({
               </span>
             </button>
 
-            {/* Active Skills Slots 1, 2, 3 */}
+            {/* Active Skills Slots 1–3 for normal heroes, plus Ginzo's awakened ultimate in slot 4. */}
             {(activeHeroId === 'ginzo' && isGinzoEvolved ? GINZO_AWAKENED_SKILLS : HERO_SKILLS[activeHeroId])?.map((skill) => {
-              const cd = skillCooldowns?.[skill.slot as (1 | 2 | 3)] ?? 0;
+              const cd = skillCooldowns?.[skill.slot as (1 | 2 | 3 | 4)] ?? 0;
               const isOnCd = cd > 0;
               return (
                 <button
                   key={skill.id}
                   type="button"
-                  onClick={() => onSkill?.(skill.slot as (1 | 2 | 3))}
+                  onClick={() => onSkill?.(skill.slot as (1 | 2 | 3 | 4))}
                   disabled={isOnCd}
                   className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60 touch-none select-none"
                   style={{ touchAction: 'none' }}
