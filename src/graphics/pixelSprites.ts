@@ -67,7 +67,7 @@ export function generateHeroTexture(
   const phase = (f / 12) * Math.PI * 2;
   const attackProgress = f / 11;
   const isAttackingPose = state.startsWith('attack');
-  const isHeavyAttack = state === 'attack3';
+  const isHeavyAttack = state === 'attack3' || state === 'attack4';
   const awakenedGinzo = heroId === 'ginzo' && isGinzoEvolved;
   // Convert world X/Z aim into the sprite's isometric screen direction. The facing
   // value compensates for the mesh's horizontal mirror so the weapon still lines up.
