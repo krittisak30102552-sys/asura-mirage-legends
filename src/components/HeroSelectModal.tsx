@@ -15,6 +15,10 @@ interface HeroSelectModalProps {
   activeHeroId: HeroId;
   onSelectHero: (heroId: HeroId) => void;
   onUnlockHero: (heroId: HeroId) => void;
+  ginzoUpgradeLevel: number;
+  isGinzoEvolved: boolean;
+  onUpgradeGinzo: () => void;
+  onToggleGinzoForm: () => void;
 }
 
 export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({
@@ -25,12 +29,16 @@ export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({
   activeHeroId,
   onSelectHero,
   onUnlockHero,
+  ginzoUpgradeLevel,
+  isGinzoEvolved,
+  onUpgradeGinzo,
+  onToggleGinzoForm,
 }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 select-none animate-fade-in">
-      <div className="relative w-full max-w-4xl bg-zinc-950 border-2 border-sky-500/80 rounded-2xl p-6 shadow-2xl text-zinc-200">
+      <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto bg-zinc-950 border-2 border-sky-500/80 rounded-2xl p-4 sm:p-6 shadow-2xl text-zinc-200">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -173,6 +181,69 @@ export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({
             );
           })}
         </div>
+
+        {/* Ginzo Awakened upgrade track: ten paid steps, then freely switch forms. */}
+        <section className="mt-5 rounded-xl border-2 border-amber-400/60 bg-gradient-to-r from-zinc-950 via-amber-950/30 to-rose-950/30 p-4 shadow-[0_0_24px_rgba(251,191,36,.08)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-amber-300/60 bg-zinc-950 text-3xl shadow-[0_0_18px_rgba(251,191,36,.14)]">
+                ⚔️
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="font-pixel text-xs text-amber-200">กินโซ · เส้นทางดาบสืบทอด</h4>
+                  <span className="rounded border border-rose-300/40 bg-rose-950/60 px-2 py-0.5 font-pixel text-[8px] text-rose-200">
+                    {ginzoUpgradeLevel >= 10 ? 'AWAKENED' : `ขั้น ${ginzoUpgradeLevel}/10`}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-300 font-rajdhani">
+                  อัปเกรดครบ 10 ขั้นเพื่อปลดล็อก <strong className="text-amber-200">กินอิ่ม</strong> · ขั้นละ 10 เหรียญ รวม 100 เหรียญ
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 text-left sm:text-right">
+              <p className="text-xs text-zinc-400 font-rajdhani">ร่างที่กำลังใช้</p>
+              <p className="font-pixel text-[10px] text-amber-200">
+                {activeHeroId !== 'ginzo' ? 'ตัวละครอื่น' : isGinzoEvolved ? 'กินอิ่ม · ร่างอัปเกรด' : 'กินโซ · ร่างปกติ'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-10 gap-1.5" aria-label={`ความคืบหน้าการอัปเกรด ${ginzoUpgradeLevel} จาก 10 ขั้น`}>
+            {Array.from({ length: 10 }, (_, index) => (
+              <div
+                key={index}
+                className={`h-2.5 rounded-sm border transition-colors ${index < ginzoUpgradeLevel ? 'border-amber-200 bg-gradient-to-r from-amber-300 to-rose-400 shadow-[0_0_8px_rgba(251,191,36,.28)]' : 'border-zinc-700 bg-zinc-900'}`}
+              />
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-zinc-400 font-rajdhani">
+              {ginzoUpgradeLevel >= 10
+                ? 'ปลดล็อกแล้ว! สกิลดาบดาวตก · ดาบโต้กลับ · คาตานะสืบทอด พร้อมเอฟเฟกต์ซามูไรอนิเมะ'
+                : `เหรียญในกระเป๋า: ${gold} G · อัปเกรดครั้งถัดไปใช้ 10 G`}
+            </p>
+            {ginzoUpgradeLevel < 10 ? (
+              <button
+                type="button"
+                onClick={onUpgradeGinzo}
+                disabled={gold < 10}
+                className={`w-full rounded-lg border-2 px-4 py-2.5 font-pixel text-[10px] font-bold transition-all sm:w-auto ${gold >= 10 ? 'border-amber-200 bg-gradient-to-r from-amber-400 to-rose-400 text-zinc-950 shadow-[0_0_16px_rgba(251,191,36,.18)] hover:brightness-110 active:scale-95' : 'cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-600'}`}
+              >
+                อัปเกรดขั้น {ginzoUpgradeLevel + 1} · 10 🪙
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleGinzoForm}
+                className="w-full rounded-lg border-2 border-amber-200 bg-gradient-to-r from-amber-300 to-yellow-100 px-4 py-2.5 font-pixel text-[10px] font-bold text-zinc-950 shadow-[0_0_18px_rgba(251,191,36,.2)] transition-all hover:brightness-110 active:scale-95 sm:w-auto"
+              >
+                {activeHeroId === 'ginzo' && isGinzoEvolved ? 'กลับเป็นกินโซ' : 'ใช้ร่างกินอิ่ม'}
+              </button>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
