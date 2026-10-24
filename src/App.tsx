@@ -639,8 +639,9 @@ export default function App() {
         setIsInventoryOpen((prev) => !prev);
       }
 
-      // E to interact with nearby NPC or Gate
-      if (e.code === 'KeyE') {
+      // E interacts only once per physical press and never repeats while held.
+      // This prevents repeated room/portal transitions on keyboards with key repeat.
+      if (e.code === 'KeyE' && !e.repeat) {
         engine.triggerInteraction();
       }
 
