@@ -10,7 +10,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerStats, HeroId, RelicItem, DifficultyMode, DungeonRoomId, DungeonInteractableType } from '../types/game';
-import { HERO_CONFIGS, HERO_SKILLS, GINZO_AWAKENED_SKILLS } from '../data/gameData';
+import { HERO_CONFIGS, getHeroSkills } from '../data/gameData';
 import { ItemIcon } from './ItemIcon';
 import { DIFFICULTY_CONFIGS } from '../game/combatRules';
 import { Shield, Volume2, VolumeX, Pause, HelpCircle, DoorOpen, Compass, Zap, Sparkles, Wind, Flame, Dices, Heart, Maximize, Minimize, Share2, Smartphone, Check, Briefcase, Terminal, X } from 'lucide-react';
@@ -720,7 +720,7 @@ export const HUD: React.FC<HUDProps> = ({
                 }`}
               >
                 <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>
-                  {activeHeroId === 'ginzo' ? '🗡️' : activeHeroId === 'katherine' ? '🔮' : '🥊'}
+                  {activeHeroId === 'ginzo' || activeHeroId === 'bamdee' ? '🗡️' : activeHeroId === 'katherine' ? '🔮' : '🥊'}
                 </span>
                 {!referenceDungeonHud && <span className="text-[7px] sm:text-[9px] font-pixel text-amber-300 font-bold mt-0.5">
                   {comboStep > 0 ? `COMBO ${comboStep}` : 'ATTACK'}
@@ -730,12 +730,12 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>}
               </div>
               <span className={`font-pixel font-bold ${referenceDungeonHud ? 'mt-1 border border-zinc-200 bg-zinc-950 px-1.5 py-0.5 text-[8px] text-white' : 'text-[8px] sm:text-[10px] font-rajdhani text-zinc-400 mt-0.5'}`}>
-                {referenceDungeonHud ? 'LMB' : activeHeroId === 'ginzo' ? 'ฟันคอมโบ' : activeHeroId === 'katherine' ? 'ยิงเวท' : 'หมัดคอมโบ'}
+                {referenceDungeonHud ? 'LMB' : activeHeroId === 'ginzo' || activeHeroId === 'bamdee' ? 'ฟันคอมโบ' : activeHeroId === 'katherine' ? 'ยิงเวท' : 'หมัดคอมโบ'}
               </span>
             </button>
 
             {/* Active Skills Slots 1–3 for normal heroes, plus Ginzo's awakened ultimate in slot 4. */}
-            {(activeHeroId === 'ginzo' && isGinzoEvolved ? GINZO_AWAKENED_SKILLS : HERO_SKILLS[activeHeroId])?.map((skill) => {
+            {getHeroSkills(activeHeroId, isGinzoEvolved).map((skill) => {
               const cd = skillCooldowns?.[skill.slot as (1 | 2 | 3 | 4)] ?? 0;
               const isOnCd = cd > 0;
               return (
