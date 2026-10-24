@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Youtube, X, Grip, Search, Play, ExternalLink } from 'lucide-react';
+import { Youtube, X, Grip, Search, Play, LoaderCircle } from 'lucide-react';
 
 interface YouTubeMusicPlayerProps {
   isMuted: boolean;
@@ -16,8 +16,26 @@ interface DragState extends PlayerPosition {
   startY: number;
 }
 
+interface VideoSearchResult {
+  type?: string;
+  title?: string;
+  videoId?: string;
+  author?: string;
+  lengthSeconds?: number;
+  viewCount?: number;
+  videoThumbnails?: Array<{ quality?: string; url?: string }>;
+}
+
 const DEFAULT_VIDEO_ID = 'iggmiF7DNoM';
 const LEGACY_API_KEY_STORAGE = 'asura-mirage-youtube-api-key';
+
+// Public, keyless search endpoints. They are community-hosted, so fail over if one is unavailable.
+const SEARCH_ENDPOINTS = [
+  'https://inv.nadeko.net',
+  'https://invidious.nerdvpn.de',
+  'https://yt.chocolatemoo53.com',
+  'https://invidious.tiekoetter.com',
+];
 
 function extractVideoId(input: string): string | null {
   const value = input.trim();
@@ -38,23 +56,40 @@ function extractVideoId(input: string): string | null {
   }
 }
 
+function formatDuration(seconds?: number): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return mins + ':' + secs;
+}
+
+function formatViews(views?: number): string {
+  if (typeof views !== 'number' || !Number.isFinite(views) || views < 0) return '';
+  if (views >= 1_000_000) return (views / 1_000_000).toFixed(1) + 'M views';
+  if (views >= 1_000) return (views / 1_000).toFixed(1) + 'K views';
+  return views + ' views';
+}
+
 /**
- * A draggable mini YouTube player. Videos are played through YouTube's official
- * embed. Search results are opened on YouTube itself, since the full YouTube
- * website cannot be embedded in another page and API keys are intentionally not used.
+ * Floating in-game player with API-key-free video search.
+ * The full youtube.com homepage blocks iframe embedding, so the panel searches
+ * through public community endpoints and plays selected videos in YouTube's embed player.
  */
 export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [videoId, setVideoId] = useState(DEFAULT_VIDEO_ID);
   const [videoInput, setVideoInput] = useState('https://www.youtube.com/watch?v=' + DEFAULT_VIDEO_ID);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<VideoSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState('');
   const [position, setPosition] = useState<PlayerPosition | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const searchRequestRef = useRef(0);
 
-  // Remove an old key saved by the previous search panel. No API key is used now.
+  // Remove a key left in local storage by the older search panel; no key is used anymore.
   useEffect(() => {
     try {
       window.localStorage.removeItem(LEGACY_API_KEY_STORAGE);
@@ -133,16 +168,62 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
     onPointerCancel: endDrag,
   };
 
-  const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSearch = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = searchQuery.trim();
     if (!query) {
-      setError('พิมพ์คำค้นก่อนนะ');
+      setError('พิมพ์ชื่อคลิป เพลง หรือช่องที่อยากค้นหาก่อนนะ');
+      setSearchResults([]);
       return;
     }
-    // The YouTube results page blocks being embedded inside this game.
-    window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), '_blank', 'noopener,noreferrer');
-    setError('เลือกคลิปจาก YouTube แล้วคัดลอกลิงก์มาวางในช่องด้านล่างเพื่อเล่นในหน้าต่างเกม');
+
+    const requestId = ++searchRequestRef.current;
+    setIsSearching(true);
+    setError('');
+    setSearchResults([]);
+
+    for (const endpoint of SEARCH_ENDPOINTS) {
+      try {
+        const url = endpoint + '/api/v1/search?q=' + encodeURIComponent(query) + '&type=video';
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) continue;
+        const payload = await response.json() as VideoSearchResult[];
+        if (!Array.isArray(payload)) continue;
+
+        const results = payload.filter((item) =>
+          item &&
+          typeof item.videoId === 'string' &&
+          /^[a-zA-Z0-9_-]{11}$/.test(item.videoId) &&
+          typeof item.title === 'string' &&
+          item.title.length > 0 &&
+          (!item.type || item.type === 'video')
+        ).slice(0, 12);
+
+        if (requestId !== searchRequestRef.current) return;
+        if (results.length > 0) {
+          setSearchResults(results);
+          setError('');
+          setIsSearching(false);
+          return;
+        }
+      } catch {
+        // Try the next community endpoint if this one is offline or blocks cross-origin access.
+      }
+      if (requestId !== searchRequestRef.current) return;
+    }
+
+    if (requestId === searchRequestRef.current) {
+      setError('ตอนนี้บริการค้นหาคลิปไม่ตอบสนอง ลองใหม่อีกครั้งได้เลย (ไม่ต้องใช้ API Key)');
+      setIsSearching(false);
+    }
+  };
+
+  const selectSearchResult = (item: VideoSearchResult) => {
+    const id = item.videoId;
+    if (!id) return;
+    setVideoId(id);
+    setVideoInput('https://www.youtube.com/watch?v=' + id);
+    setError('');
   };
 
   const handlePlayVideo = (event: React.FormEvent<HTMLFormElement>) => {
@@ -169,12 +250,12 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
   return (
     <div ref={rootRef} data-youtube-player-root style={positionStyle} className="pointer-events-auto fixed z-[45] font-rajdhani">
       {isOpen ? (
-        <section className="flex max-h-[86vh] w-[330px] max-w-[94vw] flex-col overflow-hidden rounded-xl border-2 border-red-500/80 bg-zinc-950 shadow-[0_12px_40px_rgba(0,0,0,.8)]" aria-label="หน้าต่าง YouTube ในเกม">
+        <section className="flex max-h-[88vh] w-[340px] max-w-[94vw] flex-col overflow-hidden rounded-xl border-2 border-red-500/80 bg-zinc-950 shadow-[0_12px_40px_rgba(0,0,0,.8)]" aria-label="หน้าต่าง YouTube ในเกม">
           <div {...dragHandlers} className="flex shrink-0 cursor-grab touch-none items-center justify-between gap-2 border-b border-red-900/60 bg-zinc-900 px-3 py-2 active:cursor-grabbing" title="จับตรงนี้เพื่อลากหน้าต่าง">
             <div className="flex min-w-0 items-center gap-2 text-white">
               <Grip size={15} className="shrink-0 text-zinc-400" />
               <Youtube size={18} className="shrink-0 text-red-500" />
-              <span className="truncate text-xs font-bold">YouTube · เล่นในเกม</span>
+              <span className="truncate text-xs font-bold">YouTube · ค้นหาในเกม</span>
             </div>
             <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => setIsOpen(false)} aria-label="ย่อ YouTube" className="shrink-0 rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white">
               <X size={16} />
@@ -187,24 +268,56 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
                 type="search"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setError(''); }}
-                placeholder="ค้นหาคลิปอะไรก็ได้…"
-                aria-label="ค้นหาวิดีโอบน YouTube"
+                placeholder="ค้นหาคลิป เพลง เกม ได้หมด…"
+                aria-label="ค้นหาวิดีโอ"
                 className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-2 text-xs text-white outline-none placeholder:text-zinc-500 focus:border-red-400"
               />
-              <button type="submit" className="inline-flex shrink-0 items-center gap-1 rounded border border-red-400 bg-red-600 px-2.5 py-2 text-xs font-bold text-white hover:bg-red-500">
-                <Search size={13} /> ค้นหา
+              <button type="submit" disabled={isSearching} className="inline-flex shrink-0 items-center gap-1 rounded border border-red-400 bg-red-600 px-2.5 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-wait disabled:opacity-60">
+                {isSearching ? <LoaderCircle size={13} className="animate-spin" /> : <Search size={13} />}
+                {isSearching ? 'ค้นหา…' : 'ค้นหา'}
               </button>
             </form>
 
-            {error && <p role="status" className="px-2 pt-2 text-[10px] leading-relaxed text-amber-200">{error}</p>}
+            {error && <p role="status" className="px-2 py-2 text-[10px] leading-relaxed text-amber-200">{error}</p>}
 
-            <div className="px-2 pt-2 text-[11px] font-bold text-zinc-300">วางลิงก์คลิปเพื่อเล่นในเกม</div>
+            {searchResults.length > 0 && (
+              <div className="max-h-[190px] overflow-y-auto border-b border-zinc-800" aria-label="ผลการค้นหา">
+                {searchResults.map((item) => {
+                  const id = item.videoId;
+                  if (!id) return null;
+                  const thumb = item.videoThumbnails?.find((image) => image.quality === 'medium')?.url
+                    ?? item.videoThumbnails?.[0]?.url
+                    ?? 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+                  const active = id === videoId;
+                  const duration = formatDuration(item.lengthSeconds);
+                  const views = formatViews(item.viewCount);
+                  return (
+                    <button
+                      type="button"
+                      key={id}
+                      onClick={() => selectSearchResult(item)}
+                      className={'flex w-full items-center gap-2 border-b border-zinc-900 px-2 py-2 text-left transition hover:bg-zinc-800 ' + (active ? 'bg-red-950/60' : 'bg-zinc-950')}
+                    >
+                      <img src={thumb} alt="" loading="lazy" className="h-11 w-[62px] shrink-0 rounded object-cover" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block line-clamp-2 text-[11px] font-semibold leading-snug text-zinc-100">{item.title}</span>
+                        <span className="mt-0.5 block truncate text-[10px] text-zinc-400">{item.author || 'YouTube'}</span>
+                        {(duration || views) && <span className="mt-0.5 block truncate text-[9px] text-zinc-500">{[duration, views].filter(Boolean).join(' · ')}</span>}
+                      </span>
+                      {active && <span className="shrink-0 text-[9px] font-bold text-red-300">เลือกอยู่</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="px-2 pt-2 text-[11px] font-bold text-zinc-300">หรือวางลิงก์คลิปโดยตรง</div>
             <form onSubmit={handlePlayVideo} className="flex gap-1.5 p-2">
               <input
                 type="text"
                 value={videoInput}
                 onChange={(e) => { setVideoInput(e.target.value); setError(''); }}
-                placeholder="วางลิงก์ YouTube / Video ID"
+                placeholder="วางลิงก์ YouTube"
                 aria-label="ลิงก์วิดีโอ YouTube"
                 className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-2 text-xs text-white outline-none placeholder:text-zinc-500 focus:border-red-400"
               />
@@ -226,9 +339,7 @@ export const YouTubeMusicPlayer: React.FC<YouTubeMusicPlayerProps> = ({ isMuted 
                 allowFullScreen
                 className="block h-[200px] w-full border-0 bg-black"
               />
-              <p className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
-                <ExternalLink size={10} /> ค้นหาบน YouTube แล้วนำลิงก์กลับมาวางตรงนี้ · ลากแถบด้านบนเพื่อย้าย
-              </p>
+              <p className="mt-1 text-[10px] text-zinc-500">เลือกผลค้นหาเพื่อเปลี่ยนคลิป โดยยังอยู่ในเกม · ลากแถบด้านบนเพื่อย้ายหน้าต่าง</p>
             </div>
           </div>
         </section>
