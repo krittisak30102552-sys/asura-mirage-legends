@@ -44,7 +44,9 @@ import { ForgeModal } from './components/ForgeModal';
 import { ChestRewardModal } from './components/ChestRewardModal';
 import { levelSystem, ShopOfferItem } from './game/levelSystem';
 import { EquipmentPurchaseModal } from './components/EquipmentPurchaseModal';
+import { UpdateNotesModal, UPDATE_VERSION } from './components/UpdateNotesModal';
 
+const UPDATE_SEEN_VERSION_KEY = 'asura-mirage-last-seen-update-version';
 const GINZO_UPGRADE_LEVEL_KEY = 'asura-mirage-ginzo-upgrade-level';
 const GINZO_EVOLVED_FORM_KEY = 'asura-mirage-ginzo-evolved-form';
 
@@ -87,6 +89,24 @@ export default function App() {
 
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
+  const [isUpdateNotesOpen, setIsUpdateNotesOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      setIsUpdateNotesOpen(window.localStorage.getItem(UPDATE_SEEN_VERSION_KEY) !== UPDATE_VERSION);
+    } catch {
+      setIsUpdateNotesOpen(true);
+    }
+  }, []);
+
+  const handleDismissUpdateNotes = useCallback(() => {
+    try {
+      window.localStorage.setItem(UPDATE_SEEN_VERSION_KEY, UPDATE_VERSION);
+    } catch {
+      // The dialog can still be dismissed if browser storage is unavailable.
+    }
+    setIsUpdateNotesOpen(false);
+  }, []);
 
   // Lobby & Dungeon Modals
   const [isHeroModalOpen, setIsHeroModalOpen] = useState<boolean>(false);
@@ -1315,6 +1335,7 @@ export default function App() {
           onReplaceEquipment={handleReplaceEquipment}
         />
       )}
+      <UpdateNotesModal isOpen={isUpdateNotesOpen} onClose={handleDismissUpdateNotes} />
     </div>
   );
 }
