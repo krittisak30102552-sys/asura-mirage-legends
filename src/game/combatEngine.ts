@@ -2543,6 +2543,10 @@ export class CombatEngine {
 
   public triggerInteraction() {
     if (this.bossIntroTimer > 0) return;
+    // Ignore E unless the proximity scan has found an actual interaction target.
+    // This prevents stale/no-target presses from triggering unrelated dungeon actions.
+    if (this.currentMode === 'lobby' && !this.nearbyInteractable) return;
+    if (this.currentMode === 'dungeon' && !this.nearbyDungeonInteractable) return;
     if (this.currentMode === 'lobby') {
       if (this.nearbyInteractable && this.onOpenModal) {
         soundEngine.playCoin();
