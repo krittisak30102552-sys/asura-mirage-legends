@@ -2514,7 +2514,11 @@ export class CombatEngine {
         soundEngine.playThunderBolt();
       }
 
-      this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
+      if (this.activeHeroId === 'ginzo' || this.activeHeroId === 'bamdee') {
+        this.arena.spawnGinzoComboVFX(this.comboStep, x, z, swingAngle);
+      } else {
+        this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
+      }
       if (this.hasAwakenedKit()) {
         const finisher = event.step === 2;
         this.arena.spawnKatanaArcVFX(x, z, swingAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
