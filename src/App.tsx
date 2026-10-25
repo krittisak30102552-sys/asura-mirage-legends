@@ -271,29 +271,44 @@ export default function App() {
         if (_v.z < 1.0) {
           const sx = (_v.x * halfW) + halfW;
           const sy = (-(_v.y * halfH)) + halfH;
-          const alpha = Math.max(0, d.life / d.maxLife);
+          const age = 1 - Math.max(0, Math.min(1, d.life / d.maxLife));
+          // pop-in with a little overshoot, hold, then fade out
+          const easeOutBack = (t: number) => 1 + 3.2 * Math.pow(t - 1, 3) + 2.2 * Math.pow(t - 1, 2);
+          const pop = 0.35 + 0.65 * easeOutBack(Math.min(1, age / 0.16));
+          const fade = Math.min(1, (1 - age) / 0.35);
+          const label = /^\d+$/.test(d.text) ? Number(d.text).toLocaleString('en-US') : d.text;
 
           ctx.save();
-          ctx.globalAlpha = alpha;
+          ctx.translate(sx, sy);
+          ctx.scale((d.scale || 1) * pop, (d.scale || 1) * pop);
+          ctx.globalAlpha = fade;
+          ctx.lineJoin = 'round';
 
-          // Draw Jagged Red Comic Starburst Background for Crits
           if (d.isCrit) {
+            // soft golden glow + slowly spinning comic burst
+            const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 40);
+            glow.addColorStop(0, 'rgba(250,204,21,0.55)');
+            glow.addColorStop(1, 'rgba(250,204,21,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, 40, 0, Math.PI * 2);
+            ctx.fill();
+
             ctx.save();
-            ctx.translate(sx, sy);
-            ctx.fillStyle = '#dc2626'; // Red comic burst
+            ctx.rotate(age * 1.1);
+            const burst = ctx.createLinearGradient(0, -26, 0, 26);
+            burst.addColorStop(0, '#ef4444');
+            burst.addColorStop(1, '#b91c1c');
+            ctx.fillStyle = burst;
             ctx.strokeStyle = '#7f1d1d';
             ctx.lineWidth = 2;
             ctx.beginPath();
             const points = 12;
-            const outerR = 26;
-            const innerR = 14;
             for (let i = 0; i < points * 2; i++) {
-              const r = i % 2 === 0 ? outerR : innerR;
-              const angle = (i * Math.PI) / points;
-              const px = Math.cos(angle) * r;
-              const py = Math.sin(angle) * r;
-              if (i === 0) ctx.moveTo(px, py);
-              else ctx.lineTo(px, py);
+              const r = i % 2 === 0 ? 26 : 14;
+              const ang = (i * Math.PI) / points;
+              if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+              else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
             }
             ctx.closePath();
             ctx.fill();
@@ -301,17 +316,25 @@ export default function App() {
             ctx.restore();
           }
 
-          // Damage Text
           ctx.font = d.isCrit
             ? "900 20px 'Press Start 2P', monospace"
             : "700 13px 'Press Start 2P', monospace";
-          ctx.fillStyle = d.isCrit ? '#fef08a' : d.color;
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 4;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.strokeText(d.text, sx, sy);
-          ctx.fillText(d.text, sx, sy);
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#000000';
+          ctx.strokeText(label, 0, 0);
+          if (d.isCrit) {
+            const textFill = ctx.createLinearGradient(0, -10, 0, 10);
+            textFill.addColorStop(0, '#fffbd0');
+            textFill.addColorStop(1, '#facc15');
+            ctx.fillStyle = textFill;
+            ctx.shadowColor = 'rgba(250,204,21,0.9)';
+            ctx.shadowBlur = 8;
+          } else {
+            ctx.fillStyle = d.color;
+          }
+          ctx.fillText(label, 0, 0);
 
           ctx.restore();
         }

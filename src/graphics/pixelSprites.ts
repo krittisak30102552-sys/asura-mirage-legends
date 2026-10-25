@@ -10,8 +10,9 @@ import { drawBiomeEnemy } from './biomeSprites';
 
 export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.NearestFilter;
-  texture.magFilter = THREE.NearestFilter;
+  // Linear sampling keeps combat effects soft and clean, matching the smooth 2D characters.
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = false;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -1876,7 +1877,7 @@ export function generateHitFlashTexture(): THREE.CanvasTexture {
   drawBurst('#ffffff', 0.22, 4, 0.34);
 
   ctx.restore();
-  return createPixelEffectTexture(canvas, 64);
+  return createPixelEffectTexture(canvas, 128);
 }
 
 export function generateShockwaveRingTexture(): THREE.CanvasTexture {

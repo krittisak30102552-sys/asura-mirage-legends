@@ -78,6 +78,8 @@ export class ArenaScene {
   private sparkTex: THREE.CanvasTexture | null = null;
   private hitFlashTex: THREE.CanvasTexture | null = null;
   private shockwaveRingTex: THREE.CanvasTexture | null = null;
+  private softGlowTex: THREE.CanvasTexture | null = null;
+  private streakTex: THREE.CanvasTexture | null = null;
 
   // Camera Shake & Following
   public cameraShake: number = 0;
@@ -3786,6 +3788,54 @@ export class ArenaScene {
     return this.hitFlashTex;
   }
 
+  /** Smooth radial glow used for impact bloom. */
+  public getSoftGlowTexture(): THREE.CanvasTexture {
+    if (!this.softGlowTex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d')!;
+      const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.22, 'rgba(255,255,255,0.6)');
+      g.addColorStop(0.55, 'rgba(255,255,255,0.16)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.softGlowTex = tex;
+    }
+    return this.softGlowTex;
+  }
+
+  /** Tapered speed line (bright at the root, fading to the tip) for impact streaks. */
+  public getStreakTexture(): THREE.CanvasTexture {
+    if (!this.streakTex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d')!;
+      const along = ctx.createLinearGradient(0, 0, 128, 0);
+      along.addColorStop(0, 'rgba(255,255,255,1)');
+      along.addColorStop(0.35, 'rgba(255,255,255,0.75)');
+      along.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = along;
+      ctx.fillRect(0, 0, 128, 16);
+      ctx.globalCompositeOperation = 'destination-in';
+      const across = ctx.createLinearGradient(0, 0, 0, 16);
+      across.addColorStop(0, 'rgba(255,255,255,0)');
+      across.addColorStop(0.5, 'rgba(255,255,255,1)');
+      across.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = across;
+      ctx.fillRect(0, 0, 128, 16);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.streakTex = tex;
+    }
+    return this.streakTex;
+  }
+
   public getShockwaveRingTexture(): THREE.CanvasTexture {
     if (!this.shockwaveRingTex) this.shockwaveRingTex = generateShockwaveRingTexture();
     return this.shockwaveRingTex;
@@ -3837,6 +3887,79 @@ export class ArenaScene {
       }
     };
     this.scheduleVfxFrame(fadeStar);
+
+    // 1b. Soft bloom behind the burst + radiating speed lines (time-based, frame-rate independent)
+    {
+      const glowColor = isCrit ? 0xfacc15 : themeColor ?? 0xffd166;
+      const glowGeo = new THREE.PlaneGeometry(1.8, 1.8);
+      const glowMat = new THREE.MeshBasicMaterial({
+        map: this.getSoftGlowTexture(),
+        color: glowColor,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      glow.position.set(x, y + 0.05, z);
+      glow.rotation.x = -Math.PI / 4;
+      this.vfxGroup.add(glow);
+      const glowEnd = isCrit ? 3.4 : isHeavy ? 2.6 : 1.9;
+
+      const streakTex = this.getStreakTexture();
+      const streakCount = this.scaleParticleCount(isCrit ? 9 : isHeavy ? 6 : 4);
+      const baseLen = isCrit ? 2.4 : isHeavy ? 1.9 : 1.4;
+      const streaks: { mesh: THREE.Mesh; geo: THREE.PlaneGeometry; mat: THREE.MeshBasicMaterial }[] = [];
+      for (let i = 0; i < streakCount; i++) {
+        const len = baseLen * (0.7 + Math.random() * 0.6);
+        const geo = new THREE.PlaneGeometry(len, isCrit ? 0.15 : 0.11);
+        geo.translate(len * 0.5 + 0.15, 0, 0); // root at the impact point
+        const mat = new THREE.MeshBasicMaterial({
+          map: streakTex,
+          color: i % 3 === 0 ? 0xffffff : glowColor,
+          transparent: true,
+          opacity: 1,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y + 0.08, z);
+        mesh.rotation.x = -Math.PI / 4;
+        mesh.rotation.z = (i / streakCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+        mesh.scale.x = 0.3;
+        this.vfxGroup.add(mesh);
+        streaks.push({ mesh, geo, mat });
+      }
+
+      const t0 = performance.now();
+      const dur = isCrit ? 0.26 : 0.19;
+      const animateBloom = () => {
+        const prog = (performance.now() - t0) / 1000 / dur;
+        if (prog < 1 && !this.disposed) {
+          const eased = 1 - Math.pow(1 - prog, 3);
+          const gs = glowEnd * (0.35 + 0.65 * eased);
+          glow.scale.set(gs, gs, 1);
+          glowMat.opacity = 0.9 * Math.pow(1 - prog, 1.4);
+          for (const st of streaks) {
+            st.mesh.scale.x = 0.3 + 0.9 * eased;
+            st.mat.opacity = Math.pow(1 - prog, 1.5);
+          }
+          this.scheduleVfxFrame(animateBloom);
+        } else {
+          this.vfxGroup.remove(glow);
+          glowGeo.dispose();
+          glowMat.dispose();
+          for (const st of streaks) {
+            this.vfxGroup.remove(st.mesh);
+            st.geo.dispose();
+            st.mat.dispose();
+          }
+        }
+      };
+      this.scheduleVfxFrame(animateBloom);
+    }
 
     // 2. Kinetic Glowing Spark Particles (Burst outward)
     const count = this.scaleParticleCount(isCrit ? 14 : isHeavy ? 9 : 5);

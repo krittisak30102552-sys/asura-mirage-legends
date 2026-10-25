@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.1';
+export const UPDATE_VERSION = '1.1.2';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -46,6 +46,9 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>HUD ของ Bamdee แสดงเฉพาะสกิลพิฆาตโลหิตหนึ่งสกิล</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>คงเอฟเฟกต์และระบบต่อสู้สำหรับ Hiken – Crimson Severance โดยไม่เปิดสกิลอื่นของ Ginzo ให้ Bamdee</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ปรับเอฟเฟกต์โจมตีให้เนียนขึ้น พร้อมแสงฟุ้งและเส้นกระแทกตอนโดนตี</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ปรับตัวเลขดาเมจให้เด้งแล้วค่อยจาง ใส่ comma คั่นหลักพัน และเพิ่มไฮไลต์สีทองเมื่อคริติคอล</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เพิ่มแรงสั่นกล้องเล็กน้อยเมื่อคริติคอล โดยไม่รบกวนจังหวะอัลติ</span></li>
               </ul>
             </section>
             <section className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
