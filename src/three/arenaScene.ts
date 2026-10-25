@@ -69,6 +69,10 @@ export class ArenaScene {
   private happyShopItemGroups: Array<THREE.Group | null> = [];
   private bossAltarGroup: THREE.Group | null = null;
 
+  // Ambient particles
+  private petalParticles!: THREE.Points;
+  private petalPositions!: Float32Array;
+
   // Active Combat Particles & Dynamic VFX
   public activeParticles: CombatParticle[] = [];
   private sparkTex: THREE.CanvasTexture | null = null;
@@ -141,6 +145,7 @@ export class ArenaScene {
     pmremGenerator.dispose();
 
     this.setupLighting();
+    this.buildAmbientParticles();
 
     this.scene.add(this.staticDecorGroup);
     this.scene.add(this.actorsGroup);
@@ -2847,7 +2852,6 @@ export class ArenaScene {
   // 4. Sakura Storm (Ginzo Skill 3): 8 criss-crossing razor slashes & cherry blossom explosion
   public spawnSakuraStormVFX(x: number, z: number) {
     // A flurry of visible katana cuts and sakura petals; no magic floor circle.
-    this.spawnSkillBurst(x, 1.0, z, 0xf9a8d4, 20, 4.6, 0.68);
     const slashCount = 8;
     for (let i = 0; i < slashCount; i++) {
       setTimeout(() => {
@@ -2856,7 +2860,6 @@ export class ArenaScene {
         const offX = (Math.random() - 0.5) * 2.5;
         const offZ = (Math.random() - 0.5) * 2.5;
         this.spawnKatanaArcVFX(x + offX, z + offZ, angle, 0.78 + Math.random() * 0.24, i % 2 ? 0xfda4af : 0xf472b6);
-        this.spawnSkillBurst(x + offX, 1.3, z + offZ, 0xf9a8d4, 4, 2.6, 0.32);
       }, i * 65);
     }
   }
@@ -3841,7 +3844,6 @@ export class ArenaScene {
       } else {
         this.spawnKatanaArcVFX(x, z, angle, 1.42, 0xfda4af);
         this.spawnDimensionalSlashVFX(x, z, angle);
-        this.spawnSkillBurst(x, 1.15, z, 0xf9a8d4, 12, 4.2, 0.38);
         this.addCameraShake(0.32);
       }
     } else if (heroId === 'quan') {
@@ -3868,6 +3870,40 @@ export class ArenaScene {
         this.addCameraShake(0.36);
       }
     }
+  }
+
+  private buildAmbientParticles() {
+    const count = this.graphicsQuality === 'low' ? 16 : this.graphicsQuality === 'balanced' ? 40 : 80;
+    const geo = new THREE.BufferGeometry();
+    this.petalPositions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      this.petalPositions[i * 3 + 0] = (Math.random() - 0.5) * 32;
+      this.petalPositions[i * 3 + 1] = 0.5 + Math.random() * 6;
+      this.petalPositions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(this.petalPositions, 3));
+
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = 16;
+    pCanvas.height = 16;
+    const pCtx = pCanvas.getContext('2d')!;
+    pCtx.fillStyle = '#38bdf8';
+    pCtx.beginPath();
+    pCtx.arc(8, 8, 6, 0, Math.PI * 2);
+    pCtx.fill();
+
+    const pTex = new THREE.CanvasTexture(pCanvas);
+    const pMat = new THREE.PointsMaterial({
+      size: 0.3,
+      map: pTex,
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.petalParticles = new THREE.Points(geo, pMat);
+    this.scene.add(this.petalParticles);
   }
 
   private scheduleVfxFrame(task: (now: number) => void) {
@@ -4474,6 +4510,19 @@ export class ArenaScene {
       light.intensity = baseIntensity * (0.88 + Math.sin(time + i * 2.1) * 0.12);
     });
 
+    // Ambient Sparkles
+    const pos = this.petalPositions;
+    for (let i = 0; i < pos.length / 3; i++) {
+      pos[i * 3 + 0] += Math.sin(time + i) * 0.25 * dt;
+      pos[i * 3 + 1] -= 0.5 * dt;
+      pos[i * 3 + 2] += Math.cos(time + i) * 0.25 * dt;
+      if (pos[i * 3 + 1] < 0.2) {
+        pos[i * 3 + 1] = 6 + Math.random() * 2;
+        pos[i * 3 + 0] = (Math.random() - 0.5) * 32;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 20;
+      }
+    }
+    this.petalParticles.geometry.attributes.position.needsUpdate = true;
 
     // Portal Rotation
     if (this.portalMesh) {
