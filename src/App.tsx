@@ -346,7 +346,7 @@ export default function App() {
 
     if (engine.currentMode === 'lobby' && engine.nearbyInteractable) {
       if (engine.nearbyInteractable === 'trainer') {
-        promptTarget = { x: 8, y: 2.5, z: -4, title: 'ครูฝึกฉางอี้', action: '[E] เลือกตัวละคร', color: '#38bdf8' };
+        promptTarget = { x: 9.2, y: 2.7, z: -3.2, title: 'ครูฝึกฉางอี้', action: '[E] เลือกตัวละคร', color: '#38bdf8' };
       } else if (engine.nearbyInteractable === 'gate') {
         promptTarget = { x: 0, y: 2.6, z: -6.5, title: 'ประตูดันเจี้ยน', action: '[E] เลือกด่าน / ผจญภัย', color: '#10b981' };
       }

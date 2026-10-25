@@ -852,7 +852,7 @@ export class CombatEngine {
       new THREE.MeshBasicMaterial({ map: generateNpcTexture('trainer'), transparent: true, alphaTest: 0.05, side: THREE.DoubleSide })
     );
     trainer.rotation.x = -0.58;
-    trainer.position.set(8, 1.4, -4);
+    trainer.position.set(9.2, 1.4, -3.2);
     this.arena.actorsGroup.add(trainer);
     this.trainerNpcMesh = trainer;
 
@@ -3646,7 +3646,7 @@ export class CombatEngine {
   private checkLobbyInteractions() {
     let nextInteract: 'trainer' | 'gate' | null = null;
 
-    const distTrainer = Math.hypot(this.playerX - 8, this.playerZ + 4);
+    const distTrainer = Math.hypot(this.playerX - 9.2, this.playerZ + 3.2);
     if (distTrainer < 3.2) nextInteract = 'trainer';
 
     const distGate = Math.hypot(this.playerX - 0, this.playerZ - (-7.2));
