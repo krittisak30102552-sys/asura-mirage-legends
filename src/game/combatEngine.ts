@@ -848,11 +848,11 @@ export class CombatEngine {
     });
 
     const trainer = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.4, 2.8),
+      new THREE.PlaneGeometry(2.2, 3.0),
       new THREE.MeshBasicMaterial({ map: generateNpcTexture('trainer'), transparent: true, alphaTest: 0.05, side: THREE.DoubleSide })
     );
     trainer.rotation.x = -0.58;
-    trainer.position.set(9.2, 1.4, -3.2);
+    trainer.position.set(9.2, 1.5, -3.2);
     this.arena.actorsGroup.add(trainer);
     this.trainerNpcMesh = trainer;
 

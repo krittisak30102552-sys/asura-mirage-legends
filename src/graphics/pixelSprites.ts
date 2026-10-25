@@ -1406,39 +1406,152 @@ export function generateNpcTexture(id: 'blacksmith' | 'trainer' | 'gatekeeper'):
     ctx.fillRect(cx + 24, cy - 25, 28, 16);
 
   } else if (id === 'trainer') {
-    // Master Chanyi: Martial Sage in White and Jade Robes
+    // Master Chanyi: a readable human martial-arts teacher in a white and jade robe.
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Ground shadow and staff.
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
     ctx.beginPath();
-    ctx.ellipse(cx, cy - 30, 20, 24, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#fed7aa';
+    ctx.ellipse(cx, cy + 66, 30, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#09090b';
+    ctx.strokeStyle = '#68452d';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 36, cy + 58);
+    ctx.lineTo(cx - 38, cy - 35);
+    ctx.stroke();
+
+    // Legs and shoes show beneath the robe.
+    ctx.fillStyle = '#4b5563';
+    ctx.strokeStyle = '#26313b';
+    ctx.lineWidth = 2;
+    ctx.fillRect(cx - 19, cy + 35, 16, 22);
+    ctx.strokeRect(cx - 19, cy + 35, 16, 22);
+    ctx.fillRect(cx + 3, cy + 35, 16, 22);
+    ctx.strokeRect(cx + 3, cy + 35, 16, 22);
+    ctx.fillStyle = '#292b32';
+    ctx.beginPath();
+    ctx.roundRect(cx - 23, cy + 53, 23, 9, 3);
+    ctx.roundRect(cx + 1, cy + 53, 23, 9, 3);
+    ctx.fill();
+
+    // Flowing white robe with separate sleeves.
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = '#34424d';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 19, cy - 9);
+    ctx.lineTo(cx - 30, cy - 3);
+    ctx.lineTo(cx - 40, cy + 20);
+    ctx.lineTo(cx - 32, cy + 29);
+    ctx.lineTo(cx - 20, cy + 14);
+    ctx.lineTo(cx - 29, cy + 47);
+    ctx.lineTo(cx + 29, cy + 47);
+    ctx.lineTo(cx + 20, cy + 14);
+    ctx.lineTo(cx + 32, cy + 29);
+    ctx.lineTo(cx + 40, cy + 20);
+    ctx.lineTo(cx + 30, cy - 3);
+    ctx.lineTo(cx + 19, cy - 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Hands and cuffs.
+    ctx.fillStyle = '#edf2f7';
+    ctx.fillRect(cx - 39, cy + 20, 9, 10);
+    ctx.fillRect(cx + 30, cy + 20, 9, 10);
+    ctx.fillStyle = '#edb991';
+    ctx.beginPath();
+    ctx.ellipse(cx - 35, cy + 35, 5, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 35, cy + 35, 5, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#34424d';
+    ctx.stroke();
+
+    // Jade collar, sash and robe folds.
+    ctx.strokeStyle = '#159477';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 13, cy - 8);
+    ctx.lineTo(cx, cy + 12);
+    ctx.lineTo(cx + 13, cy - 8);
+    ctx.stroke();
+    ctx.fillStyle = '#c99c48';
+    ctx.fillRect(cx - 20, cy + 24, 40, 7);
+    ctx.fillStyle = '#f7e5b1';
+    ctx.fillRect(cx - 3, cy + 25, 7, 5);
+    ctx.strokeStyle = '#bdc8d0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 14, cy + 37);
+    ctx.lineTo(cx - 9, cy + 43);
+    ctx.moveTo(cx + 14, cy + 37);
+    ctx.lineTo(cx + 9, cy + 43);
+    ctx.stroke();
+
+    // Neck, ears and face.
+    ctx.fillStyle = '#d99b72';
+    ctx.fillRect(cx - 7, cy - 18, 14, 14);
+    ctx.fillStyle = '#edb991';
+    ctx.beginPath();
+    ctx.ellipse(cx - 19, cy - 30, 5, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 19, cy - 30, 5, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy - 31, 18, 23, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#34424d';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // White Topknot Hair
+    // White hair and topknot.
     ctx.fillStyle = '#f8fafc';
     ctx.beginPath();
-    ctx.arc(cx, cy - 48, 14, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Sage Robe (White with Jade Green Lapels)
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    ctx.moveTo(cx - 26, cy - 10);
-    ctx.lineTo(cx + 26, cy - 10);
-    ctx.lineTo(cx + 30, cy + 50);
-    ctx.lineTo(cx - 30, cy + 50);
+    ctx.moveTo(cx - 18, cy - 35);
+    ctx.quadraticCurveTo(cx - 22, cy - 57, cx, cy - 57);
+    ctx.quadraticCurveTo(cx + 21, cy - 57, cx + 18, cy - 35);
+    ctx.quadraticCurveTo(cx + 8, cy - 43, cx, cy - 41);
+    ctx.quadraticCurveTo(cx - 8, cy - 42, cx - 18, cy - 35);
     ctx.closePath();
     ctx.fill();
-
-    // Jade Green Collar & Scroll
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy - 57, 9, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillRect(cx - 12, cy + 8, 24, 8); // Ancient martial scroll
-
+    // Eyes, brows, nose and short white beard give the face definition.
+    ctx.strokeStyle = '#687581';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, cy - 34);
+    ctx.lineTo(cx - 5, cy - 36);
+    ctx.moveTo(cx + 5, cy - 36);
+    ctx.lineTo(cx + 12, cy - 34);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(cx - 8, cy - 29, 4, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 8, cy - 29, 4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27313a';
+    ctx.beginPath();
+    ctx.arc(cx - 7, cy - 29, 1.8, 0, Math.PI * 2);
+    ctx.arc(cx + 7, cy - 29, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#b87658';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 27);
+    ctx.lineTo(cx - 1, cy - 20);
+    ctx.lineTo(cx + 3, cy - 20);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, cy - 18);
+    ctx.quadraticCurveTo(cx, cy - 13, cx + 10, cy - 18);
+    ctx.quadraticCurveTo(cx + 6, cy - 8, cx, cy - 9);
+    ctx.quadraticCurveTo(cx - 6, cy - 8, cx - 10, cy - 18);
+    ctx.fill();
   } else {
     // Gatekeeper
     ctx.fillStyle = '#f59e0b';

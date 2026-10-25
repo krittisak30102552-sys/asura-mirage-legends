@@ -1854,18 +1854,8 @@ export class ArenaScene {
       }
     }
 
-    // Eaves and open rafters create the silhouette of a roof while preserving gameplay visibility.
-    const rafterMat = new THREE.MeshStandardMaterial({ color: 0x2e1b13, roughness: 0.94 });
-    for (const zOffset of [2.2, 6.6, 11.0, 15.4, 19.8]) {
-      const rafter = new THREE.Mesh(new THREE.BoxGeometry(30.2, 0.24, 0.36), rafterMat);
-      rafter.position.set(0, 9.15, zOffset);
-      wallGroup.add(rafter);
-    }
-    for (const side of [-1, 1]) {
-      const eave = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.18, 22.0), wallMat);
-      eave.position.set(side * 11.0, 9.05, 11.0);
-      wallGroup.add(eave);
-    }
+    // Leave the ceiling open: overhead beams crossed the isometric camera and hid the play area.
+    // The tall timber side and rear walls still make the Lobby read as an enclosed room.
 
     this.staticDecorGroup.add(wallGroup);
   }
