@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.7';
+export const UPDATE_VERSION = '1.1.8';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -44,6 +44,8 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
             <section className="rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4">
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-sky-300"><Wrench size={15} /> ปรับปรุง</h3>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby v1.1.8 — จัดผังบ้านใหม่:</strong> จำกัดพื้นให้พอดีกับตัวบ้าน เพิ่มผนังรอบห้อง คานหลังคา และปรับกล้องให้อยู่ในตัวบ้านเพื่อลดภาพนอกแมพ</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>แยกพื้นที่เป็นมุมนั่งเล่น ทางเดินกลาง จุดครูฝึกด้านหลังขวา และมุม dummy ด้านหน้าขวา พร้อมย้ายป้ายให้ตรงกับตัวละคร</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby — บ้านพักแฟนตาซี:</strong> เปลี่ยนฉากเป็นห้องไม้แสนอบอุ่น เพิ่มหน้าต่าง ภาพแขวน โซฟา พรม ชั้นหนังสือ เตาผิง โคมไฟ และต้นไม้กระถาง</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เหลือหุ่นซ้อมสกิลใน Lobby เพียงตัวเดียว และขยับป้ายให้ตรงกับตำแหน่งหุ่น</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Ginzo + Bamdee — โจมตีปกติ:</strong> สร้างคอมโบดาบ 3 จังหวะใหม่ พร้อมเส้นฟันสีขาวงาช้าง ขอบทอง และจังหวะปิดคอมโบที่หนักแน่นขึ้น ตัดเอฟเฟกต์โจมตีเก่าที่ซ้อนกันออก</span></li>
