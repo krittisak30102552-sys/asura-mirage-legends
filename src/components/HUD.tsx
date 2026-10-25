@@ -335,7 +335,7 @@ export const HUD: React.FC<HUDProps> = ({
       <div className="flex flex-col gap-2 w-full">
         <div className="flex flex-wrap items-start justify-between gap-1 w-full">
           {/* Top-Left: Player Info & 6 Core Stats */}
-          <div className={`pointer-events-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 shadow-xl shadow-black/80 ${referenceDungeonHud ? 'border-[3px] border-[#b98a4d] rounded-sm bg-[#171416]/95' : 'bg-zinc-950/90 border-2 border-amber-600/70 rounded-xl backdrop-blur-xs'}`}>
+          <div className={`ui-glass-panel pointer-events-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 shadow-xl shadow-black/80 ${referenceDungeonHud ? 'border-[3px] border-[#b98a4d] rounded-sm bg-[#171416]/95' : 'bg-zinc-950/90 border-2 border-amber-600/70 rounded-xl backdrop-blur-xs'}`}>
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={`${referenceDungeonHud ? 'w-12 h-12 sm:w-16 sm:h-16 border-[3px] border-[#d0a65e] rounded-sm bg-[#3a2423]' : 'w-10 h-10 sm:w-12 sm:h-12 bg-zinc-900 border-2 border-amber-500 rounded-lg'} flex items-center justify-center font-pixel text-amber-200 shadow-inner shrink-0 overflow-hidden`}>
                 <img src={heroPortrait} alt={heroDisplayName} className="h-full w-full object-cover object-top" />
@@ -705,7 +705,7 @@ export const HUD: React.FC<HUDProps> = ({
 
         {/* BOTTOM CENTER: Combat Controls Dock */}
         <div className={`flex min-w-0 flex-1 items-center pointer-events-auto ${referenceDungeonHud ? 'justify-end' : 'justify-end sm:justify-center'}`}>
-          <div className={`flex items-center gap-1 sm:gap-3 ${referenceDungeonHud ? 'bg-transparent border-0 px-1 py-1 shadow-none' : 'bg-zinc-950/95 border-2 border-amber-600/70 px-1.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl shadow-2xl shadow-black backdrop-blur-xs'}`}>
+          <div className={`ui-glass-panel flex items-center gap-1 sm:gap-3 ${referenceDungeonHud ? 'bg-transparent border-0 px-1 py-1 shadow-none' : 'bg-zinc-950/95 border-2 border-amber-600/70 px-1.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl shadow-2xl shadow-black backdrop-blur-xs'}`}>
             {/* Normal Attack (LMB / Tap) */}
             <button
               type="button"
