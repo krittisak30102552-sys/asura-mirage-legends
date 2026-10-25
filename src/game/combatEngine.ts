@@ -61,7 +61,6 @@ import {
   generateNpcTexture,
   generateHappyTexture,
   generateKiBlastTexture,
-  generateSlashTexture,
   generateWhirlwindTexture,
   generateCoinTexture,
   generatePotionTexture,
@@ -330,7 +329,6 @@ export class CombatEngine {
   // Textures Cache
   private contactShadowTex!: THREE.CanvasTexture;
   private kiBlastTex!: THREE.CanvasTexture;
-  private slashTex!: THREE.CanvasTexture;
   private whirlwindTex!: THREE.CanvasTexture;
   private coinTex!: THREE.CanvasTexture;
   private potionTex!: THREE.CanvasTexture;
@@ -391,7 +389,6 @@ export class CombatEngine {
   private initTextures() {
     this.contactShadowTex = generateContactShadowTexture();
     this.kiBlastTex = generateKiBlastTexture();
-    this.slashTex = generateSlashTexture();
     this.whirlwindTex = generateWhirlwindTexture();
     this.coinTex = generateCoinTexture();
     this.potionTex = generatePotionTexture();
@@ -2264,7 +2261,6 @@ export class CombatEngine {
       if (slot === 1) {
         // Ginzo 1: Dimensional Rift (คมดาบตัดมิติ)
         soundEngine.playKatanaSlash();
-        this.arena.spawnGroundTelegraph(pX, pZ, 1.2, 0.22, 0xf472b6, 'line', angle, 8.0);
         this.arena.spawnDimensionalSlashVFX(pX + Math.cos(angle) * 2.5, pZ + Math.sin(angle) * 2.5, angle);
         this.arena.addCameraShake(0.28);
 
@@ -2353,7 +2349,6 @@ export class CombatEngine {
       if (slot === 1) {
         // Quan 1: Heaven Drum Palm (ฝ่ามือกลองสวรรค์)
         soundEngine.playKiExplosion();
-        this.arena.spawnGroundTelegraph(pX, pZ, 1.8, 0.22, 0x38bdf8, 'cone', angle, 6.0);
         this.arena.spawnHeavenDrumPalmVFX(pX, pZ, angle);
         this.arena.addCameraShake(0.3);
 
@@ -2519,7 +2514,6 @@ export class CombatEngine {
         soundEngine.playThunderBolt();
       }
 
-      this.spawnSlashVfx(x, z, swingAngle);
       this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
       if (this.hasAwakenedKit()) {
         const finisher = event.step === 2;
@@ -2863,38 +2857,6 @@ export class CombatEngine {
     };
     this.enemies.push(boss);
     this.currentBoss = boss;
-  }
-
-  private spawnSlashVfx(x: number, z: number, angle: number) {
-    const geo = new THREE.PlaneGeometry(2.4, 2.4);
-    const mat = new THREE.MeshBasicMaterial({
-      map: this.slashTex,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    const slash = new THREE.Mesh(geo, mat);
-    slash.position.set(x, 1.2, z);
-    slash.rotation.y = -angle + Math.PI / 2;
-    slash.scale.setScalar(0.82);
-    this.arena.vfxGroup.add(slash);
-    this.arena.spawnSkillBurst(x, 0.95, z, 0xfbcfe8, 3, 2.0, 0.22);
-
-    let life = 0.2;
-    const fade = () => {
-      life -= 0.03;
-      if (life > 0) {
-        slash.scale.multiplyScalar(1.09);
-        slash.rotation.z += Math.sign(angle || 1) * 0.035;
-        mat.opacity = life / 0.2;
-        requestAnimationFrame(fade);
-      } else {
-        this.arena.vfxGroup.remove(slash);
-        geo.dispose();
-        mat.dispose();
-      }
-    };
-    requestAnimationFrame(fade);
   }
 
   private spawnGhostTrail(x?: number, z?: number, opacity: number = 0.48, facing?: number) {
