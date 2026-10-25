@@ -2989,7 +2989,7 @@ export class ArenaScene {
     const outerGeo = makeRift(1.24);
     const coreGeo = makeRift(0.83);
     const outerMat = new THREE.MeshBasicMaterial({
-      color: 0xf472b6, transparent: true, opacity: 0.9,
+      color: 0xfacc15, transparent: true, opacity: 0.9,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const coreMat = new THREE.MeshBasicMaterial({
@@ -3014,7 +3014,7 @@ export class ArenaScene {
       group.add(shard);
     }
 
-    this.spawnSkillBurst(x, 1.0, z, 0xf472b6, 7, 2.8, 0.28);
+    // Keep the travelling dimensional cut, but remove the particle burst that reads as petals.
     const started = performance.now();
     const duration = 470;
     const travel = 5.8;
@@ -3819,6 +3819,22 @@ export class ArenaScene {
       }
     };
     this.scheduleVfxFrame(spin);
+  }
+
+  /**
+   * Ginzo/Bamdee normal attack: clean katana cuts without petal particle bursts.
+   */
+  public spawnGinzoComboVFX(step: number, x: number, z: number, angle: number) {
+    if (step === 1) {
+      this.spawnKatanaArcVFX(x, z, angle - 0.12, 1.0, 0xfef3c7);
+    } else if (step === 2) {
+      this.spawnKatanaArcVFX(x, z, angle - 0.38, 1.08, 0xfef3c7);
+      this.spawnKatanaArcVFX(x, z, angle + 0.32, 0.88, 0xfacc15);
+    } else {
+      this.spawnKatanaArcVFX(x, z, angle, 1.5, 0xfacc15);
+      this.spawnKatanaArcVFX(x, z, angle + 0.42, 0.92, 0xffffff);
+      this.addCameraShake(0.2);
+    }
   }
 
   /**
