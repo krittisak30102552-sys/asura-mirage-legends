@@ -2520,18 +2520,9 @@ export class CombatEngine {
         this.arena.spawnHeroComboVFX(this.activeHeroId, this.comboStep, x, z, swingAngle);
       }
       if (this.hasAwakenedKit()) {
+        // Preserve the sharper hit-stop timing, but don't stack the retired duplicate slash/burst VFX.
         const finisher = event.step === 2;
-        this.arena.spawnKatanaArcVFX(x, z, swingAngle + (event.step % 2 ? 0.2 : -0.2), finisher ? 2.05 : 1.25, finisher ? 0xfacc15 : 0xfef3c7);
-        this.arena.spawnKatanaArcVFX(x - Math.cos(swingAngle) * 0.45, z - Math.sin(swingAngle) * 0.45, swingAngle + 0.35, finisher ? 1.7 : 0.9, 0xfda4af);
-        if (finisher) {
-          this.arena.spawnDimensionalSlashVFX(x + Math.cos(swingAngle) * 1.2, z + Math.sin(swingAngle) * 1.2, swingAngle);
-          this.arena.spawnSkillBurst(x, 1.0, z, 0xfbbf24, 16, 3.6, 0.42);
-          this.arena.addCameraShake(0.34);
-          this.hitstopTimer = Math.max(this.hitstopTimer, 0.085);
-        } else {
-          this.arena.addCameraShake(0.1);
-          this.hitstopTimer = Math.max(this.hitstopTimer, 0.025);
-        }
+        this.hitstopTimer = Math.max(this.hitstopTimer, finisher ? 0.06 : 0.02);
       }
     } else if (event.type === 'hit') {
       if (event.crit) this.arena.addCameraShake(0.2);

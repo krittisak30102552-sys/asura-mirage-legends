@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.5';
+export const UPDATE_VERSION = '1.1.6';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -44,6 +44,8 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
             <section className="rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4">
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-sky-300"><Wrench size={15} /> ปรับปรุง</h3>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Ginzo + Bamdee — โจมตีปกติ:</strong> สร้างคอมโบดาบ 3 จังหวะใหม่ พร้อมเส้นฟันสีขาวงาช้าง ขอบทอง และจังหวะปิดคอมโบที่หนักแน่นขึ้น ตัดเอฟเฟกต์โจมตีเก่าที่ซ้อนกันออก</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Ginzo — สกิล 1 คลื่นดาบมิติ:</strong> ทำภาพคลื่นดาบใหม่ทั้งชุด มีแกนแสงสีขาว รอยแยกสีทอง เส้นพุ่งและเศษมิติที่เคลื่อนที่ไปข้างหน้า โดยไม่เปลี่ยนดาเมจหรือกลไกพุ่งผ่านศัตรู</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>HUD ของ Bamdee แสดงเฉพาะสกิลพิฆาตโลหิตหนึ่งสกิล</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>คงเอฟเฟกต์และระบบต่อสู้สำหรับ Hiken – Crimson Severance โดยไม่เปิดสกิลอื่นของ Ginzo ให้ Bamdee</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ปรับเอฟเฟกต์โจมตีให้เนียนขึ้น พร้อมแสงฟุ้งและเส้นกระแทกตอนโดนตี</span></li>
