@@ -4926,6 +4926,13 @@ export class ArenaScene {
     this.camera.position.y += (targetCamY - this.camera.position.y) * camLerp;
     this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
 
+    // Clamp the actual camera too, so returning from a dungeon never shows a frame of exterior space.
+    if (isLobby) {
+      this.camera.position.x = THREE.MathUtils.clamp(this.camera.position.x, -12.8, 12.8);
+      this.camera.position.y = Math.min(this.camera.position.y, 13.0);
+      this.camera.position.z = THREE.MathUtils.clamp(this.camera.position.z, 0.8, 13.0);
+    }
+
     // Keep camera shake responsive while respecting the indoor Lobby camera height.
     if (this.cameraShake > 0.001) {
       const shakeX = (Math.random() - 0.5) * this.cameraShake * 1.2;
