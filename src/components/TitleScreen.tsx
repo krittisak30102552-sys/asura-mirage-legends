@@ -51,7 +51,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col justify-between items-center p-4 sm:p-6 md:p-12 pointer-events-auto bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-zinc-950/70 select-none overflow-y-auto">
+    <div className="ui-title-screen absolute inset-0 z-20 flex flex-col justify-between items-center p-4 sm:p-6 md:p-12 pointer-events-auto bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-zinc-950/70 select-none overflow-y-auto">
       {/* Top Bar: Web Badge, Audio, Share & Fullscreen */}
       <div className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2 bg-zinc-950/80 border border-amber-600/40 px-3 py-1.5 rounded-full text-xs font-rajdhani text-amber-300 font-semibold tracking-wider">
@@ -140,7 +140,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         {/* Primary Start CTA Button */}
         <button
           onClick={onStart}
-          className="group relative inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-pixel text-xs tracking-wider rounded-lg shadow-2xl shadow-amber-500/40 border-2 border-yellow-200 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
+          className="ui-primary-cta group relative inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-pixel text-xs tracking-wider rounded-lg shadow-2xl shadow-amber-500/40 border-2 border-yellow-200 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
         >
           <Play size={18} className="fill-zinc-950 transition-transform group-hover:translate-x-1" />
           <span>START TRIAL (เริ่มประลอง)</span>
