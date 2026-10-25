@@ -69,10 +69,6 @@ export class ArenaScene {
   private happyShopItemGroups: Array<THREE.Group | null> = [];
   private bossAltarGroup: THREE.Group | null = null;
 
-  // Ambient particles
-  private petalParticles!: THREE.Points;
-  private petalPositions!: Float32Array;
-
   // Active Combat Particles & Dynamic VFX
   public activeParticles: CombatParticle[] = [];
   private sparkTex: THREE.CanvasTexture | null = null;
@@ -145,7 +141,6 @@ export class ArenaScene {
     pmremGenerator.dispose();
 
     this.setupLighting();
-    this.buildAmbientParticles();
 
     this.scene.add(this.staticDecorGroup);
     this.scene.add(this.actorsGroup);
@@ -3875,40 +3870,6 @@ export class ArenaScene {
     }
   }
 
-  private buildAmbientParticles() {
-    const count = this.graphicsQuality === 'low' ? 16 : this.graphicsQuality === 'balanced' ? 40 : 80;
-    const geo = new THREE.BufferGeometry();
-    this.petalPositions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      this.petalPositions[i * 3 + 0] = (Math.random() - 0.5) * 32;
-      this.petalPositions[i * 3 + 1] = 0.5 + Math.random() * 6;
-      this.petalPositions[i * 3 + 2] = (Math.random() - 0.5) * 20;
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(this.petalPositions, 3));
-
-    const pCanvas = document.createElement('canvas');
-    pCanvas.width = 16;
-    pCanvas.height = 16;
-    const pCtx = pCanvas.getContext('2d')!;
-    pCtx.fillStyle = '#38bdf8';
-    pCtx.beginPath();
-    pCtx.arc(8, 8, 6, 0, Math.PI * 2);
-    pCtx.fill();
-
-    const pTex = new THREE.CanvasTexture(pCanvas);
-    const pMat = new THREE.PointsMaterial({
-      size: 0.3,
-      map: pTex,
-      transparent: true,
-      opacity: 0.75,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-
-    this.petalParticles = new THREE.Points(geo, pMat);
-    this.scene.add(this.petalParticles);
-  }
-
   private scheduleVfxFrame(task: (now: number) => void) {
     if (this.disposed) return;
     this.vfxFrameTasks.add(task);
@@ -4513,19 +4474,6 @@ export class ArenaScene {
       light.intensity = baseIntensity * (0.88 + Math.sin(time + i * 2.1) * 0.12);
     });
 
-    // Ambient Sparkles
-    const pos = this.petalPositions;
-    for (let i = 0; i < pos.length / 3; i++) {
-      pos[i * 3 + 0] += Math.sin(time + i) * 0.25 * dt;
-      pos[i * 3 + 1] -= 0.5 * dt;
-      pos[i * 3 + 2] += Math.cos(time + i) * 0.25 * dt;
-      if (pos[i * 3 + 1] < 0.2) {
-        pos[i * 3 + 1] = 6 + Math.random() * 2;
-        pos[i * 3 + 0] = (Math.random() - 0.5) * 32;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 20;
-      }
-    }
-    this.petalParticles.geometry.attributes.position.needsUpdate = true;
 
     // Portal Rotation
     if (this.portalMesh) {
