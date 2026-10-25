@@ -1446,8 +1446,8 @@ export function generateNpcTexture(id: 'blacksmith' | 'trainer' | 'gatekeeper'):
     ctx.lineTo(cx - 40, cy + 20);
     ctx.lineTo(cx - 32, cy + 29);
     ctx.lineTo(cx - 20, cy + 14);
-    ctx.lineTo(cx - 29, cy + 60);
-    ctx.lineTo(cx + 29, cy + 60);
+    ctx.lineTo(cx - 29, cy + 47);
+    ctx.lineTo(cx + 29, cy + 47);
     ctx.lineTo(cx + 20, cy + 14);
     ctx.lineTo(cx + 32, cy + 29);
     ctx.lineTo(cx + 40, cy + 20);
@@ -1485,9 +1485,9 @@ export function generateNpcTexture(id: 'blacksmith' | 'trainer' | 'gatekeeper'):
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(cx - 14, cy + 37);
-    ctx.lineTo(cx - 9, cy + 54);
+    ctx.lineTo(cx - 9, cy + 43);
     ctx.moveTo(cx + 14, cy + 37);
-    ctx.lineTo(cx + 9, cy + 54);
+    ctx.lineTo(cx + 9, cy + 43);
     ctx.stroke();
 
     // Neck, ears and face.
