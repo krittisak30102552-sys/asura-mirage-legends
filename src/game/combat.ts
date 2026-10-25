@@ -69,14 +69,12 @@ interface Slash { x: number; y: number; a: number; arc: number; range: number; t
 interface Spark { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number; rgb: string }
 interface Ghost { x: number; y: number; facing: 1 | -1; t: number; life: number; color?: string }
 interface Ring { x: number; y: number; r: number; t: number; life: number; rgb: string }
-interface Petal { x: number; y: number; vx: number; vy: number; rot: number; vrot: number; t: number; life: number; color: string }
 
 export class CombatFx {
   private slashes: Slash[] = [];
   private sparks: Spark[] = [];
   private ghosts: Ghost[] = [];
   private rings: Ring[] = [];
-  private petals: Petal[] = [];
   private shakeT = 0;
   private shakeDur = 0.0001;
   private shakeMag = 0;
@@ -89,23 +87,6 @@ export class CombatFx {
       const ang = Math.random() * TAU;
       const sp = 120 + Math.random() * 220;
       this.sparks.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, t: 0, life: 0.25 + Math.random() * 0.2, size: 2 + Math.random() * 2, rgb });
-    }
-  }
-  petalBurst(x: number, y: number, n: number, color: string = '244,114,182') {
-    for (let i = 0; i < n; i++) {
-      const ang = Math.random() * TAU;
-      const sp = 40 + Math.random() * 110;
-      this.petals.push({
-        x,
-        y,
-        vx: Math.cos(ang) * sp,
-        vy: Math.sin(ang) * sp - 20,
-        rot: Math.random() * Math.PI,
-        vrot: (Math.random() - 0.5) * 8,
-        t: 0,
-        life: 0.45 + Math.random() * 0.35,
-        color,
-      });
     }
   }
   ghost(x: number, y: number, facing: 1 | -1, life: number, color?: string) {
@@ -126,19 +107,10 @@ export class CombatFx {
     for (const p of this.sparks) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.9; p.vy *= 0.9; }
     for (const g of this.ghosts) g.t += dt;
     for (const r of this.rings) r.t += dt;
-    for (const pt of this.petals) {
-      pt.t += dt;
-      pt.x += pt.vx * dt;
-      pt.y += pt.vy * dt;
-      pt.vy += 45 * dt; // gentle gravity
-      pt.vx *= 0.94;
-      pt.rot += pt.vrot * dt;
-    }
     this.slashes = this.slashes.filter(s => s.t < s.life);
     this.sparks = this.sparks.filter(p => p.t < p.life);
     this.ghosts = this.ghosts.filter(g => g.t < g.life);
     this.rings = this.rings.filter(r => r.t < r.life);
-    this.petals = this.petals.filter(pt => pt.t < pt.life);
     if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) { this.shakeMag = 0; this.shakeDur = 0.0001; } }
   }
 
@@ -208,19 +180,6 @@ export class CombatFx {
       ctx.stroke();
     }
 
-    // Sakura petals for Ginzo / floral bursts
-    for (const pt of this.petals) {
-      const p = pt.t / pt.life;
-      ctx.globalAlpha = Math.max(0, 1 - p);
-      ctx.save();
-      ctx.translate(pt.x, pt.y);
-      ctx.rotate(pt.rot);
-      ctx.fillStyle = `rgb(${pt.color})`;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 5, 2.5, 0, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
     ctx.restore();
   }
 }
@@ -321,13 +280,10 @@ export class PlayerCombat {
               this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range, '241,245,249', 0.22, this.flip);
               this.fx.ghost(o.pos.x - Math.cos(aimAngle) * 12, o.pos.y - Math.sin(aimAngle) * 12, o.facing, 0.25, '#fb7185');
             } else if (this.step === 1) {
-              // Combo 2: Rose Cross Rift — dual intersecting rose cross slashes
+              // Combo 2: Rose Cross Rift — dual intersecting crimson slashes; no separate petals.
               this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.1, def.range, '244,63,94', 0.24, this.flip, true);
-              this.fx.petalBurst(o.pos.x, o.pos.y, 4, '251,113,133');
             } else {
-              // Combo 3: Abyssal Crescent — deep dimensional crescent + sakura explosion
               this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.25, def.range * 1.15, '236,72,153', 0.32, this.flip);
-              this.fx.petalBurst(o.pos.x, o.pos.y, 14, '244,114,182');
             }
           } else if (hero === 'quan') {
             if (this.step === 0) {
