@@ -394,16 +394,17 @@ export class ArenaScene {
   // LOBBY: restore the lounge scenery while keeping the shop removed.
   // ----------------------------------------------------------------------
   private buildLobbyScene() {
-    this.scene.background = new THREE.Color(0x160d0b);
-    this.scene.fog = new THREE.FogExp2(0x160d0b, 0.008);
+    this.scene.background = new THREE.Color(0x0b0807);
+    this.scene.fog = new THREE.FogExp2(0x0b0807, 0.016);
     this.keyLight.color.setHex(0xffd3a3);
     this.keyLight.intensity = 2.0;
     this.ambientLight.color.setHex(0xffc68a);
     this.ambientLight.groundColor.setHex(0x34201c);
     this.ambientLight.intensity = 1.05;
 
-    // Extend the timber floor past the walkable area so the camera never shows a hard map edge.
-    const floorGeo = new THREE.PlaneGeometry(80, 60);
+    // A finite house footprint replaces the huge outdoor-looking floor.
+    // The camera stays inside this footprint so the room edges never reveal open world.
+    const floorGeo = new THREE.PlaneGeometry(31.8, 22.6);
     const floorTex = this.createPixelWoodFloorTexture();
     const floorMat = new THREE.MeshStandardMaterial({
       map: floorTex,
@@ -412,26 +413,26 @@ export class ArenaScene {
     });
     this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
     this.floorMesh.rotation.x = -Math.PI / 2;
+    this.floorMesh.position.z = 2.8;
     this.floorMesh.receiveShadow = true;
     this.scene.add(this.floorMesh);
 
     this.buildCozyHomeBackWall();
     this.buildCozyHomeDecor();
-    this.buildPixelLobbyTable(6, 1);
-    this.buildTrainerStation(8, -4);
+    this.buildPixelLobbyTable(5.0, 0.9);
+    this.buildTrainerStation(9.2, -4.4);
 
-    this.createInteractionPad(8, -4, 0x38bdf8, 1.8);
+    // A clear central lane connects spawn, training corner, and the dungeon gate.
+    this.createInteractionPad(9.2, -3.2, 0x38bdf8, 1.8);
     this.createInteractionPad(0, -6.8, 0x10b981, 2.5);
-    this.createFloatingBadge('📜 [E] MASTER CHANYI', '#38bdf8', 8, 3.2, -4);
+    this.createFloatingBadge('📜 [E] MASTER CHANYI', '#38bdf8', 9.2, 3.2, -3.2);
     this.createFloatingBadge('🌀 [E] DUNGEON GATE', '#10b981', 0, 5.8, -7.2);
 
     this.buildDungeonPortalGate(0, -7.2);
     this.setPortalActive(true);
-    // One dedicated skill-testing dummy, placed outside the trainer's interaction radius.
-    this.createTrainingDummy(5.5, -1.5, 9001);
-    this.createFloatingBadge('🎯 [DUMMY] ซ้อมสกิลและพลังโจมตี', '#fbbf24', 5.5, 2.8, -1.5);
-    this.createBreakableUrn(-4, -2, 9003);
-    this.createBreakableUrn(-4, 1.5, 9004);
+    // Dedicated practice corner on the right-front side, separate from the NPC and dining table.
+    this.createTrainingDummy(10.2, 2.1, 9001);
+    this.createFloatingBadge('🎯 [DUMMY] ซ้อมสกิลและพลังโจมตี', '#fbbf24', 10.2, 2.8, 2.1);
   }
 
   // ----------------------------------------------------------------------
@@ -1760,27 +1761,27 @@ export class ArenaScene {
       roughness: 0.32, metalness: 0.05,
     });
 
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(width, 8, 0.9), wallMat);
-    wall.position.y = 4;
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(width, 10, 0.9), wallMat);
+    wall.position.y = 5;
     wall.receiveShadow = true;
     wallGroup.add(wall);
 
     // Horizontal timber boards and sturdy exposed beams.
-    for (let y = 0.85; y <= 7.05; y += 0.88) {
+    for (let y = 0.85; y <= 8.65; y += 0.88) {
       const plank = new THREE.Mesh(new THREE.BoxGeometry(width - 0.4, 0.075, 0.075), plankMat);
       plank.position.set(0, y, 0.47);
       wallGroup.add(plank);
     }
     for (const x of [-13.7, -10.1, -6.1, 6.1, 10.1, 13.7]) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 7.7, 0.2), beamMat);
-      beam.position.set(x, 3.9, 0.49);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 9.6, 0.2), beamMat);
+      beam.position.set(x, 4.9, 0.49);
       wallGroup.add(beam);
     }
     const baseboard = new THREE.Mesh(new THREE.BoxGeometry(width, 0.44, 0.28), beamMat);
     baseboard.position.set(0, 0.24, 0.48);
     wallGroup.add(baseboard);
     const crown = new THREE.Mesh(new THREE.BoxGeometry(width, 0.34, 0.34), beamMat);
-    crown.position.set(0, 7.65, 0.48);
+    crown.position.set(0, 9.65, 0.48);
     wallGroup.add(crown);
 
     // Two blue evening windows with wooden frames and crossbars.
@@ -1833,23 +1834,37 @@ export class ArenaScene {
       wallGroup.add(sun);
     }
 
-    // Side walls sit just outside the walkable bounds to make the room feel enclosed.
+    // Continuous side walls now run past the player and camera area.
+    // The room has a real interior footprint instead of a large open-world wood plane.
     for (const side of [-1, 1]) {
-      const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.4, 15.6), wallMat);
-      sideWall.position.set(side * 15.1, 2.7, 7.2);
+      const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.68, 9.0, 22.2), wallMat);
+      sideWall.position.set(side * 15.1, 4.5, 11.0);
       sideWall.receiveShadow = true;
       wallGroup.add(sideWall);
-      const sideBase = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.42, 15.6), beamMat);
-      sideBase.position.set(side * 15.1, 0.22, 7.2);
+      const sideBase = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.42, 22.2), beamMat);
+      sideBase.position.set(side * 15.1, 0.22, 11.0);
       wallGroup.add(sideBase);
-      const sideTop = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.22, 15.6), beamMat);
-      sideTop.position.set(side * 15.1, 5.25, 7.2);
+      const sideTop = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.22, 22.2), beamMat);
+      sideTop.position.set(side * 15.1, 8.98, 11.0);
       wallGroup.add(sideTop);
-      for (const zOffset of [1.0, 5.0, 9.0, 13.0]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.7, 5.1, 0.18), plankMat);
-        post.position.set(side * 15.1, 2.55, zOffset);
+      for (const zOffset of [1.0, 5.5, 10.0, 14.5, 19.0]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.7, 8.2, 0.18), plankMat);
+        post.position.set(side * 15.1, 4.1, zOffset);
         wallGroup.add(post);
       }
+    }
+
+    // Eaves and open rafters create the silhouette of a roof while preserving gameplay visibility.
+    const rafterMat = new THREE.MeshStandardMaterial({ color: 0x2e1b13, roughness: 0.94 });
+    for (const zOffset of [2.2, 6.6, 11.0, 15.4, 19.8]) {
+      const rafter = new THREE.Mesh(new THREE.BoxGeometry(30.2, 0.24, 0.36), rafterMat);
+      rafter.position.set(0, 9.15, zOffset);
+      wallGroup.add(rafter);
+    }
+    for (const side of [-1, 1]) {
+      const eave = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.18, 22.0), wallMat);
+      eave.position.set(side * 11.0, 9.05, 11.0);
+      wallGroup.add(eave);
     }
 
     this.staticDecorGroup.add(wallGroup);
@@ -2030,8 +2045,24 @@ export class ArenaScene {
     this.pointLights.push(glow);
     this.staticDecorGroup.add(hearth);
 
+    // Small dojo mat marks the one dummy station without narrowing the center walkway.
+    const dojoMatOuter = new THREE.MeshStandardMaterial({ color: 0x352116, roughness: 0.98 });
+    const dojoMatInner = new THREE.MeshStandardMaterial({ color: 0x46614b, roughness: 0.98 });
+    const dojoMatGroup = new THREE.Group();
+    dojoMatGroup.position.set(10.2, 0.03, 2.1);
+    const matBase = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.07, 3.15), dojoMatOuter);
+    matBase.position.y = 0.035;
+    dojoMatGroup.add(matBase);
+    const matInset = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.035, 2.85), dojoMatInner);
+    matInset.position.y = 0.09;
+    dojoMatGroup.add(matInset);
+    const matBorder = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.025, 2.55), rugInnerMat);
+    matBorder.position.y = 0.113;
+    dojoMatGroup.add(matBorder);
+    this.staticDecorGroup.add(dojoMatGroup);
+
     // Plants in terracotta pots and a standing amber lamp soften the corners.
-    for (const [x, z] of [[-12.0, 3.4], [12.0, 3.4]] as [number, number][]) {
+    for (const [x, z] of [[-12.2, 5.0], [12.2, 5.0]] as [number, number][]) {
       const plant = new THREE.Group();
       plant.position.set(x, 0, z);
       const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.34, 0.58, 8), potteryMat);
@@ -4877,31 +4908,33 @@ export class ArenaScene {
     this.flushVfxFrameTasks(performance.now());
     const isLobby = this.currentTheme === 'lobby';
 
-    // Use the same diagonal, player-following camera in the lobby and dungeon,
-    // so combat practice in the lounge has the same framing as a real fight.
-    const targetFov = 48;
+    // Keep the Lobby camera inside the home; preserve the wide framing in dungeon rooms.
+    const targetFov = isLobby ? 44 : 48;
+    const targetCamY = isLobby ? 12.2 : 18;
     if (this.camera.fov !== targetFov) {
       this.camera.fov = targetFov;
       this.camera.updateProjectionMatrix();
     }
 
-    this.targetCamX = heroX;
-    this.targetCamZ = heroZ + 18.5;
+    this.targetCamX = isLobby ? THREE.MathUtils.clamp(heroX, -11.8, 11.8) : heroX;
+    this.targetCamZ = isLobby
+      ? THREE.MathUtils.clamp(heroZ + 10.2, 1.0, 12.8)
+      : heroZ + 18.5;
 
     const camLerp = 1 - Math.exp(-8.5 * dt);
     this.camera.position.x += (this.targetCamX - this.camera.position.x) * camLerp;
-    this.camera.position.y += (18 - this.camera.position.y) * camLerp;
+    this.camera.position.y += (targetCamY - this.camera.position.y) * camLerp;
     this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
 
-    // Keep camera shake responsive for attacks and skills in both areas.
+    // Keep camera shake responsive while respecting the indoor Lobby camera height.
     if (this.cameraShake > 0.001) {
       const shakeX = (Math.random() - 0.5) * this.cameraShake * 1.2;
       const shakeY = (Math.random() - 0.5) * this.cameraShake * 1.2;
       this.camera.position.x += shakeX;
-      this.camera.position.y = 18 + shakeY;
+      this.camera.position.y = targetCamY + shakeY;
       this.cameraShake *= Math.exp(-10 * dt);
     } else {
-      this.camera.position.y = 18;
+      this.camera.position.y = targetCamY;
       this.cameraShake = 0;
     }
 
