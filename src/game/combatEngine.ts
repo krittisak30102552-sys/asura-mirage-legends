@@ -2003,7 +2003,8 @@ export class CombatEngine {
   }
 
   public handleAttack() {
-    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence) return;
+    if ((this.currentMode !== 'dungeon' && this.currentMode !== 'lobby') ||
+        this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence) return;
     this.playerCombat.pressM1();
   }
 
