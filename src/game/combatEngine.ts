@@ -2024,16 +2024,18 @@ export class CombatEngine {
       const target = this.enemies
         .filter((enemy) => enemy.state !== 'dead')
         .sort((a, b) => Math.hypot(a.x - pX, a.z - pZ) - Math.hypot(b.x - pX, b.z - pZ))[0];
-      if (!target) return;
+      if (!target && this.currentMode !== 'lobby') return;
 
       const dashPastTarget = 4.6;
+      // No enemies exist in the lobby, so showcase the same cinematic along the aim direction.
+      const previewDistance = 7.2;
       const targetX = THREE.MathUtils.clamp(
-        target.x + Math.cos(angle) * dashPastTarget,
+        target ? target.x + Math.cos(angle) * dashPastTarget : pX + Math.cos(angle) * previewDistance,
         this.arena.bounds.minX + 1.2,
         this.arena.bounds.maxX - 1.2
       );
       const targetZ = THREE.MathUtils.clamp(
-        target.z + Math.sin(angle) * dashPastTarget,
+        target ? target.z + Math.sin(angle) * dashPastTarget : pZ + Math.sin(angle) * previewDistance,
         this.arena.bounds.minZ + 1.2,
         this.arena.bounds.maxZ - 1.2
       );
@@ -2217,7 +2219,7 @@ export class CombatEngine {
   }
 
   public castSkill(slot: 1 | 2 | 3 | 4): boolean {
-    if (this.currentMode !== 'dungeon' || this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence || this.playerStats.hp <= 0) {
+    if (this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence || this.playerStats.hp <= 0) {
       return false;
     }
     if (!this.noSkillCooldown && (this.skillCooldowns[slot] ?? 0) > 0) {
@@ -2241,8 +2243,12 @@ export class CombatEngine {
       const target = this.enemies
         .filter((enemy) => enemy.state !== 'dead')
         .sort((a, b) => Math.hypot(a.x - this.playerX, a.z - this.playerZ) - Math.hypot(b.x - this.playerX, b.z - this.playerZ))[0];
-      if (!target) { this.skillCooldowns[4] = 0; return false; }
-      angle = Math.atan2(target.z - this.playerZ, target.x - this.playerX);
+      if (!target) {
+        // In the lobby, allow a visual-only ultimate preview along the player's current aim.
+        if (this.currentMode !== 'lobby') { this.skillCooldowns[4] = 0; return false; }
+      } else {
+        angle = Math.atan2(target.z - this.playerZ, target.x - this.playerX);
+      }
     }
     const pX = this.playerX;
     const pZ = this.playerZ;
@@ -3245,7 +3251,7 @@ export class CombatEngine {
       this.ginzoUltimateTimer = 0;
       return;
     }
-    if (this.currentMode !== 'dungeon' || !this.hasAwakenedKit()) {
+    if (!this.hasAwakenedKit()) {
       this.ginzoUltimateSequence = null;
       this.ginzoUltimatePath = null;
       this.ginzoUltimateTimer = 0;
