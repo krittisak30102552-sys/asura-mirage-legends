@@ -236,6 +236,9 @@ export class CombatEngine {
   public heroActionAimAngle: number = 0;
   public heroActionFacing: number = 1;
   private actionAnimationTimer: number = 0;
+  private actionAnimationDuration: number = 0;
+  // Smoothed procedural body motion (squash/stretch, lean, lunge) layered over the pose drawings.
+  private heroVisual = { bobY: 0, tilt: 0, sy: 1, sx: 1, lunge: 0 };
   private actionAnimationState: HeroAnimationState | null = null;
 
   // Combo system
@@ -796,6 +799,7 @@ export class CombatEngine {
     this.playerFacing = this.heroActionFacing;
     this.actionAnimationState = `attack${slot}` as HeroAnimationState;
     this.actionAnimationTimer = duration;
+    this.actionAnimationDuration = duration;
     this.animState = this.actionAnimationState;
     this.animFrame = 0;
     this.animTimer = 0;
@@ -3528,48 +3532,104 @@ export class CombatEngine {
     this.playerX = THREE.MathUtils.clamp(this.playerX, this.arena.bounds.minX + wallInset, this.arena.bounds.maxX - wallInset);
     this.playerZ = THREE.MathUtils.clamp(this.playerZ, this.arena.bounds.minZ + wallInset, this.arena.bounds.maxZ - wallInset);
 
-    // Add a little 3D body weight on top of the articulated drawing: idle breath,
-    // alternating run bounce, and a committed lean with squash/stretch on attacks.
+    // Procedural body motion on top of the 12 pose drawings. Each state yields target
+    // values (bob, lean, squash/stretch, lunge) that are eased toward every frame, so
+    // changing state blends smoothly instead of snapping.
     const motionPhase = (this.animFrame / 12) * Math.PI * 2;
     const runBob = Math.abs(Math.sin(motionPhase * 2));
-    const attackWave = Math.sin((this.animFrame / 11) * Math.PI * 2);
-    let bodyBobY = 0;
-    let bodyTilt = 0;
-    let bodyStretchY = 1;
-    let shadowSpread = 1;
-
-    if (this.isDashing || this.animState === 'dash') {
-      bodyBobY = 0.045 + Math.sin(motionPhase) * 0.025;
-      bodyTilt = -0.09 + Math.sin(motionPhase) * 0.025;
-      bodyStretchY = 1.045;
-      shadowSpread = 1.08;
-    } else if (this.animState === 'run') {
-      bodyBobY = runBob * 0.065;
-      bodyTilt = -0.028 + Math.sin(motionPhase) * 0.018;
-      bodyStretchY = 1 + runBob * 0.018;
-      shadowSpread = 1 + runBob * 0.045;
-    } else if (this.animState.startsWith('attack')) {
-      const heavySwing = this.animState === 'attack3' || this.animState === 'attack4';
-      bodyBobY = Math.sin((this.animFrame / 11) * Math.PI) * (heavySwing ? 0.055 : 0.03);
-      bodyTilt = (heavySwing ? -0.12 : -0.065) + attackWave * (heavySwing ? 0.09 : 0.06);
-      bodyStretchY = 1 + Math.sin((this.animFrame / 11) * Math.PI) * (heavySwing ? 0.035 : 0.02);
-      shadowSpread = 1.04;
-    } else {
-      bodyBobY = Math.sin(motionPhase * 0.5) * 0.018;
-      bodyTilt = Math.sin(motionPhase * 0.5 + 0.35) * 0.009;
-      shadowSpread = 1 + Math.sin(motionPhase * 0.5) * 0.015;
-    }
-
-    this.heroMesh.position.set(this.playerX, 1.4 + bodyBobY, this.playerZ);
     const actionPose = this.animState.startsWith('attack');
     const visualAimAngle = actionPose ? this.heroActionAimAngle : this.playerAimAngle;
     const visualFacing = actionPose ? this.heroActionFacing : this.playerFacing;
+    const speedRatio = THREE.MathUtils.clamp(
+      Math.hypot(this.playerVx, this.playerVz) / Math.max(1, this.playerStats.moveSpeed), 0, 1
+    );
+    const smooth = (t: number) => t * t * (3 - 2 * t);
+
+    let tBobY = 0;
+    let tTilt = 0; // positive = lean forward (resolved against facing below)
+    let tSY = 1;
+    let tSX = 1;
+    let tLunge = 0;
+
+    if (this.isDashing || this.animState === 'dash') {
+      tBobY = 0.03;
+      tTilt = 0.2;
+      tSY = 0.91;
+      tSX = 1.15;
+    } else if (actionPose) {
+      // anticipation -> strike -> recovery, driven by the action timer when there is one
+      const progress = this.actionAnimationTimer > 0 && this.actionAnimationDuration > 0
+        ? 1 - this.actionAnimationTimer / this.actionAnimationDuration
+        : Math.min(1, this.animFrame / 11);
+      const power = this.animState === 'attack3' || this.animState === 'attack4' ? 1.45 : 1;
+      if (progress < 0.22) {
+        const k = smooth(progress / 0.22);
+        tSY = 1 - 0.07 * power * k;
+        tSX = 1 + 0.05 * power * k;
+        tTilt = -0.06 * power * k;
+        tBobY = -0.03 * power * k;
+      } else if (progress < 0.5) {
+        const k = smooth((progress - 0.22) / 0.28);
+        tSY = 1 - 0.07 * power + 0.16 * power * k;
+        tSX = 1 + 0.05 * power - 0.1 * power * k;
+        tTilt = -0.06 * power + 0.24 * power * k;
+        tBobY = -0.03 * power + 0.08 * power * k;
+        tLunge = 0.3 * power * k;
+      } else {
+        const k = smooth((progress - 0.5) / 0.5);
+        tSY = 1 + 0.09 * power * (1 - k);
+        tSX = 1 - 0.05 * power * (1 - k);
+        tTilt = 0.18 * power * (1 - k);
+        tBobY = 0.05 * power * (1 - k);
+        tLunge = 0.3 * power * (1 - k);
+      }
+    } else if (this.animState === 'hurt') {
+      tSY = 0.9;
+      tSX = 1.08;
+      tTilt = -0.14; // recoil backwards
+      tLunge = -0.08;
+    } else if (this.animState === 'run') {
+      const dirLean = THREE.MathUtils.clamp(this.playerVx / Math.max(1, this.playerStats.moveSpeed), -1, 1);
+      tBobY = runBob * 0.075 * speedRatio;
+      tTilt = 0.05 * speedRatio + Math.sin(motionPhase) * 0.02 * speedRatio;
+      tSY = 0.975 + runBob * 0.05 * speedRatio + (1 - speedRatio) * 0.025;
+      tSX = 1.02 - runBob * 0.03 * speedRatio;
+      // extra world-space lean in the travel direction
+      tTilt += Math.abs(dirLean) * 0.03;
+    } else {
+      const breath = Math.sin(motionPhase * 0.5);
+      tBobY = breath * 0.02;
+      tTilt = 0.01 + Math.sin(motionPhase * 0.5 + 0.35) * 0.008;
+      tSY = 1 + breath * 0.022;
+      tSX = 1 - breath * 0.012;
+    }
+
+    const vis = this.heroVisual;
+    const rate = actionPose || this.animState === 'hurt' || this.isDashing ? 34 : 16;
+    const ease = 1 - Math.exp(-dt * rate);
+    vis.bobY += (tBobY - vis.bobY) * ease;
+    vis.tilt += (tTilt - vis.tilt) * ease;
+    vis.sy += (tSY - vis.sy) * ease;
+    vis.sx += (tSX - vis.sx) * ease;
+    vis.lunge += (tLunge - vis.lunge) * ease;
+
+    // Keep the feet planted: scaling around the plane's centre would float them.
+    const feetLift = (vis.sy - 1) * 1.4;
+    const lungeX = Math.cos(visualAimAngle) * vis.lunge;
+    const lungeZ = Math.sin(visualAimAngle) * vis.lunge;
+    this.heroMesh.position.set(
+      this.playerX + lungeX,
+      1.4 + vis.bobY + feetLift * Math.cos(0.58),
+      this.playerZ + lungeZ - feetLift * Math.sin(0.58)
+    );
     this.heroMesh.rotation.x = -0.58;
     this.heroMesh.rotation.y = THREE.MathUtils.clamp(Math.sin(visualAimAngle) * 0.075, -0.075, 0.075);
-    this.heroMesh.rotation.z = bodyTilt;
-    this.heroShadowMesh.position.set(this.playerX, 0.02, this.playerZ);
+    // forward lean follows facing: leaning right is a clockwise (negative z) rotation
+    this.heroMesh.rotation.z = -visualFacing * vis.tilt;
+    const shadowSpread = THREE.MathUtils.clamp(1 - vis.bobY * 1.6 + (vis.sx - 1) * 0.9, 0.8, 1.35);
+    this.heroShadowMesh.position.set(this.playerX + lungeX * 0.6, 0.02, this.playerZ + lungeZ * 0.6);
     this.heroShadowMesh.scale.set(shadowSpread, 1, shadowSpread);
-    this.heroMesh.scale.set(Math.abs(this.heroMesh.scale.x) * visualFacing, bodyStretchY, 1);
+    this.heroMesh.scale.set(visualFacing * vis.sx, vis.sy, 1);
 
     // Twelve pose drawings cycled at 25 FPS, giving the arms and legs a much
     // smoother gait and sword follow-through than the old four-frame animation.
@@ -4170,7 +4230,25 @@ export class CombatEngine {
       }
 
       this.keepEnemyInsideArena(enemy);
-      enemy.mesh.position.set(enemy.x, (enemy.mesh.geometry as THREE.PlaneGeometry).parameters.height / 2, enemy.z);
+      // Squash & stretch: breathing while idle, bobbing when chasing, compress on wind-up,
+      // stretch on strike, flatten on hit. Vertical only, so the base (boss-intro) scale is kept.
+      const planeH = (enemy.mesh.geometry as THREE.PlaneGeometry).parameters.height;
+      const fx = enemy.mesh.userData as { phase?: number; sy?: number };
+      const chasing = enemy.state === 'chase';
+      fx.phase = (fx.phase ?? Math.random() * Math.PI * 2) + dt * (chasing ? 9 : 2.6);
+      const amp = enemy.isBoss ? 0.5 : 1;
+      let enemySY = 1 + Math.sin(fx.phase) * (chasing ? 0.04 : 0.016) * amp;
+      if (enemy.state === 'windup' || enemy.state === 'skill_windup') enemySY = 1 - 0.1 * amp;
+      else if (enemy.state === 'attack' || enemy.state === 'skill_release') enemySY = 1 + 0.1 * amp;
+      else if (enemy.state === 'hurt') enemySY = 1 - 0.12 * amp;
+      fx.sy = (fx.sy ?? 1) + (enemySY - (fx.sy ?? 1)) * (1 - Math.exp(-dt * 20));
+      enemy.mesh.scale.y = Math.abs(enemy.mesh.scale.x) * fx.sy;
+      const enemyLift = (fx.sy - 1) * planeH * 0.5;
+      enemy.mesh.position.set(
+        enemy.x,
+        planeH / 2 + enemyLift * Math.cos(0.58),
+        enemy.z - enemyLift * Math.sin(0.58)
+      );
       enemy.mesh.rotation.x = -0.58;
       enemy.shadowMesh.position.set(enemy.x, 0.02, enemy.z);
       enemy.hpBarGroup.position.set(enemy.x, (enemy.mesh.geometry as THREE.PlaneGeometry).parameters.height + 0.3, enemy.z);
