@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.3';
+export const UPDATE_VERSION = '1.1.4';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -51,6 +51,8 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เพิ่มแรงสั่นกล้องเล็กน้อยเมื่อคริติคอล โดยไม่รบกวนจังหวะอัลติ</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เอฟเฟกต์คอมโบดาบ Ginzo/Bamdee ใช้แสงและเส้นฟันชุดใหม่ แทนกลีบซากุระจากระบบเก่า</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>กดใช้สกิลใน Lobby เพื่อทดลองแอนิเมชันและเอฟเฟกต์ได้ โดยท่าอัลติของแบมดีจะแสดงเป็นตัวอย่างเมื่อไม่มีศัตรู</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ปรับกล้อง Lobby ให้เป็นมุมเฉียงติดตามตัวละครแบบเดียวกับในดันเจี้ยน</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>สามารถกดโจมตีปกติใน Lobby เพื่อทดลองคอมโบดาบและเอฟเฟกต์ได้</span></li>
               </ul>
             </section>
             <section className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">

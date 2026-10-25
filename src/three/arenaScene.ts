@@ -4460,49 +4460,35 @@ export class ArenaScene {
     this.flushVfxFrameTasks(performance.now());
     const isLobby = this.currentTheme === 'lobby';
 
-    // Keep the lobby framed from above so its walkable room reads like a pixel RPG hub.
-    const targetFov = isLobby ? 42 : 48;
+    // Use the same diagonal, player-following camera in the lobby and dungeon,
+    // so combat practice in the lounge has the same framing as a real fight.
+    const targetFov = 48;
     if (this.camera.fov !== targetFov) {
       this.camera.fov = targetFov;
       this.camera.updateProjectionMatrix();
     }
 
-    if (isLobby) {
-      // 1. LOBBY: Grand overhead lounge view
-      this.targetCamX = THREE.MathUtils.clamp(heroX * 0.45, -5, 5);
-      this.targetCamZ = THREE.MathUtils.clamp(heroZ * 0.35 + 10.5, 7, 13);
+    this.targetCamX = heroX;
+    this.targetCamZ = heroZ + 18.5;
 
-      const camLerp = 1 - Math.exp(-6 * dt);
-      this.camera.position.x += (this.targetCamX - this.camera.position.x) * camLerp;
-      this.camera.position.y += (21 - this.camera.position.y) * camLerp;
-      this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
+    const camLerp = 1 - Math.exp(-8.5 * dt);
+    this.camera.position.x += (this.targetCamX - this.camera.position.x) * camLerp;
+    this.camera.position.y += (18 - this.camera.position.y) * camLerp;
+    this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
 
-      this.camera.lookAt(this.camera.position.x * 0.6, 0.5, heroZ * 0.25);
-
+    // Keep camera shake responsive for attacks and skills in both areas.
+    if (this.cameraShake > 0.001) {
+      const shakeX = (Math.random() - 0.5) * this.cameraShake * 1.2;
+      const shakeY = (Math.random() - 0.5) * this.cameraShake * 1.2;
+      this.camera.position.x += shakeX;
+      this.camera.position.y = 18 + shakeY;
+      this.cameraShake *= Math.exp(-10 * dt);
     } else {
-      // 2. DUNGEON: keep the hero centered while the camera scrolls through the arena.
-      this.targetCamX = heroX;
-      this.targetCamZ = heroZ + 18.5;
-
-      const camLerp = 1 - Math.exp(-8.5 * dt);
-      this.camera.position.x += (this.targetCamX - this.camera.position.x) * camLerp;
-      this.camera.position.y += (18 - this.camera.position.y) * camLerp;
-      this.camera.position.z += (this.targetCamZ - this.camera.position.z) * camLerp;
-
-      // Camera Shake Decay
-      if (this.cameraShake > 0.001) {
-        const shakeX = (Math.random() - 0.5) * this.cameraShake * 1.2;
-        const shakeY = (Math.random() - 0.5) * this.cameraShake * 1.2;
-        this.camera.position.x += shakeX;
-        this.camera.position.y = (isLobby ? 21 : 18) + shakeY;
-        this.cameraShake *= Math.exp(-10 * dt);
-      } else {
-        this.camera.position.y = isLobby ? 21 : 18;
-        this.cameraShake = 0;
-      }
-
-      this.camera.lookAt(heroX, 0.5, heroZ);
+      this.camera.position.y = 18;
+      this.cameraShake = 0;
     }
+
+    this.camera.lookAt(heroX, 0.5, heroZ);
 
     // Lantern Flickering
     const time = performance.now() * 0.005;
