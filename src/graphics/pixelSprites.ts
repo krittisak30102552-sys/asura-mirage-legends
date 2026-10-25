@@ -1,7 +1,7 @@
 /**
  * Procedural sprite textures for heroes, monsters, and combat effects.
- * The renderer keeps the scene at display resolution while these source textures
- * retain crisp nearest-neighbor sampling for a clean pixel-art silhouette.
+ * Heroes and enemies are smooth, anti-aliased 2D art (full-resolution source with
+ * trilinear filtering); combat effects keep their crisp nearest-neighbor look.
  */
 
 import * as THREE from 'three';
@@ -17,18 +17,29 @@ export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasText
   return texture;
 }
 
-/** Reduce only character art to a deliberate pixel grid; scene and HUD resolution stay untouched. */
+/**
+ * Smooth 2D character texture: the source canvas is kept at full resolution (no
+ * pixel-grid downsample) and sampled with trilinear filtering so edges stay clean
+ * at any camera zoom. The optional tint is applied with a canvas filter.
+ */
 function createActorPixelTexture(source: HTMLCanvasElement, tintFilter?: string): THREE.CanvasTexture {
-  const longestSide = Math.max(source.width, source.height);
-  const scale = Math.min(1, 80 / longestSide);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(source.width * scale));
-  canvas.height = Math.max(1, Math.round(source.height * scale));
-  const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = true;
-  if (tintFilter) ctx.filter = tintFilter;
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-  return createCanvasTexture(canvas);
+  let canvas = source;
+  if (tintFilter) {
+    canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.filter = tintFilter;
+    ctx.drawImage(source, 0, 0);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): THREE.CanvasTexture {
