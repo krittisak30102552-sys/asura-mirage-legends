@@ -1253,6 +1253,8 @@ export class ArenaScene {
   }
 
   public spawnEnemyImpactShapeVFX(x: number, z: number, color: number, kind: 'bolt' | 'slam' | 'volley') {
+    this.spawnBloomFlash(x, kind === 'slam' ? 0.6 : 0.8, z, color, kind === 'slam' ? 3.8 : 2.4, 260);
+    if (kind === 'slam') this.spawnRadialStreaks(x, 0.7, z, color, 8, 2.0);
     const group = new THREE.Group(); group.position.set(x, 0, z); this.vfxGroup.add(group);
     const geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [], animated: THREE.Mesh[] = [];
     const ringGeo = new THREE.RingGeometry(0.72, 1, 28);
@@ -1534,6 +1536,11 @@ export class ArenaScene {
     const outer = new THREE.Mesh(og, om), inner = new THREE.Mesh(ig, im);
     outer.position.z = 0.02; inner.position.z = 0.035; group.add(outer, inner);
     this.spawnSkillBurst(x + Math.cos(angle) * 1.25, 1.15, z + Math.sin(angle) * 1.25, color, 4, 2.3, 0.22);
+    this.spawnBloomFlash(x + Math.cos(angle) * 1.3, 1.1, z + Math.sin(angle) * 1.3, color, 2.4, 200);
+    this.spawnSlashLineVFX(
+      x + Math.cos(angle) * 1.3, 1.1, z + Math.sin(angle) * 1.3,
+      -angle + (Math.random() < 0.5 ? 0.9 : -0.9), 2.4, 0.12, color, 190
+    );
     let elapsed = 0;
     const animate = () => {
       elapsed += 1 / 60; const p = Math.min(1, elapsed / 0.24);
@@ -2169,6 +2176,8 @@ export class ArenaScene {
   // ----------------------------------------------------------------------
 
   public spawnSkillBurst(x: number, y: number, z: number, color: number, count: number, speed: number, life: number) {
+    if (count >= 6) this.spawnBloomFlash(x, y, z, color, Math.min(4.2, 1.2 + count * 0.07), 180 + Math.min(120, life * 200));
+    if (count >= 12) this.spawnRadialStreaks(x, y, z, color, Math.min(10, Math.round(count / 3)), 1.2 + speed * 0.18);
     const sparkTex = this.getSparkTexture();
     const particleCount = this.scaleParticleCount(count);
     for (let i = 0; i < particleCount && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
@@ -2219,6 +2228,14 @@ export class ArenaScene {
     const inner = new THREE.Mesh(innerGeo, innerMat);
     inner.scale.setScalar(0.72);
     seal.add(outer, inner);
+    const discGeo = new THREE.PlaneGeometry(2.3, 2.3);
+    const discMat = new THREE.MeshBasicMaterial({
+      map: this.getSoftGlowTexture(), color, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.position.z = -0.005;
+    seal.add(disc);
 
     const tickPoints: number[] = [];
     const tickCount = this.graphicsQuality === 'low' ? 16 : 32;
@@ -2257,6 +2274,7 @@ export class ArenaScene {
       const fade = 1 - progress;
       ringMat.opacity = 0.9 * fade;
       innerMat.opacity = 0.8 * fade;
+      discMat.opacity = 0.55 * fade * fade;
       tickMat.opacity = 0.86 * fade;
       runes.forEach((rune, index) => {
         rune.rotation.y += index % 2 === 0 ? 0.055 : -0.055;
@@ -2272,6 +2290,8 @@ export class ArenaScene {
         ringMat.dispose();
         innerMat.dispose();
         tickMat.dispose();
+        discGeo.dispose();
+        discMat.dispose();
         runes.forEach((rune) => (rune.material as THREE.Material).dispose());
       }
     };
@@ -2282,6 +2302,7 @@ export class ArenaScene {
     const group = new THREE.Group();
     group.position.set(x, 1.08, z);
     group.rotation.y = -angle;
+    this.spawnBloomFlash(x + Math.cos(angle) * 0.6, 1.08, z + Math.sin(angle) * 0.6, color, 1.3, 170);
     group.scale.setScalar(projectileScale);
     this.vfxGroup.add(group);
 
@@ -2377,6 +2398,7 @@ export class ArenaScene {
     const group = new THREE.Group();
     const orbLike = style === 'orb' || style === 'dragon';
     group.position.set(x, orbLike ? 1.15 : 1.0, z);
+    this.spawnBloomFlash(x + Math.cos(angle) * 0.7, orbLike ? 1.15 : 1.0, z + Math.sin(angle) * 0.7, color, 1.7, 190);
     group.rotation.y = -angle;
     group.scale.setScalar(projectileScale);
     this.vfxGroup.add(group);
@@ -2855,29 +2877,33 @@ export class ArenaScene {
     group.rotation.y = -angle;
     this.vfxGroup.add(group);
 
-    const makeSteppedWave = (scale: number, inset: number) => {
+    // Smooth crescent: convex edge leads, tips trail behind. Built from two circle arcs
+    // (outer circle minus an offset inner circle) so every edge is a clean curve.
+    const makeCrescent = (radius: number, depth: number) => {
       const shape = new THREE.Shape();
-      const points: [number, number][] = [
-        [0, -0.08], [0.24, 0.02], [0.46, 0.18], [0.72, 0.42],
-        [1.02, 0.62], [1.32, 0.68], [1.62, 0.55], [1.9, 0.34],
-        [2.18, 0.1], [2.28, -0.08], [2.04, -0.18], [1.78, -0.36],
-        [1.48, -0.49], [1.18, -0.48], [0.9, -0.35], [0.64, -0.2],
-        [0.38, -0.12], [0.15, -0.1],
-      ];
-      const adjusted = points.map(([px, py]) => [
-        (px - inset * 0.3) * scale,
-        py * scale * (1 - inset * 0.45),
-      ] as [number, number]);
-      shape.moveTo(adjusted[0][0], adjusted[0][1]);
-      for (let i = 1; i < adjusted.length; i++) shape.lineTo(adjusted[i][0], adjusted[i][1]);
+      const segments = 36;
+      const outerLimit = Math.acos(-depth / (2 * radius));
+      const innerLimit = Math.acos(depth / (2 * radius));
+      for (let i = 0; i <= segments; i++) {
+        const t = -outerLimit + (2 * outerLimit * i) / segments;
+        const px = Math.cos(t) * radius;
+        const py = Math.sin(t) * radius;
+        if (i === 0) shape.moveTo(px, py); else shape.lineTo(px, py);
+      }
+      for (let i = 0; i <= segments; i++) {
+        const t = innerLimit - (2 * innerLimit * i) / segments;
+        shape.lineTo(-depth + Math.cos(t) * radius, Math.sin(t) * radius);
+      }
       shape.closePath();
-      return new THREE.ShapeGeometry(shape);
+      const geo = new THREE.ShapeGeometry(shape, 12);
+      geo.translate(-radius * 0.55, 0, 0); // pivot near the visual centre
+      return geo;
     };
 
-    const outerGeo = makeSteppedWave(strength, 0);
-    const coreGeo = makeSteppedWave(Math.max(0.45, strength * 0.72), 0.22);
+    const outerGeo = makeCrescent(1.0 * strength, 0.46 * strength);
+    const coreGeo = makeCrescent(0.97 * strength, 0.2 * strength);
     const outerMat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
+      color, transparent: true, opacity: 0.62, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const coreMat = new THREE.MeshBasicMaterial({
@@ -2889,17 +2915,29 @@ export class ArenaScene {
     core.position.z = 0.035;
     group.add(outer, core);
 
-    // Hard-edged square fragments trail the wave instead of round magic blobs.
-    const shardGeo = new THREE.PlaneGeometry(0.12, 0.12);
+    // Soft bloom behind the crescent so the wave glows instead of reading as a flat cutout.
+    const trailGeo = new THREE.PlaneGeometry(2.8 * strength, 2.2 * strength);
+    const trailMat = new THREE.MeshBasicMaterial({
+      map: this.getSoftGlowTexture(), color, transparent: true, opacity: 0.75, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const trail = new THREE.Mesh(trailGeo, trailMat);
+    trail.position.set(-0.35 * strength, 0, -0.03);
+    group.add(trail);
+
+    // Soft glowing motes trail the wave (round glow sprites, not hard squares).
+    const shardGeo = new THREE.PlaneGeometry(0.34, 0.34);
     const shardMat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+      map: this.getSoftGlowTexture(), color, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const shards: THREE.Mesh[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const shard = new THREE.Mesh(shardGeo, shardMat);
-      shard.position.set(0.18 + i * 0.22, (i % 2 ? 1 : -1) * (0.18 + (i % 3) * 0.07), 0.06 + i * 0.002);
-      shard.scale.set(i % 2 ? 1.0 : 0.7, i % 3 ? 0.7 : 1.2, 1);
+      const back = -0.2 - i * 0.2;
+      shard.position.set(back * strength, (i % 2 ? 1 : -1) * (0.25 + (i % 3) * 0.14) * strength, 0.06 + i * 0.002);
+      const sc = 0.55 + (i % 3) * 0.28;
+      shard.scale.set(sc, sc, 1);
       group.add(shard);
       shards.push(shard);
     }
@@ -2912,14 +2950,16 @@ export class ArenaScene {
       group.position.x = x + Math.cos(angle) * (0.55 + p * travel);
       group.position.z = z + Math.sin(angle) * (0.55 + p * travel);
       group.scale.set(0.72 + p * 0.45, 0.82 + p * 0.22, 1);
-      outerMat.opacity = 0.88 * (1 - p);
-      coreMat.opacity = 0.95 * (1 - p);
-      shardMat.opacity = 0.9 * (1 - p);
+      const fadeOut = Math.pow(1 - p, 1.25);
+      outerMat.opacity = 0.62 * fadeOut;
+      coreMat.opacity = 0.95 * fadeOut;
+      trailMat.opacity = 0.75 * fadeOut;
+      shardMat.opacity = 0.9 * fadeOut;
       if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
       else {
         group.removeFromParent();
-        outerGeo.dispose(); coreGeo.dispose(); shardGeo.dispose();
-        outerMat.dispose(); coreMat.dispose(); shardMat.dispose();
+        outerGeo.dispose(); coreGeo.dispose(); shardGeo.dispose(); trailGeo.dispose();
+        outerMat.dispose(); coreMat.dispose(); shardMat.dispose(); trailMat.dispose();
       }
     };
     this.scheduleVfxFrame(animate);
@@ -3305,6 +3345,179 @@ export class ArenaScene {
     this.scheduleVfxFrame(fade);
   }
 
+  /** Soft expanding glow flash: the shared "bloom" used to lift every skill and monster hit. */
+  public spawnBloomFlash(x: number, y: number, z: number, color: number, size: number, durationMs = 220) {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.getSoftGlowTexture(), color, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.x = -Math.PI / 4;
+    mesh.scale.set(size * 0.35, size * 0.35, 1);
+    this.vfxGroup.add(mesh);
+    const t0 = performance.now();
+    const animate = () => {
+      const p = (performance.now() - t0) / durationMs;
+      if (p < 1 && !this.disposed) {
+        const eased = 1 - Math.pow(1 - p, 3);
+        const sc = size * (0.35 + 0.65 * eased);
+        mesh.scale.set(sc, sc, 1);
+        mat.opacity = 0.85 * Math.pow(1 - p, 1.4);
+        this.scheduleVfxFrame(animate);
+      } else {
+        this.vfxGroup.remove(mesh);
+        geo.dispose();
+        mat.dispose();
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  /** Tapered speed lines radiating from a point (impact / explosion read). */
+  public spawnRadialStreaks(x: number, y: number, z: number, color: number, count: number, length: number) {
+    const n = this.scaleParticleCount(count);
+    const tex = this.getStreakTexture();
+    const items: { mesh: THREE.Mesh; geo: THREE.PlaneGeometry; mat: THREE.MeshBasicMaterial }[] = [];
+    for (let i = 0; i < n; i++) {
+      const len = length * (0.7 + Math.random() * 0.6);
+      const geo = new THREE.PlaneGeometry(len, 0.1);
+      geo.translate(len * 0.5 + 0.12, 0, 0);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex, color: i % 3 === 0 ? 0xffffff : color, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.rotation.x = -Math.PI / 4;
+      mesh.rotation.z = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      mesh.scale.x = 0.3;
+      this.vfxGroup.add(mesh);
+      items.push({ mesh, geo, mat });
+    }
+    const t0 = performance.now();
+    const animate = () => {
+      const p = (performance.now() - t0) / 260;
+      if (p < 1 && !this.disposed) {
+        const eased = 1 - Math.pow(1 - p, 3);
+        for (const it of items) {
+          it.mesh.scale.x = 0.3 + 0.9 * eased;
+          it.mat.opacity = Math.pow(1 - p, 1.5);
+        }
+        this.scheduleVfxFrame(animate);
+      } else {
+        for (const it of items) {
+          this.vfxGroup.remove(it.mesh);
+          it.geo.dispose();
+          it.mat.dispose();
+        }
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  /** A bright slash line through (x, y, z): two tapered streaks growing outward from the centre. */
+  public spawnSlashLineVFX(
+    x: number, y: number, z: number, rotZ: number,
+    length: number, thickness: number, color: number, durationMs = 220
+  ) {
+    const tex = this.getStreakTexture();
+    const meshes: { mesh: THREE.Mesh; geo: THREE.PlaneGeometry; mat: THREE.MeshBasicMaterial }[] = [];
+    for (let side = 0; side < 2; side++) {
+      const geo = new THREE.PlaneGeometry(length, thickness);
+      geo.translate(length * 0.5, 0, 0);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex, color: side ? color : 0xffffff, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.rotation.x = -Math.PI / 4;
+      mesh.rotation.z = rotZ + side * Math.PI;
+      mesh.scale.x = 0.2;
+      this.vfxGroup.add(mesh);
+      meshes.push({ mesh, geo, mat });
+    }
+    const t0 = performance.now();
+    const animate = () => {
+      const p = (performance.now() - t0) / durationMs;
+      if (p < 1 && !this.disposed) {
+        const grow = 1 - Math.pow(1 - Math.min(1, p * 2.2), 3);
+        for (const m of meshes) {
+          m.mesh.scale.set(0.2 + 0.85 * grow, 1 - p * 0.6, 1);
+          m.mat.opacity = Math.pow(1 - p, 1.3);
+        }
+        this.scheduleVfxFrame(animate);
+      } else {
+        for (const m of meshes) {
+          this.vfxGroup.remove(m.mesh);
+          m.geo.dispose();
+          m.mat.dispose();
+        }
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
+  /** Energy streaks rushing inward to (x, z) with a pulsing aura: the "gathering power" read of a charge. */
+  public spawnConvergingStreaksVFX(x: number, z: number, color: number, durationMs = 900, count = 14) {
+    const tex = this.getStreakTexture();
+    const streaks: { mesh: THREE.Mesh; geo: THREE.PlaneGeometry; mat: THREE.MeshBasicMaterial; a: number; r0: number; delay: number }[] = [];
+    for (let i = 0; i < count; i++) {
+      const length = 0.9 + Math.random() * 0.9;
+      const geo = new THREE.PlaneGeometry(length, 0.1);
+      geo.translate(length * 0.5, 0, 0); // bright root = leading (inner) end
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex, color: i % 3 === 0 ? 0xffffff : color, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      mesh.rotation.z = -a; // lie on the ground, tail pointing outward
+      this.vfxGroup.add(mesh);
+      streaks.push({ mesh, geo, mat, a, r0: 3.0 + Math.random() * 1.2, delay: Math.random() * 0.35 });
+    }
+    const auraGeo = new THREE.PlaneGeometry(3.4, 3.4);
+    const auraMat = new THREE.MeshBasicMaterial({
+      map: this.getSoftGlowTexture(), color, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const aura = new THREE.Mesh(auraGeo, auraMat);
+    aura.position.set(x, 1.1, z);
+    aura.rotation.x = -Math.PI / 4;
+    this.vfxGroup.add(aura);
+
+    const t0 = performance.now();
+    const animate = () => {
+      const p = (performance.now() - t0) / durationMs;
+      if (p < 1 && !this.disposed) {
+        for (const st of streaks) {
+          const local = Math.max(0, Math.min(1, (p - st.delay) / (1 - st.delay)));
+          const eased = local * local; // accelerate inward
+          const r = st.r0 * (1 - eased) + 0.25;
+          st.mesh.position.set(x + Math.cos(st.a) * r, 0.07, z + Math.sin(st.a) * r);
+          st.mat.opacity = local <= 0 ? 0 : Math.sin(Math.min(1, local) * Math.PI) * 0.95;
+        }
+        const pulse = 0.55 + Math.sin(p * Math.PI * 9) * 0.12;
+        aura.scale.setScalar(0.7 + p * 0.7);
+        auraMat.opacity = Math.min(1, p * 3) * (1 - p * 0.55) * pulse;
+        this.scheduleVfxFrame(animate);
+      } else {
+        for (const st of streaks) {
+          this.vfxGroup.remove(st.mesh);
+          st.geo.dispose();
+          st.mat.dispose();
+        }
+        this.vfxGroup.remove(aura);
+        auraGeo.dispose();
+        auraMat.dispose();
+      }
+    };
+    this.scheduleVfxFrame(animate);
+  }
+
   /** Red gathering aura before Ginzo's awakened iaido ultimate. */
   public spawnCrimsonSeveranceChargeVFX(x: number, z: number, angle: number) {
     this.spawnSkillRing(x, z, 0x991b1b, 2.5, 1.08);
@@ -3312,6 +3525,7 @@ export class ArenaScene {
     this.spawnSkillBurst(x, 1.15, z, 0xfff1f2, 8, 2.2, 0.38);
     this.spawnKatanaArcVFX(x, z, angle - 0.8, 1.05, 0x991b1b);
     this.spawnKatanaArcVFX(x, z, angle + 0.8, 0.85, 0xf43f5e);
+    this.spawnConvergingStreaksVFX(x, z, 0xf43f5e, 1000, 16);
 
     // Persistent, contracting crimson runes recreate the prototype's gathering charge.
     const group = new THREE.Group();
@@ -3415,9 +3629,18 @@ export class ArenaScene {
       x, z, angle, finisher ? 3.1 : 1.15 + Math.random() * 0.28,
       finisher ? 0xfef2f2 : (Math.random() > 0.5 ? 0xf43f5e : 0x991b1b)
     );
+    // Smooth bloom + radiating lines at the cut, then a bright slash line through it.
+    this.spawnHitImpactVFX(x, 1.0, z, finisher, !finisher, 0xf43f5e);
+    this.spawnSlashLineVFX(
+      x, 1.0, z, Math.random() * Math.PI,
+      finisher ? 6.5 : 2.6 + Math.random() * 1.2, finisher ? 0.26 : 0.12,
+      finisher ? 0xfff1f2 : 0xf43f5e, finisher ? 360 : 200
+    );
     if (finisher) {
       this.spawnSkillBurst(x, 1.05, z, 0xf43f5e, 30, 7.8, 0.68);
       this.spawnSkillBurst(x, 1.05, z, 0xffffff, 18, 6.5, 0.5);
+      this.spawnSkillRing(x, z, 0xf43f5e, 5.2, 0.55);
+      this.spawnSlashLineVFX(x, 1.0, z, Math.random() * Math.PI, 5.2, 0.18, 0xf43f5e, 420);
     } else {
       this.spawnSkillBurst(x, 0.95, z, 0xf43f5e, 5, 3.1, 0.24);
     }
@@ -3605,6 +3828,13 @@ export class ArenaScene {
    * Renders the distinctive Three.js 3D layers matching user prompt specifications
    */
   public spawnHeroComboVFX(heroId: HeroId, step: number, x: number, z: number, angle: number) {
+    // Shared strike flash for every hero: bloom + a crossing slash line, bigger each combo step.
+    const strikeX = x + Math.cos(angle) * 1.3;
+    const strikeZ = z + Math.sin(angle) * 1.3;
+    const tone = ({ ginzo: 0xf43f5e, bamdee: 0xf43f5e, quan: 0x38bdf8, katherine: 0xa78bfa } as Record<HeroId, number>)[heroId];
+    this.spawnBloomFlash(strikeX, 1.0, strikeZ, tone, 1.6 + step * 0.45, 210);
+    this.spawnSlashLineVFX(strikeX, 1.0, strikeZ, -angle + (step % 2 ? 0.9 : -0.9), 1.8 + step * 0.7, 0.1 + step * 0.02, 0xffffff, 190);
+    if (step >= 3) this.spawnRadialStreaks(strikeX, 1.0, strikeZ, tone, 8, 2.2);
     if (heroId === 'ginzo' || heroId === 'bamdee') {
       if (step === 1) {
         this.spawnKatanaArcVFX(x, z, angle, 0.9, 0xe2e8f0);
@@ -4047,6 +4277,8 @@ export class ArenaScene {
     const sparkTex = this.getSparkTexture();
     const numParticles = this.scaleParticleCount(14);
     const colVal = typeof colorHex === 'string' ? new THREE.Color(colorHex).getHex() : colorHex;
+    this.spawnBloomFlash(x, y, z, colVal, 2.6, 240);
+    this.spawnRadialStreaks(x, y, z, colVal, 6, 1.6);
 
     for (let i = 0; i < numParticles && this.activeParticles.length < this.maxActiveCombatParticles; i++) {
       const mat = new THREE.MeshBasicMaterial({
@@ -4087,6 +4319,8 @@ export class ArenaScene {
    * Dark soul disintegrating fire embers floating upwards when enemy is defeated
    */
   public spawnEnemyDeathVFX(x: number, y: number, z: number) {
+    this.spawnBloomFlash(x, y + 0.2, z, 0xec4899, 3.4, 300);
+    this.spawnRadialStreaks(x, y + 0.2, z, 0xa855f7, 8, 2.0);
     const sparkTex = this.getSparkTexture();
     const count = this.scaleParticleCount(20);
     const colors = [0xa855f7, 0xec4899, 0xef4444, 0x3b82f6];
