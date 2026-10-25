@@ -341,64 +341,6 @@ export default function App() {
       }
     }
 
-    // Render the combat.ts Canvas2D effects in the same projected ground plane as the 3D arena.
-    const projectGround = (x: number, z: number) => {
-      _v.set(x, 0.04, z);
-      _v.project(arena.camera);
-      return { x: (_v.x * halfW) + halfW, y: (-_v.y * halfH) + halfH };
-    };
-    const center = projectGround(engine.playerX, engine.playerZ);
-    const xAxis = projectGround(engine.playerX + 1, engine.playerZ);
-    const zAxis = projectGround(engine.playerX, engine.playerZ + 1);
-    const a = (xAxis.x - center.x) / 32;
-    const b = (xAxis.y - center.y) / 32;
-    const c = (zAxis.x - center.x) / 32;
-    const d = (zAxis.y - center.y) / 32;
-    ctx.save();
-    ctx.setTransform(
-      a, b, c, d,
-      center.x - a * engine.playerX * 32 - c * engine.playerZ * 32,
-      center.y - b * engine.playerX * 32 - d * engine.playerZ * 32,
-    );
-    const shake = engine.playerCombat.fx.shakeOffset();
-    ctx.translate(shake.x, shake.y);
-    engine.playerCombat.fx.draw(ctx, (ghostCtx, x, y, facing, alpha) => {
-      ghostCtx.save();
-      ghostCtx.translate(x, y);
-      ghostCtx.scale(facing, 1);
-      ghostCtx.globalAlpha = alpha;
-      ghostCtx.shadowColor = '#7fe3ff';
-      ghostCtx.shadowBlur = 10;
-      ghostCtx.fillStyle = 'rgba(70, 196, 255, 0.5)';
-      ghostCtx.strokeStyle = 'rgba(220, 250, 255, 0.9)';
-      ghostCtx.lineWidth = 2;
-      ghostCtx.beginPath();
-      ghostCtx.ellipse(0, -21, 6, 7, 0, 0, Math.PI * 2);
-      ghostCtx.fill();
-      ghostCtx.stroke();
-      ghostCtx.beginPath();
-      ghostCtx.moveTo(-7, -13);
-      ghostCtx.lineTo(-10, 3);
-      ghostCtx.lineTo(-5, 4);
-      ghostCtx.lineTo(0, -2);
-      ghostCtx.lineTo(5, 4);
-      ghostCtx.lineTo(10, 3);
-      ghostCtx.lineTo(7, -13);
-      ghostCtx.closePath();
-      ghostCtx.fill();
-      ghostCtx.stroke();
-      ghostCtx.beginPath();
-      ghostCtx.moveTo(-5, 3);
-      ghostCtx.lineTo(-8, 13);
-      ghostCtx.moveTo(5, 3);
-      ghostCtx.lineTo(8, 13);
-      ghostCtx.moveTo(6, -10);
-      ghostCtx.lineTo(19, -20);
-      ghostCtx.stroke();
-      ghostCtx.restore();
-    });
-    ctx.restore();
-
     // 3. Floating Overhead NPC / Door Speech Bubble (Right over NPC's head)
     let promptTarget: { x: number; y: number; z: number; title: string; action: string; color: string } | null = null;
 
