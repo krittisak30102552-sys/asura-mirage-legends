@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.1.4';
+export const UPDATE_VERSION = '1.1.5';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -53,6 +53,8 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>กดใช้สกิลใน Lobby เพื่อทดลองแอนิเมชันและเอฟเฟกต์ได้ โดยท่าอัลติของแบมดีจะแสดงเป็นตัวอย่างเมื่อไม่มีศัตรู</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ปรับกล้อง Lobby ให้เป็นมุมเฉียงติดตามตัวละครแบบเดียวกับในดันเจี้ยน</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>สามารถกดโจมตีปกติใน Lobby เพื่อทดลองคอมโบดาบและเอฟเฟกต์ได้</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>เปลี่ยนเอฟเฟกต์ตีปกติให้ใช้ชุด 3D ใหม่ โดยถอดเอฟเฟกต์ Canvas2D และแสงฟันดาบเก่าที่ซ้อนกันออก</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>ถอดเส้นเตือนพื้นแบบเดิมจากสกิล 1 ของ Ginzo และ Quan คงเอฟเฟกต์สกิลชุดใหม่ไว้</span></li>
               </ul>
             </section>
             <section className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
