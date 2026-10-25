@@ -205,8 +205,6 @@ export function drawCooldownRing(ctx: CanvasRenderingContext2D, x: number, y: nu
 // ---------- ระบบต่อสู้หลัก ----------
 type M1State = 'idle' | 'windup' | 'active' | 'recovery';
 export class PlayerCombat {
-  readonly fx = new CombatFx();
-
   private m1: M1State = 'idle';
   private step = 0;           // index ของท่าที่กำลังตี (หรือท่าถัดไปตอน idle)
   private t = 0;
@@ -227,7 +225,6 @@ export class PlayerCombat {
   get comboStep(): number { return this.m1 !== 'idle' ? this.step + 1 : this.comboT > 0 ? this.step : 0; }
   get comboWindowLeft(): number { return this.comboT; }
   update(dt: number, targets: Target[]) {
-    this.fx.update(dt);
     if (this.hitstop > 0) { this.hitstop -= dt; return; } // หยุดเฟรมสั้นๆ ให้หนักมือ
 
     this.m1Cd = Math.max(0, this.m1Cd - dt);
@@ -269,55 +266,7 @@ export class PlayerCombat {
         this.t += sdt;
         if (this.t >= def.windup) {
           this.m1 = 'active'; this.t = 0; this.hitSet.clear();
-          const o = this.owner;
-          const hero = o.heroId === 'bamdee' ? 'ginzo' : (o.heroId || 'ginzo');
-          const heavy = this.step === COMBO.length - 1;
-          const aimAngle = Math.atan2(o.aim.y, o.aim.x);
 
-          if (hero === 'ginzo') {
-            if (this.step === 0) {
-              // Combo 1: Silver Moon — silver crescent + pink ghost after-image
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range, '241,245,249', 0.22, this.flip);
-              this.fx.ghost(o.pos.x - Math.cos(aimAngle) * 12, o.pos.y - Math.sin(aimAngle) * 12, o.facing, 0.25, '#fb7185');
-            } else if (this.step === 1) {
-              // Combo 2: Rose Cross Rift — dual intersecting crimson slashes; no separate petals.
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.1, def.range, '244,63,94', 0.24, this.flip, true);
-            } else {
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.25, def.range * 1.15, '236,72,153', 0.32, this.flip);
-            }
-          } else if (hero === 'quan') {
-            if (this.step === 0) {
-              // Combo 1: Jade Pulse — cyan/gold fist shockwave
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 0.9, def.range * 0.9, '56,189,248', 0.2, this.flip);
-              this.fx.ring(o.pos.x, o.pos.y, 24, '250,204,21');
-            } else if (this.step === 1) {
-              // Combo 2: Azure Dragon Orbit — circular swirl ring around player
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.2, def.range, '34,211,238', 0.24, this.flip);
-              this.fx.ring(o.pos.x, o.pos.y, 38, '34,211,238');
-            } else {
-              // Combo 3: Sky-Rising Dragon — golden energy burst + expanding ring
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.35, def.range * 1.2, '251,191,36', 0.34, this.flip);
-              this.fx.ring(o.pos.x, o.pos.y, 50, '251,191,36');
-              this.fx.burst(o.pos.x, o.pos.y, 12, '253,224,71');
-            }
-          } else if (hero === 'katherine') {
-            if (this.step === 0) {
-              // Combo 1: Frost Shard — crystalline ice projectile trail
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 0.75, def.range * 1.1, '125,211,252', 0.22, this.flip);
-              this.fx.burst(o.pos.x, o.pos.y, 6, '224,242,254');
-            } else if (this.step === 1) {
-              // Combo 2: Storm Relay — branching electric storm discharge
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range * 1.1, '167,139,250', 0.24, this.flip);
-              this.fx.burst(o.pos.x, o.pos.y, 10, '147,197,253');
-            } else {
-              // Combo 3: Astral Convergence — crystal flare & violet thunder burst
-              this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc * 1.4, def.range * 1.25, '192,132,252', 0.34, this.flip);
-              this.fx.ring(o.pos.x, o.pos.y, 45, '192,132,252');
-              this.fx.burst(o.pos.x, o.pos.y, 16, '244,114,182');
-            }
-          } else {
-            this.fx.slash(o.pos.x, o.pos.y, aimAngle, def.arc, def.range, heavy ? '255,190,90' : '255,255,255', heavy ? 0.28 : 0.18, this.flip);
-          }
         }
         break;
       case 'active':
@@ -348,12 +297,12 @@ export class PlayerCombat {
       if (dist > def.range + tg.radius) continue;
       if (dist > tg.radius && angDiff(Math.atan2(dy, dx), base) > def.arc / 2) continue;
       this.hitSet.add(tg);
-      this.applyHit(tg, def.dmg, def.knock, def.hitstop, this.step === COMBO.length - 1);
+      this.applyHit(tg, def.dmg, def.knock, def.hitstop);
     }
   }
 
   // ----- ดาเมจรวม -----
-  private applyHit(tg: Target, mult: number, knock: number, hitstop: number, heavy: boolean) {
+  private applyHit(tg: Target, mult: number, knock: number, hitstop: number) {
     const s = this.owner.stats;
     const crit = Math.random() < s.critChance;
     const dmg = Math.round(s.damage * mult * (crit ? s.critDamage : 1));
@@ -362,8 +311,6 @@ export class PlayerCombat {
     tg.hit(dmg, { x: (dx / len) * knock, y: (dy / len) * knock }, crit);
     if (s.lifestealPct > 0) this.owner.heal(dmg * s.lifestealPct);
     this.hitstop = Math.max(this.hitstop, hitstop);
-    this.fx.burst(tg.pos.x, tg.pos.y, crit ? 14 : 8, crit ? '255,211,107' : '255,255,255');
-    if (heavy || crit) this.fx.shake(heavy ? 6 : 3, 0.12);
     this.emit({ type: 'hit', damage: dmg, crit, target: tg });
   }
 
