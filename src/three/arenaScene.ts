@@ -3946,6 +3946,18 @@ export class ArenaScene {
    * Renders the distinctive Three.js 3D layers matching user prompt specifications
    */
   public spawnHeroComboVFX(heroId: HeroId, step: number, x: number, z: number, angle: number) {
+    if (heroId === 'ginzo' || heroId === 'bamdee') {
+      this.spawnGinzoComboVFX(step, x, z, angle);
+      return;
+    }
+
+    // Shared strike flash for every hero: bloom + a crossing slash line, bigger each combo step.
+    const strikeX = x + Math.cos(angle) * 1.3;
+    const strikeZ = z + Math.sin(angle) * 1.3;
+    const tone = ({ ginzo: 0xf43f5e, bamdee: 0xf43f5e, quan: 0x38bdf8, katherine: 0xa78bfa } as Record<HeroId, number>)[heroId];
+    this.spawnBloomFlash(strikeX, 1.0, strikeZ, tone, 1.6 + step * 0.45, 210);
+    this.spawnSlashLineVFX(strikeX, 1.0, strikeZ, -angle + (step % 2 ? 0.9 : -0.9), 1.8 + step * 0.7, 0.1 + step * 0.02, 0xffffff, 190);
+    if (step >= 3) this.spawnRadialStreaks(strikeX, 1.0, strikeZ, tone, 8, 2.2);
     if (heroId === 'quan') {
       if (step === 1) {
         this.spawnSkillBurst(x, 1.0, z, 0x38bdf8, 8, 3.2, 0.28);
