@@ -2964,8 +2964,9 @@ export class ArenaScene {
   }
 
   /**
-   * Awakened Ginzo's dimensional blade wave: larger, pink-gold stepped crescent
-   * with a bright pixel core and a travelling rift, not a static rounded slab.
+   * Ginzo Skill 1: a travelling dimensional blade wave built from a molten-gold
+   * silhouette, a white-hot cutting core, fine rift rails, and angular fragments.
+   * This is a mesh-based VFX only; it does not change combat or hit detection.
    */
   public spawnDimensionalSlashVFX(x: number, z: number, angle: number) {
     const group = new THREE.Group();
@@ -2973,64 +2974,143 @@ export class ArenaScene {
     group.rotation.y = -angle;
     this.vfxGroup.add(group);
 
-    const makeRift = (scale: number) => {
+    const points: [number, number][] = [
+      [0, -0.1], [0.34, 0.02], [0.72, 0.24], [1.14, 0.49],
+      [1.62, 0.69], [2.08, 0.62], [2.52, 0.36], [2.98, 0.02],
+      [2.64, -0.19], [2.22, -0.47], [1.76, -0.6], [1.3, -0.45],
+      [0.86, -0.24], [0.4, -0.12],
+    ];
+
+    const makeWave = (scale: number) => {
       const shape = new THREE.Shape();
-      const points: [number, number][] = [
-        [0, -0.12], [0.36, 0.02], [0.72, 0.26], [1.1, 0.54],
-        [1.52, 0.72], [1.92, 0.66], [2.32, 0.42], [2.7, 0.13],
-        [2.86, -0.1], [2.58, -0.22], [2.2, -0.45], [1.82, -0.62],
-        [1.42, -0.62], [1.04, -0.43], [0.7, -0.23], [0.34, -0.13],
-      ];
       shape.moveTo(points[0][0] * scale, points[0][1] * scale);
-      for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0] * scale, points[i][1] * scale);
+      for (let i = 1; i < points.length; i++) {
+        shape.lineTo(points[i][0] * scale, points[i][1] * scale);
+      }
       shape.closePath();
-      return new THREE.ShapeGeometry(shape);
+      return new THREE.ShapeGeometry(shape, 2);
     };
-    const outerGeo = makeRift(1.24);
-    const coreGeo = makeRift(0.83);
+
+    const outerGeo = makeWave(1.24);
+    const midGeo = makeWave(0.96);
+    const coreGeo = makeWave(0.65);
     const outerMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b, transparent: true, opacity: 0.76,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const midMat = new THREE.MeshBasicMaterial({
       color: 0xfacc15, transparent: true, opacity: 0.9,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xfff7fb, transparent: true, opacity: 0.98,
+      color: 0xfffdf2, transparent: true, opacity: 0.98,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const outer = new THREE.Mesh(outerGeo, outerMat);
+    const mid = new THREE.Mesh(midGeo, midMat);
     const core = new THREE.Mesh(coreGeo, coreMat);
-    core.position.z = 0.04;
-    group.add(outer, core);
+    mid.position.z = 0.035;
+    core.position.z = 0.075;
+    group.add(outer, mid, core);
 
-    // Gold/pink square fragments sell the cut as a flying wave.
-    const shardGeo = new THREE.PlaneGeometry(0.15, 0.15);
-    const shardMat = new THREE.MeshBasicMaterial({
-      color: 0xfde68a, transparent: true, opacity: 0.95,
+    // Bright contour gives the torn edge a deliberate dimensional-rift silhouette.
+    const outlinePoints = points.map(([px, py]) =>
+      new THREE.Vector3(px * 1.24, py * 1.24, 0)
+    );
+    outlinePoints.push(outlinePoints[0].clone());
+    const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePoints);
+    const outlineMat = new THREE.LineBasicMaterial({
+      color: 0xfff7cc, transparent: true, opacity: 0.92,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const outline = new THREE.Line(outlineGeo, outlineMat);
+    outline.position.z = 0.095;
+    group.add(outline);
+
+    // Two tapered trails stretch behind the leading edge instead of a flat slab.
+    const trailGeo = new THREE.PlaneGeometry(4.7, 0.4);
+    trailGeo.translate(-1.25, 0, 0);
+    const trailMat = new THREE.MeshBasicMaterial({
+      map: this.getStreakTexture(), color: 0xfbbf24, transparent: true, opacity: 0.78,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    for (let i = 0; i < 8; i++) {
-      const shard = new THREE.Mesh(shardGeo, shardMat);
-      shard.position.set(0.15 + i * 0.29, (i % 2 ? 1 : -1) * (0.28 + (i % 3) * 0.08), 0.07 + i * 0.002);
-      shard.scale.set(i % 3 === 0 ? 1.3 : 0.75, i % 2 ? 0.65 : 1.15, 1);
-      group.add(shard);
+    const trail = new THREE.Mesh(trailGeo, trailMat);
+    trail.position.set(0, -0.02, -0.055);
+    group.add(trail);
+
+    const coreTrailGeo = new THREE.PlaneGeometry(3.05, 0.075);
+    coreTrailGeo.translate(1.48, 0.025, 0);
+    const coreTrailMat = new THREE.MeshBasicMaterial({
+      map: this.getStreakTexture(), color: 0xffffff, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const coreTrail = new THREE.Mesh(coreTrailGeo, coreTrailMat);
+    coreTrail.position.z = 0.12;
+    group.add(coreTrail);
+
+    // Angular pixel-like fragments sell the tearing edge; no petals or burst sprites.
+    const shardGeo = new THREE.PlaneGeometry(0.14, 0.09);
+    const goldShardMat = new THREE.MeshBasicMaterial({
+      color: 0xfde68a, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const whiteShardMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const shards: { mesh: THREE.Mesh; baseX: number; baseY: number; spin: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const baseX = 0.1 + (i / 11) * 2.82;
+      const side = i % 2 === 0 ? 1 : -1;
+      const baseY = side * (0.13 + (i % 4) * 0.105);
+      const mesh = new THREE.Mesh(shardGeo, i % 4 === 0 ? whiteShardMat : goldShardMat);
+      mesh.position.set(baseX, baseY, 0.11 + (i % 2) * 0.012);
+      mesh.scale.set(0.65 + (i % 3) * 0.24, 0.7 + (i % 2) * 0.3, 1);
+      mesh.rotation.z = (i % 5) * 0.42;
+      group.add(mesh);
+      shards.push({ mesh, baseX, baseY, spin: (i % 2 ? -1 : 1) * (0.5 + (i % 3) * 0.35) });
     }
 
-    // Keep the travelling dimensional cut, but remove the particle burst that reads as petals.
+    // A brief departure flash makes the wave feel released from the blade.
+    this.spawnBloomFlash(x, 1.0, z, 0xfacc15, 1.7, 160);
+    this.spawnSlashLineVFX(x, 1.04, z, -angle + 0.12, 3.2, 0.105, 0xffffff, 180);
+    this.spawnRadialStreaks(x, 0.92, z, 0xfacc15, 5, 1.15);
+
     const started = performance.now();
-    const duration = 470;
-    const travel = 5.8;
+    const duration = 500;
+    const travel = 6.5;
     const animate = (now: number) => {
-      const p = Math.min(1, (now - started) / duration);
-      group.position.x = x + Math.cos(angle) * p * travel;
-      group.position.z = z + Math.sin(angle) * p * travel;
-      group.scale.set(0.76 + p * 0.54, 0.82 + p * 0.2, 1);
-      outerMat.opacity = 0.9 * (1 - p);
-      coreMat.opacity = 0.98 * (1 - p);
-      shardMat.opacity = 0.95 * (1 - p);
-      if (p < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
+      const raw = Math.min(1, (now - started) / duration);
+      const eased = 1 - Math.pow(1 - raw, 2.25);
+      const fade = Math.pow(1 - raw, 1.15);
+
+      group.position.x = x + Math.cos(angle) * eased * travel;
+      group.position.z = z + Math.sin(angle) * eased * travel;
+      group.scale.set(0.74 + eased * 0.52, 0.82 + Math.sin(raw * Math.PI) * 0.24, 1);
+      group.rotation.z = Math.sin(raw * Math.PI) * 0.018;
+
+      outerMat.opacity = 0.76 * fade;
+      midMat.opacity = 0.9 * fade;
+      coreMat.opacity = 0.98 * fade;
+      outlineMat.opacity = 0.92 * fade;
+      trailMat.opacity = 0.78 * fade;
+      coreTrailMat.opacity = 0.9 * fade;
+      goldShardMat.opacity = 0.9 * fade;
+      whiteShardMat.opacity = 0.9 * fade;
+
+      for (const shard of shards) {
+        shard.mesh.position.x = shard.baseX + eased * 0.36;
+        shard.mesh.position.y = shard.baseY + Math.sin(raw * 5 + shard.spin) * 0.055;
+        shard.mesh.rotation.z += shard.spin * 0.012;
+      }
+
+      if (raw < 1 && group.parent && !this.disposed) this.scheduleVfxFrame(animate);
       else {
         group.removeFromParent();
-        outerGeo.dispose(); coreGeo.dispose(); shardGeo.dispose();
-        outerMat.dispose(); coreMat.dispose(); shardMat.dispose();
+        outerGeo.dispose(); midGeo.dispose(); coreGeo.dispose(); outlineGeo.dispose();
+        trailGeo.dispose(); coreTrailGeo.dispose(); shardGeo.dispose();
+        outerMat.dispose(); midMat.dispose(); coreMat.dispose(); outlineMat.dispose();
+        trailMat.dispose(); coreTrailMat.dispose(); goldShardMat.dispose(); whiteShardMat.dispose();
       }
     };
     this.scheduleVfxFrame(animate);
@@ -3822,18 +3902,42 @@ export class ArenaScene {
   }
 
   /**
-   * Ginzo/Bamdee normal attack: clean katana cuts without petal particle bursts.
+   * Ginzo/Bamdee signature 3-hit katana chain.
+   * Crisp ivory cuts, a restrained gold edge, and a stronger third-hit impact;
+   * deliberately no legacy blossom or particle-burst layers.
    */
   public spawnGinzoComboVFX(step: number, x: number, z: number, angle: number) {
-    if (step === 1) {
-      this.spawnKatanaArcVFX(x, z, angle - 0.12, 1.0, 0xfef3c7);
+    const impactX = x + Math.cos(angle) * 0.62;
+    const impactZ = z + Math.sin(angle) * 0.62;
+
+    if (step <= 1) {
+      this.spawnKatanaArcVFX(x, z, angle - 0.1, 0.96, 0xfef3c7);
+      this.spawnSlashLineVFX(impactX, 0.94, impactZ, -angle + 0.28, 1.85, 0.075, 0xffffff, 150);
+      this.spawnBloomFlash(impactX, 0.96, impactZ, 0xfacc15, 0.82, 125);
     } else if (step === 2) {
-      this.spawnKatanaArcVFX(x, z, angle - 0.38, 1.08, 0xfef3c7);
-      this.spawnKatanaArcVFX(x, z, angle + 0.32, 0.88, 0xfacc15);
+      this.spawnKatanaArcVFX(x, z, angle - 0.34, 1.12, 0xffffff);
+      this.spawnKatanaArcVFX(
+        x + Math.cos(angle) * 0.2,
+        z + Math.sin(angle) * 0.2,
+        angle + 0.28,
+        0.9,
+        0xfacc15
+      );
+      this.spawnSlashLineVFX(impactX, 0.98, impactZ, -angle - 0.24, 2.35, 0.09, 0xfef3c7, 175);
+      this.spawnBloomFlash(impactX, 0.98, impactZ, 0xfbbf24, 1.0, 145);
     } else {
-      this.spawnKatanaArcVFX(x, z, angle, 1.5, 0xfacc15);
-      this.spawnKatanaArcVFX(x, z, angle + 0.42, 0.92, 0xffffff);
-      this.addCameraShake(0.2);
+      this.spawnKatanaArcVFX(x, z, angle, 1.44, 0xfacc15);
+      this.spawnKatanaArcVFX(
+        x + Math.cos(angle) * 0.16,
+        z + Math.sin(angle) * 0.16,
+        angle + 0.3,
+        1.08,
+        0xffffff
+      );
+      this.spawnSlashLineVFX(impactX, 1.02, impactZ, -angle + 0.1, 3.1, 0.13, 0xffffff, 215);
+      this.spawnSlashLineVFX(impactX, 1.04, impactZ, -angle - 0.2, 2.45, 0.06, 0xfacc15, 195);
+      this.spawnRadialStreaks(impactX, 0.92, impactZ, 0xfacc15, 5, 1.15);
+      this.addCameraShake(0.22);
     }
   }
 
@@ -3842,27 +3946,7 @@ export class ArenaScene {
    * Renders the distinctive Three.js 3D layers matching user prompt specifications
    */
   public spawnHeroComboVFX(heroId: HeroId, step: number, x: number, z: number, angle: number) {
-    // Shared strike flash for every hero: bloom + a crossing slash line, bigger each combo step.
-    const strikeX = x + Math.cos(angle) * 1.3;
-    const strikeZ = z + Math.sin(angle) * 1.3;
-    const tone = ({ ginzo: 0xf43f5e, bamdee: 0xf43f5e, quan: 0x38bdf8, katherine: 0xa78bfa } as Record<HeroId, number>)[heroId];
-    this.spawnBloomFlash(strikeX, 1.0, strikeZ, tone, 1.6 + step * 0.45, 210);
-    this.spawnSlashLineVFX(strikeX, 1.0, strikeZ, -angle + (step % 2 ? 0.9 : -0.9), 1.8 + step * 0.7, 0.1 + step * 0.02, 0xffffff, 190);
-    if (step >= 3) this.spawnRadialStreaks(strikeX, 1.0, strikeZ, tone, 8, 2.2);
-    if (heroId === 'ginzo' || heroId === 'bamdee') {
-      if (step === 1) {
-        this.spawnKatanaArcVFX(x, z, angle, 0.9, 0xe2e8f0);
-        this.spawnSkillBurst(x, 1.0, z, 0xf1f5f9, 5, 2.8, 0.2);
-      } else if (step === 2) {
-        this.spawnKatanaArcVFX(x, z, angle - 0.55, 1.05, 0xf43f5e);
-        this.spawnKatanaArcVFX(x, z, angle + 0.55, 0.82, 0xfda4af);
-        this.spawnSkillBurst(x, 1.05, z, 0xf43f5e, 7, 3.6, 0.26);
-      } else {
-        this.spawnKatanaArcVFX(x, z, angle, 1.42, 0xfda4af);
-        this.spawnDimensionalSlashVFX(x, z, angle);
-        this.addCameraShake(0.32);
-      }
-    } else if (heroId === 'quan') {
+    if (heroId === 'quan') {
       if (step === 1) {
         this.spawnSkillBurst(x, 1.0, z, 0x38bdf8, 8, 3.2, 0.28);
         this.spawnSkillBurst(x, 1.0, z, 0xfacc15, 6, 2.8, 0.25);
