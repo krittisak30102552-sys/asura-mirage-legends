@@ -2929,7 +2929,7 @@ export class CombatEngine {
       if (dist <= radius + 0.8) {
         soundEngine.playHit(true);
 
-        if (prop.id === 9001 || prop.id === 9002) {
+        if (prop.id === 9001) {
           const isCrit = Math.random() < this.playerStats.critChance;
           const dmg = Math.round(
             isCrit ? this.playerStats.attackPower * this.playerStats.critMultiplier : this.playerStats.attackPower * (1.0 + Math.random() * 0.4)
