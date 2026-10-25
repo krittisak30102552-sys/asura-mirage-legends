@@ -261,7 +261,8 @@ export const HUD: React.FC<HUDProps> = ({
     crop.height = 128;
     const context = crop.getContext('2d');
     if (context) {
-      context.imageSmoothingEnabled = false;
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
       context.drawImage(source, 0, 0, 256, 210, 0, 0, 128, 128);
     }
     sprite.dispose();
