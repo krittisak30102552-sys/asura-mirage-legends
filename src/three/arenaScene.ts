@@ -2310,16 +2310,30 @@ export class ArenaScene {
   private buildTrainerStation(x: number, z: number) {
     const station = new THREE.Group();
     station.position.set(x, 0, z);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
-    const bannerMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.7, side: THREE.DoubleSide });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5b3824, roughness: 0.9 });
+    const bannerMat = new THREE.MeshStandardMaterial({ color: 0xe1c18a, roughness: 0.92, side: THREE.DoubleSide });
+    const inkMat = new THREE.MeshStandardMaterial({ color: 0x803f32, roughness: 0.95 });
 
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 2.0, 8), woodMat);
     pole.position.y = 1.0;
     station.add(pole);
+    const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.15, 8), woodMat);
+    crossbar.rotation.z = Math.PI / 2;
+    crossbar.position.set(0.8, 2.05, -0.4);
+    station.add(crossbar);
 
-    const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.8), bannerMat);
-    banner.position.set(0.8, 1.2, -0.4);
+    // A parchment training scroll suits the small home dojo better than a neon banner.
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.55), bannerMat);
+    banner.position.set(0.8, 1.22, -0.38);
     station.add(banner);
+    const seal = new THREE.Mesh(new THREE.CircleGeometry(0.14, 8), inkMat);
+    seal.position.set(0.8, 1.55, -0.34);
+    station.add(seal);
+    for (const y of [1.16, 1.0, 0.84]) {
+      const brushStroke = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.045, 0.025), inkMat);
+      brushStroke.position.set(0.8, y, -0.34);
+      station.add(brushStroke);
+    }
 
     this.staticDecorGroup.add(station);
   }
