@@ -114,7 +114,6 @@ button[class*="bg-zinc-900"]:hover {
 
 /* The title screen gets soft, atmospheric light; the game view itself stays untouched. */
 .ui-title-screen {
-  position: relative;
   isolation: isolate;
 }
 
