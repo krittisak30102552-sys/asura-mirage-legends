@@ -3016,6 +3016,8 @@ export class CombatEngine {
 
     this.spawnDamageNumber(enemy.x, 1.2, enemy.z, dealtDamage, isCrit);
     this.arena.spawnHitImpactVFX(enemy.x, 0.92, enemy.z, isCrit, isHeavy, 0xef4458);
+    // A touch of camera kick on crits (skipped during the ultimate, which has its own choreography).
+    if (isCrit && !this.ginzoUltimateSequence) this.arena.addCameraShake(0.07);
 
     this.applyEquipmentStatusOnHit(enemy);
     if (isCrit) this.handleEquipmentCritical();
