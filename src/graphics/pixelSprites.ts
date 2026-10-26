@@ -43,6 +43,213 @@ function createActorPixelTexture(source: HTMLCanvasElement, tintFilter?: string)
   return texture;
 }
 
+
+// ----------------------------------------------------------------------
+// REFERENCE HERO SPRITES + PIXEL-ART PASS
+// Reference sprite sheets are animated in the browser; the existing 25 FPS
+// texture loop captures the current frame and layers state-based movement.
+// ----------------------------------------------------------------------
+type ReferenceHeroId = 'ginzo' | 'katherine';
+const referenceHeroImages: Partial<Record<ReferenceHeroId, HTMLImageElement>> = {};
+
+function getReferenceHeroImage(heroId: ReferenceHeroId): HTMLImageElement | null {
+  if (typeof document === 'undefined') return null;
+  let image = referenceHeroImages[heroId];
+  if (!image) {
+    image = document.createElement('img');
+    image.decoding = 'async';
+    const assetPath = heroId === 'ginzo'
+      ? 'assets/characters/Ginzo_Default_Idle.webp'
+      : 'assets/characters/Katherine_Default_Idle.webp';
+    image.src = new URL(assetPath, document.baseURI).toString();
+    referenceHeroImages[heroId] = image;
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null;
+}
+
+function createCrispPixelTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** Converts the existing procedural 12-pose art into a controlled pixel palette. */
+function createPixelArtHeroTexture(source: HTMLCanvasElement, tintFilter?: string): THREE.CanvasTexture {
+  let sourceCanvas = source;
+  if (tintFilter) {
+    sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = source.width;
+    sourceCanvas.height = source.height;
+    const tintContext = sourceCanvas.getContext('2d')!;
+    tintContext.imageSmoothingEnabled = false;
+    tintContext.filter = tintFilter;
+    tintContext.drawImage(source, 0, 0);
+    tintContext.filter = 'none';
+  }
+
+  const pixelCanvas = document.createElement('canvas');
+  pixelCanvas.width = 128;
+  pixelCanvas.height = 160;
+  const pixelContext = pixelCanvas.getContext('2d', { willReadFrequently: true })!;
+  pixelContext.imageSmoothingEnabled = false;
+  pixelContext.drawImage(sourceCanvas, 0, 0, pixelCanvas.width, pixelCanvas.height);
+
+  // Quantize RGB gently to remove vector-render gradients while preserving
+  // outlines, skin tones, fabric highlights, and the original transparency.
+  const pixels = pixelContext.getImageData(0, 0, pixelCanvas.width, pixelCanvas.height);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    if (pixels.data[i + 3] < 24) continue;
+    pixels.data[i] = Math.min(255, Math.round(pixels.data[i] / 24) * 24);
+    pixels.data[i + 1] = Math.min(255, Math.round(pixels.data[i + 1] / 24) * 24);
+    pixels.data[i + 2] = Math.min(255, Math.round(pixels.data[i + 2] / 24) * 24);
+  }
+  pixelContext.putImageData(pixels, 0, 0);
+  return createCrispPixelTexture(pixelCanvas);
+}
+
+/** Convert Ginzo's red haori and red blade into a deep-to-bright gold palette. */
+function applyGinzoGoldPalette(canvas: HTMLCanvasElement): void {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return;
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 24) continue;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (r > 70 && g < 132 && b < 110 && r > g * 1.28 && r > b * 1.25) {
+      if (r > 220) {
+        data[i] = 255; data[i + 1] = 213; data[i + 2] = 78;
+      } else if (r > 150) {
+        data[i] = 226; data[i + 1] = 157; data[i + 2] = 38;
+      } else if (r > 105) {
+        data[i] = 165; data[i + 1] = 105; data[i + 2] = 27;
+      } else {
+        data[i] = 92; data[i + 1] = 56; data[i + 2] = 20;
+      }
+    }
+  }
+  context.putImageData(image, 0, 0);
+}
+
+function generateReferenceHeroTexture(
+  heroId: HeroId,
+  state: HeroAnimationState,
+  frameIndex: number,
+  isGinzoEvolved: boolean,
+  aimAngle: number,
+  facing: number
+): THREE.CanvasTexture | null {
+  if (heroId !== 'ginzo' && heroId !== 'katherine') return null;
+  const sprite = getReferenceHeroImage(heroId);
+  if (!sprite) return null;
+
+  const W = 128;
+  const H = 160;
+  // Keep the supplied sprite's native aspect ratio inside the engine's canvas.
+  const drawHeight = Math.min(H, W * sprite.naturalHeight / sprite.naturalWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = false;
+
+  const frame = ((frameIndex % 12) + 12) % 12;
+  const phase = (frame / 12) * Math.PI * 2;
+  const attacking = state.startsWith('attack');
+  const attackProgress = frame / 11;
+  const evolved = heroId === 'ginzo' && isGinzoEvolved;
+
+  // A restrained gold aura distinguishes Awakened Ginzo without hiding the sprite.
+  if (evolved) {
+    const glow = ctx.createRadialGradient(W / 2, H * 0.58, 5, W / 2, H * 0.58, 78);
+    glow.addColorStop(0, 'rgba(255, 207, 72, 0.24)');
+    glow.addColorStop(0.62, 'rgba(245, 158, 11, 0.10)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  let bob = 0;
+  let rotation = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  let shiftX = 0;
+
+  if (state === 'idle') {
+    bob = Math.sin(phase) * 0.8;
+    rotation = Math.sin(phase * 0.5) * 0.012;
+  } else if (state === 'run') {
+    bob = Math.abs(Math.sin(phase * 2)) * 2.5;
+    rotation = 0.035 * (facing < 0 ? -1 : 1);
+    scaleX = 1.015;
+    scaleY = 0.985 + Math.sin(phase * 2) * 0.012;
+    shiftX = facing * Math.sin(phase) * 1.4;
+  } else if (state === 'dash') {
+    bob = 1 + Math.sin(phase) * 1.2;
+    rotation = 0.105 * (facing < 0 ? -1 : 1);
+    scaleX = 1.07;
+    scaleY = 0.94;
+    shiftX = facing * 4.5;
+    // Two low-opacity afterimages sell the dash while retaining the pixel silhouette.
+    for (let trail = 2; trail >= 1; trail--) {
+      ctx.save();
+      ctx.globalAlpha = evolved ? 0.17 : 0.13;
+      ctx.translate(W / 2 - facing * trail * 5, H - trail * 1.4);
+      ctx.scale(facing < 0 ? -1 : 1, 1);
+      ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
+      ctx.restore();
+    }
+  } else if (attacking) {
+    const strike = Math.sin(attackProgress * Math.PI);
+    const slot = Number(state.replace('attack', '')) || 1;
+    bob = strike * (slot >= 3 ? 2.5 : 1.2);
+    rotation = (0.018 + strike * (slot >= 3 ? 0.095 : 0.065)) * (facing < 0 ? -1 : 1);
+    rotation += THREE.MathUtils.clamp(Math.sin(aimAngle) * 0.025, -0.025, 0.025);
+    scaleX = 1 + strike * (slot >= 3 ? 0.075 : 0.035);
+    scaleY = 1 - strike * 0.035;
+    shiftX = facing * strike * (slot >= 3 ? 5.5 : 3.2);
+  } else if (state === 'hurt') {
+    bob = -1;
+    rotation = -0.08 * (facing < 0 ? -1 : 1);
+    scaleX = 0.97;
+    scaleY = 1.02;
+  } else if (state === 'dead') {
+    bob = -18;
+    rotation = 1.0 * (facing < 0 ? -1 : 1);
+    scaleX = 1.12;
+    scaleY = 0.56;
+  }
+
+  if (!attacking && state !== 'dead') {
+    rotation += THREE.MathUtils.clamp(Math.sin(aimAngle) * 0.012, -0.012, 0.012);
+  }
+
+  ctx.save();
+  ctx.translate(W / 2 + shiftX, H - bob);
+  ctx.rotate(rotation);
+  ctx.scale((facing < 0 ? -1 : 1) * scaleX, scaleY);
+  ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
+  ctx.restore();
+
+  if (state === 'hurt') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#fff7ed';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  if (evolved) applyGinzoGoldPalette(canvas);
+  return createCrispPixelTexture(canvas);
+}
+
 function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): THREE.CanvasTexture {
   const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
   const canvas = document.createElement('canvas');
@@ -55,8 +262,8 @@ function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): T
 }
 
 // ----------------------------------------------------------------------
-// HERO SPRITE RENDERER: High-Definition Humanoid Anatomy (Ginzo, Quan, Katherine)
-// Canvas: 256 x 320 px (smooth vector drawing, anti-aliased curves and shading)
+// HERO SPRITE RENDERER: frame-animated pixel-art heroes (Ginzo, Quan, Katherine, Bamdee).
+// Ginzo/Katherine use the supplied references; Quan/Bamdee keep procedural 12-pose rigs.
 // ----------------------------------------------------------------------
 export function generateHeroTexture(
   heroId: HeroId,
@@ -66,6 +273,9 @@ export function generateHeroTexture(
   aimAngle: number = 0,
   facing: number = 1
 ): THREE.CanvasTexture {
+  const referenceTexture = generateReferenceHeroTexture(heroId, state, frameIndex, isGinzoEvolved, aimAngle, facing);
+  if (referenceTexture) return referenceTexture;
+
   const W = 256;
   const H = 320;
   const canvas = document.createElement('canvas');
@@ -1049,7 +1259,7 @@ export function generateHeroTexture(
     ctx.restore();
   }
 
-  return createActorPixelTexture(canvas, heroId === 'bamdee' ? 'hue-rotate(200deg) saturate(1.1)' : undefined);
+  return createPixelArtHeroTexture(canvas, heroId === 'bamdee' ? 'hue-rotate(200deg) saturate(1.1)' : undefined);
 }
 
 // ----------------------------------------------------------------------
