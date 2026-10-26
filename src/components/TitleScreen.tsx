@@ -13,6 +13,15 @@ interface TitleScreenProps {
   onOpenGuide: () => void;
 }
 
+// Deterministic ember layout so the animation never reshuffles between renders.
+const EMBERS = Array.from({ length: 18 }, (_, i) => ({
+  left: `${(i * 37 + 7) % 100}%`,
+  size: `${3 + (i % 4)}px`,
+  dur: `${8 + ((i * 5) % 7)}s`,
+  delay: `${-((i * 3) % 11)}s`,
+  drift: `${((i % 2 === 0 ? 1 : -1) * (20 + ((i * 11) % 50)))}px`,
+}));
+
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   onStart,
   isMuted,
@@ -52,6 +61,16 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
   return (
     <div className="ui-title-screen absolute inset-0 z-20 flex flex-col justify-between items-center p-4 sm:p-6 md:p-12 pointer-events-auto bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-zinc-950/70 select-none overflow-y-auto">
+      <div className="ui-ember-layer pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
+        {EMBERS.map((e, i) => (
+          <span
+            key={i}
+            className="ui-ember"
+            style={{ left: e.left, '--size': e.size, '--dur': e.dur, '--delay': e.delay, '--drift': e.drift } as React.CSSProperties}
+          />
+        ))}
+      </div>
+
       {/* Top Bar: Web Badge, Audio, Share & Fullscreen */}
       <div className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2 bg-zinc-950/80 border border-amber-600/40 px-3 py-1.5 rounded-full text-xs font-rajdhani text-amber-300 font-semibold tracking-wider">
@@ -92,7 +111,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
 
         {/* Bespoke Inline SVG Logo */}
-        <div className="relative mb-3">
+        <div className="ui-title-logo relative mb-3">
           <svg
             className="w-80 sm:w-96 md:w-[480px] h-24 overflow-visible drop-shadow-[0_10px_25px_rgba(245,158,11,0.4)]"
             viewBox="0 0 500 100"
@@ -159,9 +178,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
       {/* Bottom Hint Line */}
       <div className="w-full flex flex-col sm:flex-row items-center justify-between text-xs font-rajdhani text-zinc-400 border-t border-zinc-800/80 pt-4 px-2">
-        <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 sm:mb-0">
           <span className="text-amber-400 font-bold">CONTROLS:</span>
-          <span>💻 คอมพิวเตอร์: WASD เคลื่อนที่ · เมาส์ เล็ง/โจมตี · Space หลบ · E โต้ตอบ</span>
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            💻 <span className="ui-keycap">WASD</span> เคลื่อนที่
+            <span className="ui-keycap">เมาส์</span> เล็ง/โจมตี
+            <span className="ui-keycap">Space</span> หลบ
+            <span className="ui-keycap">E</span> โต้ตอบ
+          </span>
           <span className="text-zinc-600 hidden md:inline">|</span>
           <span className="text-sky-300">📱 มือถือ: จอยสติ๊กสัมผัสบนจอ & ปุ่มโจมตี/หลบ</span>
         </div>

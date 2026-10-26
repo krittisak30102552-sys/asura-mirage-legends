@@ -1,11 +1,81 @@
 @import "tailwindcss";
 
+/* Typefaces: Latin glyphs come from the display fonts, Thai glyphs fall through to Kanit / Noto Sans Thai. */
+@theme {
+  --font-pixel: "Pixelify Sans", "Kanit", ui-monospace, monospace;
+  --font-cinzel: "Cinzel", "Kanit", serif;
+  --font-rajdhani: "Rajdhani", "Noto Sans Thai", "Kanit", system-ui, sans-serif;
+}
+
 :root {
   color-scheme: dark;
   --mirage-gold: #f4c66a;
   --mirage-gold-soft: rgba(244, 198, 106, 0.2);
   --mirage-cyan-soft: rgba(103, 232, 249, 0.14);
   --mirage-shadow: rgba(0, 0, 0, 0.42);
+  --mirage-panel: rgba(14, 12, 16, 0.92);
+  --mirage-panel-border: rgba(190, 144, 78, 0.72);
+}
+
+body {
+  font-family: "Noto Sans Thai", "Kanit", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(244, 198, 106, 0.35);
+  color: #fff;
+}
+
+/* Slim gold scrollbars for modal content. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(190, 144, 78, 0.6) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(190, 144, 78, 0.55);
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 198, 106, 0.8);
+}
+
+/* Utility animations referenced by the components (Tailwind v4 does not ship these). */
+@keyframes ui-fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: ui-fade-in 220ms ease-out both;
+}
+
+@keyframes ui-modal-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ui-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fixed.inset-0 {
+  animation: ui-backdrop-in 180ms ease-out both;
+}
+
+.fixed.inset-0 > div[class*="bg-zinc-950"][class*="border"],
+.fixed.inset-0 > div[class*="border"][class*="bg-zinc-950"],
+.fixed.inset-0 > section[class*="bg-zinc-950"][class*="border"] {
+  animation: ui-modal-pop 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 html,
@@ -129,7 +199,7 @@ button[class*="bg-zinc-900"]:hover {
     radial-gradient(ellipse at 83% 25%, rgba(168, 85, 247, 0.07), transparent 30%);
 }
 
-.ui-title-screen > * {
+.ui-title-screen > *:not(.ui-ember-layer) {
   position: relative;
   z-index: 1;
 }
@@ -174,6 +244,92 @@ button[class*="bg-zinc-900"]:hover {
 
 .pixel-rpg-hud .rounded-md {
   border-radius: 5px !important;
+}
+
+/* ---------- Title screen atmosphere ---------- */
+.ui-title-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+.ui-ember {
+  position: absolute;
+  bottom: -12px;
+  width: var(--size, 4px);
+  height: var(--size, 4px);
+  border-radius: 9999px;
+  background: radial-gradient(circle, #fde68a 0%, #f59e0b 55%, transparent 72%);
+  opacity: 0;
+  pointer-events: none;
+  animation: ui-ember-rise var(--dur, 9s) linear var(--delay, 0s) infinite;
+}
+
+@keyframes ui-ember-rise {
+  0% { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  12% { opacity: 0.9; }
+  100% { transform: translate3d(var(--drift, 30px), -105vh, 0) scale(1.1); opacity: 0; }
+}
+
+.ui-title-logo {
+  animation: ui-logo-float 5s ease-in-out infinite;
+}
+
+@keyframes ui-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.ui-primary-cta {
+  animation: ui-cta-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes ui-cta-pulse {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.42), 0 0 0 1px rgba(255,228,138,.13), 0 0 24px rgba(245,158,11,.16), 0 12px 28px rgba(0,0,0,.36); }
+  50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 0 0 1px rgba(255,228,138,.28), 0 0 42px rgba(245,158,11,.34), 0 12px 28px rgba(0,0,0,.36); }
+}
+
+.ui-keycap {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid rgba(190, 144, 78, 0.55);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(24, 20, 22, 0.85);
+  color: #fde7b0;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* ---------- HUD polish ---------- */
+.pixel-rpg-hud .ui-hud-bar {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.pixel-rpg-hud .ui-hud-bar > div:first-child {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.pixel-rpg-hud .ui-skill-slot.rounded-lg {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 4px 10px rgba(0, 0, 0, 0.4);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 55%);
+}
+
+.pixel-rpg-hud .ui-skill-slot.rounded-lg:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 14px rgba(244, 198, 106, 0.3), 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.pixel-rpg-hud .ui-keybadge {
+  z-index: 2;
+  min-width: 1.1rem;
+  text-align: center;
+  line-height: 1.25;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
 
 @keyframes cinematic-warp-overlay {

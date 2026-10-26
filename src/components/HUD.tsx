@@ -342,11 +342,11 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
 
               <div className="flex flex-col space-y-1 w-32 sm:w-44 lg:w-56">
-                <div className="flex items-center justify-between text-xs font-rajdhani font-bold tracking-wider text-amber-300">
-                  <div className="flex items-center gap-1.5">
-                    <span>{heroDisplayName}</span>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs font-rajdhani font-bold tracking-wider text-amber-300">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{heroDisplayName}</span>
                     <span
-                      className="text-[9px] font-pixel px-1.5 py-0.2 rounded font-bold"
+                      className="shrink-0 whitespace-nowrap text-[9px] font-pixel px-1.5 py-px rounded font-bold"
                       style={{
                         backgroundColor: `${DIFFICULTY_CONFIGS[difficulty]?.badgeColor || '#38bdf8'}20`,
                         color: DIFFICULTY_CONFIGS[difficulty]?.badgeColor || '#38bdf8',
@@ -356,13 +356,13 @@ export const HUD: React.FC<HUDProps> = ({
                       {DIFFICULTY_CONFIGS[difficulty]?.nameTh || 'ปานกลาง'}
                     </span>
                   </div>
-                  <span className="font-pixel text-[10px] text-zinc-400">
+                  <span className="ml-auto shrink-0 whitespace-nowrap rounded-sm border border-zinc-700/80 bg-black/40 px-1.5 py-px font-pixel text-[10px] text-zinc-300">
                     {mode === 'lobby' ? '🏛️ LOUNGE' : referenceDungeonHud ? `ชั้น ${stageMap?.stageNumber ?? 1}` : `WAVE ${currentWave}/${maxWaves}`}
                   </span>
                 </div>
 
                 {/* Health Bar (Health พลังชีวิต) */}
-                <div className="relative w-full h-3 bg-zinc-900 border border-red-950 rounded overflow-hidden">
+                <div className="ui-hud-bar relative w-full h-3 bg-zinc-900 border border-red-950 rounded overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-red-600 to-rose-500 transition-all duration-150"
                     style={{ width: `${hpPercent}%` }}
@@ -373,7 +373,7 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
 
                 {/* Armor Bar (Armor เกราะหรือค่าป้องกัน) */}
-                <div className="relative w-full h-2.5 bg-zinc-900 border border-sky-950 rounded overflow-hidden">
+                <div className="ui-hud-bar relative w-full h-2.5 bg-zinc-900 border border-sky-950 rounded overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-150"
                     style={{ width: `${shieldPercent}%` }}
@@ -714,7 +714,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="โจมตีปกติ (คลิกซ้าย หรือกดปุ่ม)"
             >
               <div
-                className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center transition-all ${referenceDungeonHud ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]' : 'rounded-lg bg-zinc-900 border-2'} ${
+                className={`ui-skill-slot relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center transition-all ${referenceDungeonHud ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]' : 'rounded-lg bg-zinc-900 border-2'} ${
                   comboStep > 0
                     ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-amber-500/30 bg-amber-950/30'
                     : 'border-zinc-700 hover:border-amber-400'
@@ -726,7 +726,7 @@ export const HUD: React.FC<HUDProps> = ({
                 {!referenceDungeonHud && <span className="text-[7px] sm:text-[9px] font-pixel text-amber-300 font-bold mt-0.5">
                   {comboStep > 0 ? `COMBO ${comboStep}` : 'ATTACK'}
                 </span>}
-                {!referenceDungeonHud && <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-0.2 rounded font-bold shadow">
+                {!referenceDungeonHud && <div className="ui-keybadge absolute -top-2 -right-2 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-px rounded font-bold shadow">
                   LMB
                 </div>}
               </div>
@@ -751,7 +751,7 @@ export const HUD: React.FC<HUDProps> = ({
                   title={`${skill.name} (${skill.nameTh}) [กดเลข ${skill.slot}]`}
                 >
                   <div
-                    className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden transition-all ${
+                    className={`ui-skill-slot relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center transition-all ${
                       referenceDungeonHud
                         ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]'
                         : 'rounded-lg bg-zinc-900 border-2 border-zinc-700 hover:border-amber-400'
@@ -767,7 +767,7 @@ export const HUD: React.FC<HUDProps> = ({
                     )}
                     {isOnCd && (
                       <div
-                        className="absolute inset-0 bg-zinc-950/85 flex items-center justify-center text-[10px] sm:text-xs font-pixel text-amber-300 font-bold"
+                        className="absolute inset-0 overflow-hidden rounded-[inherit] bg-zinc-950/85 flex items-center justify-center text-[10px] sm:text-xs font-pixel text-amber-300 font-bold"
                         style={{
                           clipPath: `polygon(0 0, 100% 0, 100% ${100 - Math.min(100, Math.max(0, (cd / skill.cooldown) * 100))}%, 0 ${100 - Math.min(100, Math.max(0, (cd / skill.cooldown) * 100))}%)`,
                         }}
@@ -775,7 +775,7 @@ export const HUD: React.FC<HUDProps> = ({
                         {cd.toFixed(1)}
                       </div>
                     )}
-                    <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-0.2 rounded font-bold shadow">
+                    <div className="ui-keybadge absolute -top-2 -right-2 bg-amber-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-px rounded font-bold shadow">
                       {skill.slot}
                     </div>
                   </div>
@@ -794,12 +794,12 @@ export const HUD: React.FC<HUDProps> = ({
               className={`flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60 ${referenceDungeonHud && !forceTouchControls ? 'hidden' : ''}`}
               title="แดชหลบหลีก (Space bar หรือคลิก)"
             >
-              <div className={`relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center overflow-hidden ${referenceDungeonHud ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]' : 'rounded-lg bg-zinc-900 border-2 border-zinc-700 hover:border-sky-400'}`}>
+              <div className={`ui-skill-slot relative w-9 h-9 sm:w-[3.55rem] sm:h-[3.55rem] flex flex-col items-center justify-center ${referenceDungeonHud ? 'rounded-full border-2 border-[#f4eee4] bg-black/50 shadow-[0_0_12px_rgba(255,244,220,.28)]' : 'rounded-lg bg-zinc-900 border-2 border-zinc-700 hover:border-sky-400'}`}>
                 <span className={referenceDungeonHud ? 'text-xl sm:text-2xl' : 'text-base sm:text-xl'}>💨</span>
                 {!referenceDungeonHud && <span className="text-[7px] sm:text-[9px] font-pixel text-sky-300 font-bold mt-0.5">DODGE</span>}
                 {dashCooldown > 0 && (
                   <div
-                    className="absolute inset-0 bg-zinc-950/80 flex items-center justify-center text-xs font-pixel text-sky-400 font-bold"
+                    className="absolute inset-0 overflow-hidden rounded-[inherit] bg-zinc-950/80 flex items-center justify-center text-xs font-pixel text-sky-400 font-bold"
                     style={{
                       clipPath: `polygon(0 0, 100% 0, 100% ${100 - (dashCooldown / dashMaxCooldown) * 100}%, 0 ${100 - (dashCooldown / dashMaxCooldown) * 100}%)`,
                     }}
@@ -807,7 +807,7 @@ export const HUD: React.FC<HUDProps> = ({
                     {dashCooldown.toFixed(1)}
                   </div>
                 )}
-                {!referenceDungeonHud && <div className="absolute -top-1.5 -right-1.5 bg-sky-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-0.2 rounded font-bold shadow">
+                {!referenceDungeonHud && <div className="ui-keybadge absolute -top-2 -right-2 bg-sky-500 text-zinc-950 font-pixel text-[7px] sm:text-[8px] px-1 py-px rounded font-bold shadow">
                   SPACE
                 </div>}
               </div>
