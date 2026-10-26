@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.2.0';
+export const UPDATE_VERSION = '1.2.1';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -47,6 +47,7 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby v1.1.8 — จัดผังบ้านใหม่:</strong> จำกัดพื้นให้พอดีกับตัวบ้าน เพิ่มผนังรอบห้อง คานหลังคา และปรับกล้องให้อยู่ในตัวบ้านเพื่อลดภาพนอกแมพ</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby v1.1.9 — เปิดมุมกล้อง:</strong> เอาคานและชายหลังคาที่พาดเหนือพื้นที่เล่นออก ให้เห็นตัวละครและฉากได้เต็มขึ้น โดยคงผนังไม้รอบห้องไว้</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>UI v1.2.0 — Mirage Glow:</strong> เพิ่มไล่สีแบบบาง ๆ แสงสะท้อนและเงานุ่มให้แผง HUD เมนูหลัก ปุ่มสำคัญ และหน้าต่างเมนู พร้อมเอฟเฟกต์ hover/focus ที่ชัดขึ้นโดยไม่รบกวนการอ่านหรือเปลี่ยนตำแหน่งปุ่ม</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>UI v1.2.1 — Mirage Glass:</strong> เพิ่มมิติให้หน้าต่างและการ์ดเมนูด้วยแสงทอง–ฟ้าแบบบาง ๆ เงาซ้อนนุ่ม ๆ ปุ่มไล่สีมีไฮไลต์และยกขึ้นเล็กน้อยเมื่อชี้เมาส์ พร้อมขอบเรืองแสงให้ HUD และช่องสกิลชัดขึ้น โดยไม่เปลี่ยนตำแหน่งหรือการทำงานของปุ่ม</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Master Chanyi:</strong> วาด NPC ใหม่ให้เห็นใบหน้า ดวงตา หนวดเครา เสื้อคลุมสีขาวขอบหยก มือ กางเกง และรองเท้าชัดขึ้น พร้อมปรับสัดส่วนให้ดูเป็นคนมากกว่าเดิม</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span>แยกพื้นที่เป็นมุมนั่งเล่น ทางเดินกลาง จุดครูฝึกด้านหลังขวา และมุม dummy ด้านหน้าขวา พร้อมย้ายป้ายให้ตรงกับตัวละคร</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby — บ้านพักแฟนตาซี:</strong> เปลี่ยนฉากเป็นห้องไม้แสนอบอุ่น เพิ่มหน้าต่าง ภาพแขวน โซฟา พรม ชั้นหนังสือ เตาผิง โคมไฟ และต้นไม้กระถาง</span></li>
