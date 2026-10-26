@@ -115,13 +115,14 @@ export function generateHeroTexture(
     weaponAngle = previewPose ? 0.28 : 0.34 + breath * 0.035;
   } else if (state === 'run') {
     const stride = Math.sin(phase);
-    bobY = Math.abs(Math.sin(phase * 2)) * 5.5;
-    leanX = 6 + stride * 1.8;
+    // Character Lab uses a compact walk cycle instead of an exaggerated wide-legged run.
+    bobY = Math.abs(Math.sin(phase * 2)) * (previewPose ? 2.4 : 5.5);
+    leanX = previewPose ? 2.5 + stride * 0.8 : 6 + stride * 1.8;
     legCycle = stride;
-    armSwing = Math.cos(phase);
-    bodyTilt = -0.045 + stride * 0.025;
-    headTilt = -0.012 + Math.sin(phase + 0.5) * 0.026;
-    weaponAngle = 0.34 + Math.sin(phase + 0.4) * 0.2;
+    armSwing = previewPose ? Math.cos(phase) * 1.15 : Math.cos(phase);
+    bodyTilt = previewPose ? -0.018 + stride * 0.012 : -0.045 + stride * 0.025;
+    headTilt = previewPose ? -0.005 + Math.sin(phase + 0.5) * 0.01 : -0.012 + Math.sin(phase + 0.5) * 0.026;
+    weaponAngle = previewPose ? 0.25 + Math.sin(phase + 0.4) * 0.08 : 0.34 + Math.sin(phase + 0.4) * 0.2;
   } else if (state === 'dash') {
     leanX = 18;
     bobY = 7.5 + Math.sin(phase) * 1.1;
@@ -148,7 +149,10 @@ export function generateHeroTexture(
 
   // Close the neutral standing stance only in Character Lab. Live combat keeps its existing pose.
   const idleStance = previewPose && state === 'idle' ? 0.32 : 1;
-  const footOffset = previewPose && state === 'idle' ? 3 : 8;
+  const walkStance = previewPose && state === 'run' ? 0.62 : 1;
+  const legStance = previewPose && state === 'run' ? walkStance : idleStance;
+  const strideScale = previewPose && state === 'run' ? 0.42 : 1;
+  const footOffset = previewPose && (state === 'idle' || state === 'run') ? 3 : 8;
 
   // Helper drawing functions
   const fillPoly = (pts: [number, number][], fill: string | CanvasGradient, stroke?: string, lineWidth = 2) => {
@@ -262,8 +266,8 @@ export function generateHeroTexture(
     }
 
     // Legs: Black pleated Hakama with smooth fabric folds
-    const leftLegX = cx - 18 * idleStance + legCycle * 14;
-    const rightLegX = cx + 18 * idleStance - legCycle * 14;
+    const leftLegX = cx - 18 * legStance + legCycle * 14 * strideScale;
+    const rightLegX = cx + 18 * legStance - legCycle * 14 * strideScale;
 
     // Hakama Pants
     const hakamaGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
@@ -579,8 +583,8 @@ export function generateHeroTexture(
     ctx.fill();
 
     // Legs: Indigo Martial Arts Trousers with White Wraps
-    const leftLegX = cx - 18 + legCycle * 14;
-    const rightLegX = cx + 18 - legCycle * 14;
+    const leftLegX = cx - 18 * legStance + legCycle * 14 * strideScale;
+    const rightLegX = cx + 18 * legStance - legCycle * 14 * strideScale;
 
     const pantsGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
     pantsGrad.addColorStop(0, '#1e1b4b');
@@ -823,8 +827,8 @@ export function generateHeroTexture(
     ctx.fill();
 
     // Legs & Boots: Violet Thigh-high Boots under Dress
-    const leftLegX = cx - 14 * idleStance + legCycle * 10;
-    const rightLegX = cx + 14 * idleStance - legCycle * 10;
+    const leftLegX = cx - 14 * legStance + legCycle * 10 * strideScale;
+    const rightLegX = cx + 14 * legStance - legCycle * 10 * strideScale;
     fillPoly([[leftLegX - 8, 235], [leftLegX + 8, 235], [leftLegX + 6, 275], [leftLegX - 6, 275]], '#581c87', '#3b0764', 2);
     fillPoly([[rightLegX - 8, 235], [rightLegX + 8, 235], [rightLegX + 6, 275], [rightLegX - 6, 275]], '#581c87', '#3b0764', 2);
     drawCircle(leftLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);

@@ -14,7 +14,7 @@ const characters: Array<{id:LabId; name:string; accent:Accent}> = [
  {id:'bamdee',name:'Bamdee',accent:{title:'Jade Edge',hint:'นักดาบหยก · คมดาบสีมรกต',tint:'from-teal-950 via-[#091513] to-[#080a13]',glow:'rgba(65,255,202,.24)',ring:'rgba(95,255,209,.3)',slash:'#73ffe0',element:'JADE / STEEL'}},
 ];
 const states: Array<{id:HeroAnimationState;name:string}> = [
- {id:'idle',name:'Idle'},{id:'run',name:'Run'},{id:'dash',name:'Dash'},
+ {id:'idle',name:'Idle'},{id:'run',name:'Walk'},{id:'dash',name:'Dash'},
  {id:'attack1',name:'Attack 1'},{id:'attack2',name:'Attack 2'},{id:'attack3',name:'Attack 3'},
  {id:'attack4',name:'Attack 4'},{id:'hurt',name:'Hurt'},{id:'dead',name:'Dead'},
 ];
