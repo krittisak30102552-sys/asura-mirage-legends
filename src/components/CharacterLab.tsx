@@ -41,7 +41,7 @@ export default function CharacterLab() {
  useEffect(()=>{
   const canvas=canvasRef.current,ctx=canvas?.getContext('2d');
   if(!canvas||!ctx)return;
-  const texture=generateHeroTexture(heroId,state,frame,awakened,0.12,facing);
+  const texture=generateHeroTexture(heroId,state,frame,awakened,0.12,facing,true);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
   ctx.drawImage(texture.image as HTMLCanvasElement,0,0,canvas.width,canvas.height);
@@ -51,12 +51,12 @@ export default function CharacterLab() {
 
  return <div className="min-h-screen bg-[#08090e] text-zinc-100">
   <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 md:px-8">
-   <div><p className="font-rajdhani text-xs uppercase tracking-[.35em] text-amber-200/70">Asura Mirage · Dev tools</p><h1 className="mt-1 text-2xl font-bold md:text-3xl">Character Lab <span className="text-amber-300">v1.2.4</span></h1><p className="mt-1 text-sm text-zinc-400">พื้นที่ทดสอบโมเดลแยกจากเกมหลัก</p></div>
+   <div><p className="font-rajdhani text-xs uppercase tracking-[.35em] text-amber-200/70">Asura Mirage · Dev tools</p><h1 className="mt-1 text-2xl font-bold md:text-3xl">Character Lab <span className="text-amber-300">v1.2.4</span></h1><p className="mt-1 text-sm text-zinc-400">ห้องเทสแอนิเมชันแยก · ไม่กระทบตัวละครในเกมหลัก</p></div>
    <a href="./index.html" className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-3 py-2 text-sm text-zinc-300 hover:border-amber-300/40"><ArrowLeft size={16}/> กลับเกม</a>
   </header>
   <main className="mx-auto grid max-w-7xl gap-5 px-5 pb-10 md:px-8 lg:grid-cols-[1.3fr_.9fr]">
    <section className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/60 shadow-2xl">
-    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="text-xs uppercase tracking-[.22em] text-zinc-500">Preview viewport</p><h2 className="mt-1 text-lg font-semibold">{selected.name}</h2></div><span className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">Visual test only</span></div>
+    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="text-xs uppercase tracking-[.22em] text-zinc-500">Preview viewport</p><h2 className="mt-1 text-lg font-semibold">{selected.name}</h2></div><span className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">LAB PREVIEW ONLY</span></div>
     <div className={"relative flex min-h-[430px] items-center justify-center overflow-hidden bg-gradient-to-br "+selected.tint+" px-6 py-8"}>
      <div className="pointer-events-none absolute inset-0 opacity-25" style={{backgroundImage:'linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.08) 1px,transparent 1px)',backgroundSize:'28px 28px'}}/>
      <div className="pointer-events-none absolute bottom-10 h-20 w-[72%] rounded-[100%] bg-black/50 blur-2xl"/>
