@@ -178,10 +178,10 @@ function drawPixelStaff(
   const dy = Math.sin(angle);
   const px = -dy;
   const py = dx;
-  const endX = hx + dx * 39;
-  const endY = hy + dy * 39;
-  const bottomX = hx - dx * 30;
-  const bottomY = hy - dy * 30;
+  const endX = hx + dx * 33;
+  const endY = hy + dy * 33;
+  const bottomX = hx - dx * 25;
+  const bottomY = hy - dy * 25;
   pixelLine(ctx, bottomX, bottomY, endX, endY, palette.outline, 6);
   pixelLine(ctx, bottomX, bottomY, endX, endY, palette.metal, 3);
   pixelLine(ctx, bottomX, bottomY, endX, endY, palette.metalLight, 1);
@@ -396,8 +396,8 @@ function drawQuanPixelHero(
   pixelRect(ctx, 47, 59 + bodyY, 5, 6, palette.metalLight, out);
   pixelPoly(ctx, [[31, 41 + bodyY], [40, 42 + bodyY], [37, 53 + bodyY],
     [29, 54 + bodyY], [27, 47 + bodyY]], palette.accent, out);
-  pixelPoly(ctx, [[52, 41 + bodyY], [60, 44 + bodyY], [64 + armSwing, 53 + bodyY],
-    [58 + armSwing, 56 + bodyY], [51, 50 + bodyY]], palette.accentShade, out);
+  pixelPoly(ctx, [[52, 41 + bodyY], [59 + punchCurve, 44 + bodyY], [65 + punchCurve, 51 + bodyY],
+    [59 + punchCurve, 56 + bodyY], [51, 50 + bodyY]], palette.accentShade, out);
   pixelRect(ctx, 31, 49 + bodyY, 8, 6, palette.skin, out);
   pixelRect(ctx, 57 + punchCurve, 49 + bodyY, 8, 7, palette.skin, out);
   pixelRect(ctx, 59 + punchCurve, 47 + bodyY, 5, 3, palette.skinShade);
@@ -472,7 +472,8 @@ function generateOriginalHeroPixelTexture(
     : state === 'dash' ? Math.round(Math.sin(phase) * 3)
       : state === 'idle' ? Math.round(Math.sin(phase) * 1) : 0;
   const armSwing = state === 'run' ? Math.round(Math.cos(phase) * 3)
-    : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 6 : 3)) : 0;
+    : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 6 : 3))
+      : state === 'idle' ? Math.round(Math.sin(phase) * 1.5) : 0;
   const lunge = state === 'dash' ? 4 : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 5 : 3)) : 0;
   const screenAimAngle = Math.atan2(Math.sin(aimAngle) * 0.58, Math.cos(aimAngle));
   const localAimAngle = facing < 0 ? Math.PI - screenAimAngle : screenAimAngle;
@@ -499,7 +500,7 @@ function generateOriginalHeroPixelTexture(
   // Katherine's staff has its own arm and keyframed casting arc. Samurai sword
   // arcs likewise change pose every frame instead of rotating a still image.
   if (heroId === 'katherine') {
-    const staffBase = state === 'idle' ? -0.82
+    const staffBase = state === 'idle' ? -0.82 + Math.sin(phase) * 0.045
       : state === 'run' ? -0.72 + Math.sin(phase) * 0.1
         : isAttack ? localAimAngle - 0.36 + slashFrames[frame] * 0.16
           : state === 'dash' ? localAimAngle - 0.12 : -0.82;
@@ -509,7 +510,7 @@ function generateOriginalHeroPixelTexture(
     drawQuanPixelHero(ctx, palette, frame, state, bob, runStep, armSwing, lunge);
     if (isAttack) addPixelCombatSpark(ctx, 73 + Math.round(strikeCurve * 5), 52, palette.metalLight, frame);
   } else {
-    const baseAngle = state === 'idle' ? 0.27
+    const baseAngle = state === 'idle' ? 0.27 + Math.sin(phase) * 0.045
       : state === 'run' ? 0.22 + Math.sin(phase) * 0.12
         : isAttack ? localAimAngle + slashFrames[frame] * (attackSlot >= 3 ? 1.05 : 0.82)
           : state === 'dash' ? localAimAngle - 0.18 : 0.27;
