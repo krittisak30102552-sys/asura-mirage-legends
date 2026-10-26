@@ -151,6 +151,8 @@ function generateReferenceHeroTexture(
 
   const W = 128;
   const H = 160;
+  // Keep the supplied sprite's native aspect ratio inside the engine's canvas.
+  const drawHeight = Math.min(H, W * sprite.naturalHeight / sprite.naturalWidth);
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -200,7 +202,7 @@ function generateReferenceHeroTexture(
       ctx.globalAlpha = evolved ? 0.17 : 0.13;
       ctx.translate(W / 2 - facing * trail * 5, H - trail * 1.4);
       ctx.scale(facing < 0 ? -1 : 1, 1);
-      ctx.drawImage(sprite, -W / 2, -H, W, H);
+      ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
       ctx.restore();
     }
   } else if (attacking) {
@@ -232,7 +234,7 @@ function generateReferenceHeroTexture(
   ctx.translate(W / 2 + shiftX, H - bob);
   ctx.rotate(rotation);
   ctx.scale((facing < 0 ? -1 : 1) * scaleX, scaleY);
-  ctx.drawImage(sprite, -W / 2, -H, W, H);
+  ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
   ctx.restore();
 
   if (state === 'hurt') {
