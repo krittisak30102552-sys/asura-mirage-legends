@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Plus, Sparkles, Trash2, X, Wrench } from 'lucide-react';
 
-export const UPDATE_VERSION = '1.2.3';
+export const UPDATE_VERSION = '1.2.4';
 
 interface UpdateNotesModalProps {
   isOpen: boolean;
@@ -44,8 +44,8 @@ export const UpdateNotesModal: React.FC<UpdateNotesModalProps> = ({ isOpen, onCl
             <section className="rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4">
               <h3 className="flex items-center gap-2 font-pixel text-[10px] text-sky-300"><Wrench size={15} /> ปรับปรุง</h3>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-200">
-                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>ตัวละคร v1.2.3 — Original Pixel Remaster:</strong> วาด Ginzo ชุดแดงผมขาว, Awakened Ginzo โทนทอง, Katherine เมจผมทองถือคทา, Quan นักสู้กังฟู และ Bamdee โทนเขียว ด้วยสไปรต์ที่วาดขึ้นใหม่สำหรับเกมเราเอง ไม่ได้นำภาพตัวอย่างมาแปะเป็นตัวละคร</span></li>
-                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>แอนิเมชันเฟรมต่อเฟรม:</strong> เพิ่มจังหวะ Idle, Run, Dash, Attack, Hurt และ Dead ที่เปลี่ยนแขน ขา ลำตัว ดาบ และคทาตามเฟรม 12 จังหวะ โดยคงระบบดาเมจ คูลดาวน์ ปุ่มควบคุม และสกิล Hiken ช่อง 4 ของ Bamdee</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Character Config v1.2.4:</strong> Ginzo ใช้แอนิเมชัน 7 เฟรม, Ginzo Awakened โทนทอง, Catherine 8 เฟรม และ Quan/Bamdee ใช้การวาดเนียนสมส่วนแบบ non-pixel</span></li>
+                <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Character Lab:</strong> เพิ่มหน้าเทสแยก <code>character-lab.html</code> สำหรับเลือกตัวละคร สลับ Idle/Run/Dash/Attack/Hurt/Dead ปรับความเร็วและเลื่อนเฟรม โดยไม่แตะดาเมจหรือสกิล</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby v1.1.8 — จัดผังบ้านใหม่:</strong> จำกัดพื้นให้พอดีกับตัวบ้าน เพิ่มผนังรอบห้อง คานหลังคา และปรับกล้องให้อยู่ในตัวบ้านเพื่อลดภาพนอกแมพ</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>Lobby v1.1.9 — เปิดมุมกล้อง:</strong> เอาคานและชายหลังคาที่พาดเหนือพื้นที่เล่นออก ให้เห็นตัวละครและฉากได้เต็มขึ้น โดยคงผนังไม้รอบห้องไว้</span></li>
                 <li className="flex gap-2"><Sparkles size={14} className="mt-1 shrink-0 text-sky-300" /><span><strong>UI v1.2.0 — Mirage Glow:</strong> เพิ่มไล่สีแบบบาง ๆ แสงสะท้อนและเงานุ่มให้แผง HUD เมนูหลัก ปุ่มสำคัญ และหน้าต่างเมนู พร้อมเอฟเฟกต์ hover/focus ที่ชัดขึ้นโดยไม่รบกวนการอ่านหรือเปลี่ยนตำแหน่งปุ่ม</span></li>
