@@ -115,14 +115,13 @@ export function generateHeroTexture(
     weaponAngle = previewPose ? 0.28 : 0.34 + breath * 0.035;
   } else if (state === 'run') {
     const stride = Math.sin(phase);
-    // Character Lab uses a compact walk cycle instead of an exaggerated wide-legged run.
-    bobY = Math.abs(Math.sin(phase * 2)) * (previewPose ? 2.4 : 5.5);
-    leanX = previewPose ? 2.5 + stride * 0.8 : 6 + stride * 1.8;
+    bobY = Math.abs(Math.sin(phase * 2)) * 5.5;
+    leanX = 6 + stride * 1.8;
     legCycle = stride;
-    armSwing = previewPose ? Math.cos(phase) * 1.15 : Math.cos(phase);
-    bodyTilt = previewPose ? -0.018 + stride * 0.012 : -0.045 + stride * 0.025;
-    headTilt = previewPose ? -0.005 + Math.sin(phase + 0.5) * 0.01 : -0.012 + Math.sin(phase + 0.5) * 0.026;
-    weaponAngle = previewPose ? 0.25 + Math.sin(phase + 0.4) * 0.08 : 0.34 + Math.sin(phase + 0.4) * 0.2;
+    armSwing = Math.cos(phase);
+    bodyTilt = -0.045 + stride * 0.025;
+    headTilt = -0.012 + Math.sin(phase + 0.5) * 0.026;
+    weaponAngle = 0.34 + Math.sin(phase + 0.4) * 0.2;
   } else if (state === 'dash') {
     leanX = 18;
     bobY = 7.5 + Math.sin(phase) * 1.1;
@@ -147,12 +146,17 @@ export function generateHeroTexture(
 
   cy += bobY;
 
-  // Close the neutral standing stance only in Character Lab. Live combat keeps its existing pose.
-  const idleStance = previewPose && state === 'idle' ? 0.32 : 1;
-  const walkStance = previewPose && state === 'run' ? 0.62 : 1;
-  const legStance = previewPose && state === 'run' ? walkStance : idleStance;
-  const strideScale = previewPose && state === 'run' ? 0.42 : 1;
-  const footOffset = previewPose && (state === 'idle' || state === 'run') ? 3 : 8;
+  // Tighten only the neutral standing pose in Character Lab; live combat is unchanged.
+  const closeStandingPose = previewPose && state === 'idle';
+  const idleStance = closeStandingPose ? 0.32 : 1;
+  const footOffset = closeStandingPose ? 3 : 8;
+  const ginzoHemOuter = closeStandingPose ? 10 : 22;
+  const ginzoHemInner = closeStandingPose ? 2 : 4;
+  const quanHemOuter = closeStandingPose ? 11 : 18;
+  const quanHemInner = closeStandingPose ? 2 : 4;
+  const quanWrapOuter = closeStandingPose ? 8 : 14;
+  const quanWrapInner = closeStandingPose ? 1 : 2;
+  const quanFootOffset = closeStandingPose ? 2 : 6;
 
   // Helper drawing functions
   const fillPoly = (pts: [number, number][], fill: string | CanvasGradient, stroke?: string, lineWidth = 2) => {
@@ -266,8 +270,8 @@ export function generateHeroTexture(
     }
 
     // Legs: Black pleated Hakama with smooth fabric folds
-    const leftLegX = cx - 18 * legStance + legCycle * 14 * strideScale;
-    const rightLegX = cx + 18 * legStance - legCycle * 14 * strideScale;
+    const leftLegX = cx - 18 * idleStance + legCycle * 14;
+    const rightLegX = cx + 18 * idleStance - legCycle * 14;
 
     // Hakama Pants
     const hakamaGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
@@ -278,16 +282,16 @@ export function generateHeroTexture(
     // Left Hakama Leg
     fillPoly([
       [cx - 12, cy + 45],
-      [leftLegX - 22, 265],
-      [leftLegX + 4, 265],
+      [leftLegX - ginzoHemOuter, 265],
+      [leftLegX + ginzoHemInner, 265],
       [cx, cy + 55],
     ], hakamaGrad, '#09090b', 2.5);
 
     // Right Hakama Leg
     fillPoly([
       [cx, cy + 55],
-      [rightLegX - 4, 265],
-      [rightLegX + 22, 265],
+      [rightLegX - ginzoHemInner, 265],
+      [rightLegX + ginzoHemOuter, 265],
       [cx + 12, cy + 45],
     ], hakamaGrad, '#09090b', 2.5);
 
@@ -583,8 +587,8 @@ export function generateHeroTexture(
     ctx.fill();
 
     // Legs: Indigo Martial Arts Trousers with White Wraps
-    const leftLegX = cx - 18 * legStance + legCycle * 14 * strideScale;
-    const rightLegX = cx + 18 * legStance - legCycle * 14 * strideScale;
+    const leftLegX = cx - 18 * idleStance + legCycle * 14;
+    const rightLegX = cx + 18 * idleStance - legCycle * 14;
 
     const pantsGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
     pantsGrad.addColorStop(0, '#1e1b4b');
@@ -594,26 +598,26 @@ export function generateHeroTexture(
     // Left Kung Fu Leg
     fillPoly([
       [cx - 14, cy + 45],
-      [leftLegX - 18, 255],
-      [leftLegX + 4, 255],
+      [leftLegX - quanHemOuter, 255],
+      [leftLegX + quanHemInner, 255],
       [cx, cy + 55],
     ], pantsGrad, '#09090b', 2.5);
 
     // Right Kung Fu Leg
     fillPoly([
       [cx, cy + 55],
-      [rightLegX - 4, 255],
-      [rightLegX + 18, 255],
+      [rightLegX - quanHemInner, 255],
+      [rightLegX + quanHemOuter, 255],
       [cx + 14, cy + 45],
     ], pantsGrad, '#09090b', 2.5);
 
     // White Shin Wraps
-    fillPoly([[leftLegX - 14, 255], [leftLegX + 2, 255], [leftLegX + 2, 273], [leftLegX - 14, 273]], '#f8fafc', '#94a3b8', 1.5);
-    fillPoly([[rightLegX - 2, 255], [rightLegX + 14, 255], [rightLegX + 14, 273], [rightLegX - 2, 273]], '#f8fafc', '#94a3b8', 1.5);
+    fillPoly([[leftLegX - quanWrapOuter, 255], [leftLegX + quanWrapInner, 255], [leftLegX + quanWrapInner, 273], [leftLegX - quanWrapOuter, 273]], '#f8fafc', '#94a3b8', 1.5);
+    fillPoly([[rightLegX - quanWrapInner, 255], [rightLegX + quanWrapOuter, 255], [rightLegX + quanWrapOuter, 273], [rightLegX - quanWrapInner, 273]], '#f8fafc', '#94a3b8', 1.5);
 
     // Kung Fu Slippers (Black cloth with gold edge)
-    drawCircle(leftLegX - 6, 278, 8, '#09090b', '#fbbf24', 1.5);
-    drawCircle(rightLegX + 6, 278, 8, '#09090b', '#fbbf24', 1.5);
+    drawCircle(leftLegX - quanFootOffset, 278, 8, '#09090b', '#fbbf24', 1.5);
+    drawCircle(rightLegX + quanFootOffset, 278, 8, '#09090b', '#fbbf24', 1.5);
 
     // Rotate from the waist so the martial artist's chest leads the strike.
     ctx.save();
@@ -827,8 +831,8 @@ export function generateHeroTexture(
     ctx.fill();
 
     // Legs & Boots: Violet Thigh-high Boots under Dress
-    const leftLegX = cx - 14 * legStance + legCycle * 10 * strideScale;
-    const rightLegX = cx + 14 * legStance - legCycle * 10 * strideScale;
+    const leftLegX = cx - 14 * idleStance + legCycle * 10;
+    const rightLegX = cx + 14 * idleStance - legCycle * 10;
     fillPoly([[leftLegX - 8, 235], [leftLegX + 8, 235], [leftLegX + 6, 275], [leftLegX - 6, 275]], '#581c87', '#3b0764', 2);
     fillPoly([[rightLegX - 8, 235], [rightLegX + 8, 235], [rightLegX + 6, 275], [rightLegX - 6, 275]], '#581c87', '#3b0764', 2);
     drawCircle(leftLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
