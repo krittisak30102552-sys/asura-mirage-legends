@@ -351,3 +351,132 @@ button[class*="bg-zinc-900"]:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ---------- Mirage Glass v1.2.1: restrained light, gradient and depth ---------- */
+:root {
+  --mirage-violet-soft: rgba(167, 139, 250, 0.12);
+  --mirage-cyan-glow: rgba(34, 211, 238, 0.16);
+  --mirage-amber-glow: rgba(245, 158, 11, 0.16);
+}
+
+/* Dialogs: a warmer glass surface with a subtle cool highlight and deeper lift. */
+.fixed.inset-0 > div[class*="bg-zinc-950"][class*="border"],
+.fixed.inset-0 > div[class*="border"][class*="bg-zinc-950"],
+.fixed.inset-0 > section[class*="bg-zinc-950"][class*="border"] {
+  border-color: rgba(190, 164, 116, 0.48);
+  background-image:
+    radial-gradient(ellipse at 100% 0%, rgba(251, 191, 36, 0.13), transparent 38%),
+    radial-gradient(ellipse at 0% 100%, rgba(56, 189, 248, 0.085), transparent 42%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), transparent 48%, rgba(167, 139, 250, 0.025));
+  box-shadow:
+    0 28px 84px rgba(0, 0, 0, 0.66),
+    0 0 0 1px rgba(255, 255, 255, 0.025),
+    0 0 34px rgba(34, 211, 238, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+/* Smaller cards inside menus get their own soft edge so the layout feels layered. */
+.fixed.inset-0 section[class*="rounded-xl"][class*="border"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 8px 22px rgba(0, 0, 0, 0.14);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.fixed.inset-0 section[class*="rounded-xl"][class*="border"]:hover {
+  border-color: rgba(244, 198, 106, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 26px rgba(0, 0, 0, 0.2),
+    0 0 18px rgba(34, 211, 238, 0.035);
+}
+
+/* Gradient buttons feel like lit enamel instead of flat blocks. */
+button[class*="bg-gradient-to-r"] {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.13),
+    0 7px 20px rgba(0, 0, 0, 0.26);
+}
+
+button[class*="bg-gradient-to-r"]:hover:enabled {
+  transform: translateY(-1px);
+  filter: brightness(1.08) saturate(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 0 22px rgba(56, 189, 248, 0.10),
+    0 10px 24px rgba(0, 0, 0, 0.32);
+}
+
+button[class*="bg-gradient-to-r"]:active:enabled {
+  transform: translateY(0) scale(0.99);
+}
+
+/* Quiet glass sheen for regular controls, with clearer hover/focus feedback. */
+button[class*="bg-zinc-950/80"],
+button[class*="bg-zinc-950/90"],
+button[class*="bg-zinc-900"],
+button[class*="bg-zinc-800"] {
+  border-color: rgba(190, 164, 116, 0.22);
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 58%);
+}
+
+button[class*="bg-zinc-950/80"]:hover:enabled,
+button[class*="bg-zinc-950/90"]:hover:enabled,
+button[class*="bg-zinc-900"]:hover:enabled,
+button[class*="bg-zinc-800"]:hover:enabled {
+  border-color: rgba(244, 198, 106, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(244, 198, 106, 0.075),
+    0 7px 18px rgba(0, 0, 0, 0.28);
+}
+
+/* HUD panels and skill slots: gold/cyan ambient light, without adding visual clutter. */
+.pixel-rpg-hud .ui-glass-panel {
+  border-color: rgba(190, 164, 116, 0.28);
+  background-image:
+    radial-gradient(ellipse at 0% 0%, rgba(251, 191, 36, 0.12), transparent 42%),
+    radial-gradient(ellipse at 100% 100%, rgba(56, 189, 248, 0.07), transparent 44%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 60%);
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.38),
+    0 0 20px rgba(34, 211, 238, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.pixel-rpg-hud .ui-skill-slot.rounded-lg {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.11), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(8, 8, 12, 0.12) 70%);
+  border-color: rgba(190, 164, 116, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.16),
+    0 5px 13px rgba(0, 0, 0, 0.42);
+}
+
+.pixel-rpg-hud .ui-skill-slot.rounded-lg:hover {
+  border-color: rgba(103, 232, 249, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 18px rgba(56, 189, 248, 0.18),
+    0 5px 13px rgba(0, 0, 0, 0.42);
+}
+
+/* Give keyboard focus a soft glow too, while respecting reduced-motion preferences. */
+button:focus-visible,
+input:focus-visible {
+  outline-color: rgba(103, 232, 249, 0.92);
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixed.inset-0 section[class*="rounded-xl"][class*="border"],
+  button[class*="bg-gradient-to-r"] {
+    transition-duration: 0.01ms !important;
+  }
+}
