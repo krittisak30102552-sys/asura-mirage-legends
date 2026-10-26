@@ -65,7 +65,8 @@ export function generateHeroTexture(
   frameIndex: number = 0,
   isGinzoEvolved: boolean = false,
   aimAngle: number = 0,
-  facing: number = 1
+  facing: number = 1,
+  previewPose: boolean = false
 ): THREE.CanvasTexture {
   const character = getCharacterConfig(heroId, isGinzoEvolved);
   const frameCount = character.animationFrames ?? 12;
@@ -105,12 +106,13 @@ export function generateHeroTexture(
 
   if (state === 'idle') {
     const breath = Math.sin(phase);
-    bobY = breath * 2.1;
-    legCycle = breath * 0.06;
-    armSwing = breath * 2.4;
-    bodyTilt = breath * 0.014;
-    headTilt = Math.sin(phase + 0.35) * 0.025;
-    weaponAngle = 0.34 + breath * 0.035;
+    // Test-room idle is calm and upright; only subtle breathing remains.
+    bobY = breath * (previewPose ? 0.45 : 2.1);
+    legCycle = previewPose ? 0 : breath * 0.06;
+    armSwing = breath * (previewPose ? 0.45 : 2.4);
+    bodyTilt = breath * (previewPose ? 0.003 : 0.014);
+    headTilt = Math.sin(phase + 0.35) * (previewPose ? 0.006 : 0.025);
+    weaponAngle = previewPose ? 0.28 : 0.34 + breath * 0.035;
   } else if (state === 'run') {
     const stride = Math.sin(phase);
     bobY = Math.abs(Math.sin(phase * 2)) * 5.5;
@@ -132,16 +134,21 @@ export function generateHeroTexture(
   } else if (isAttackingPose) {
     const swing = Math.sin(attackProgress * Math.PI * 2);
     leanX = isHeavyAttack ? 14 + swing * 2.5 : 8 + swing * 2;
-    bobY = 2.5 + Math.sin(attackProgress * Math.PI) * (isHeavyAttack ? 5 : 2.5);
+    bobY = (previewPose ? 1.4 : 2.5) + Math.sin(attackProgress * Math.PI) * (isHeavyAttack ? 5 : 2.5);
     legCycle = (isHeavyAttack ? -0.34 : 0.12) + Math.sin(phase) * 0.35;
-    armSwing = Math.sin(phase + 0.6) * 0.72;
+    // Stronger shoulder and wrist follow-through for the isolated animation preview.
+    armSwing = Math.sin(attackProgress * Math.PI * 2 + 0.6) * (previewPose ? 1.25 : 0.72);
     bodyTilt = (isHeavyAttack ? -0.18 : -0.095) + swing * (isHeavyAttack ? 0.13 : 0.08);
     headTilt = -bodyTilt * 0.42 + Math.sin(phase + 0.3) * 0.024;
-    weaponAngle = (isHeavyAttack ? 0.98 : 0.42) + swing * (isHeavyAttack ? 0.62 : 0.46);
+    weaponAngle = (isHeavyAttack ? 0.98 : 0.42) + swing * (previewPose ? (isHeavyAttack ? 1.02 : 0.78) : (isHeavyAttack ? 0.62 : 0.46));
     auraGlow = true;
   }
 
   cy += bobY;
+
+  // Close the neutral standing stance only in Character Lab. Live combat keeps its existing pose.
+  const idleStance = previewPose && state === 'idle' ? 0.32 : 1;
+  const footOffset = previewPose && state === 'idle' ? 3 : 8;
 
   // Helper drawing functions
   const fillPoly = (pts: [number, number][], fill: string | CanvasGradient, stroke?: string, lineWidth = 2) => {
@@ -255,8 +262,8 @@ export function generateHeroTexture(
     }
 
     // Legs: Black pleated Hakama with smooth fabric folds
-    const leftLegX = cx - 18 + legCycle * 14;
-    const rightLegX = cx + 18 - legCycle * 14;
+    const leftLegX = cx - 18 * idleStance + legCycle * 14;
+    const rightLegX = cx + 18 * idleStance - legCycle * 14;
 
     // Hakama Pants
     const hakamaGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
@@ -282,11 +289,11 @@ export function generateHeroTexture(
 
     // Feet: White Tabi Socks & Wooden Geta Sandals
     // Left foot
-    drawCircle(leftLegX - 8, 273, 7, '#ffffff', '#09090b', 2);
-    fillPoly([[leftLegX - 16, 278], [leftLegX + 2, 278], [leftLegX + 2, 283], [leftLegX - 16, 283]], '#92400e', '#451a03', 1.5);
+    drawCircle(leftLegX - footOffset, 273, 7, '#ffffff', '#09090b', 2);
+    fillPoly([[leftLegX - footOffset - 8, 278], [leftLegX - footOffset + 10, 278], [leftLegX - footOffset + 10, 283], [leftLegX - footOffset - 8, 283]], '#92400e', '#451a03', 1.5);
     // Right foot
-    drawCircle(rightLegX + 8, 273, 7, '#ffffff', '#09090b', 2);
-    fillPoly([[rightLegX, 278], [rightLegX + 18, 278], [rightLegX + 18, 283], [rightLegX, 283]], '#92400e', '#451a03', 1.5);
+    drawCircle(rightLegX + footOffset, 273, 7, '#ffffff', '#09090b', 2);
+    fillPoly([[rightLegX + footOffset - 8, 278], [rightLegX + footOffset + 10, 278], [rightLegX + footOffset + 10, 283], [rightLegX + footOffset - 8, 283]], '#92400e', '#451a03', 1.5);
 
     // Flowing Silver Ponytail (behind body)
     const hairGrad = ctx.createLinearGradient(cx - 50, cy - 80, cx, cy);
@@ -469,11 +476,15 @@ export function generateHeroTexture(
     // Shoulder-to-hand reach follows the same locked direction as the ground slash VFX.
     // The small secondary movement is a shoulder/elbow follow-through, not a wrist-only swing.
     const rightArmReach = isAttackingPose
-      ? (isHeavyAttack ? 39 : 35) + Math.sin(phase + 0.25) * (isHeavyAttack ? 3 : 2)
+      ? (isHeavyAttack ? 39 : 35) + (previewPose
+        ? Math.sin(attackProgress * Math.PI * 2) * (isHeavyAttack ? 15 : 12)
+        : Math.sin(phase + 0.25) * (isHeavyAttack ? 3 : 2))
       : 3.5;
     const shoulderX = cx + 24;
     const shoulderY = cy - 18;
-    const elbowFollow = isAttackingPose ? Math.sin(phase + 0.55) * 2 : 0;
+    const elbowFollow = isAttackingPose
+      ? Math.sin((previewPose ? attackProgress * Math.PI * 2 : phase) + 0.55) * (previewPose ? 8 : 2)
+      : 0;
     const rightArmX = isAttackingPose
       ? shoulderX + Math.cos(localAimAngle) * rightArmReach - Math.sin(localAimAngle) * elbowFollow
       : cx + 32 + Math.sin(phase) * 3.5;
@@ -498,7 +509,7 @@ export function generateHeroTexture(
     // Blade length points along the precise aim direction used by the slash effect.
     // The tiny sweep is only visual follow-through and never reverses the intended hit direction.
     ctx.rotate(isAttackingPose
-      ? localAimAngle + 0.265 + Math.sin(phase) * 0.045
+      ? localAimAngle + 0.265 + (previewPose ? Math.sin(attackProgress * Math.PI * 2) * (isHeavyAttack ? 0.98 : 0.76) : Math.sin(phase) * 0.045)
       : weaponAngle || 0.4);
 
     // Tsuka (Hilt)
@@ -729,12 +740,14 @@ export function generateHeroTexture(
     // Toned Arms with Golden Dragon Gauntlets & Chi Flames
     // The rear fist guards while the lead shoulder, elbow and fist drive toward the aim.
     const punchWave = Math.sin(phase + 0.25);
+    const punchSweep = Math.sin(attackProgress * Math.PI * 2);
+    const guardDistance = 20 + (previewPose && isAttackingPose ? punchSweep * 8 : punchWave * 3);
     const lHandX = isAttackingPose
-      ? cx - 20 + Math.cos(localAimAngle + Math.PI) * (20 + punchWave * 3)
-      : cx - 38 - Math.sin(phase) * 4;
+      ? cx - 20 + Math.cos(localAimAngle + Math.PI) * guardDistance
+      : cx - 38 - Math.sin(phase) * (previewPose ? 1.5 : 4);
     const lHandY = isAttackingPose
-      ? cy + 6 + Math.sin(localAimAngle + Math.PI) * (20 + punchWave * 3)
-      : cy + 5 + Math.sin(phase + Math.PI) * 2;
+      ? cy + 6 + Math.sin(localAimAngle + Math.PI) * guardDistance
+      : cy + 5 + Math.sin(phase + Math.PI) * (previewPose ? 1 : 2);
     if (isAttackingPose) {
       fillLimb(cx - 20, cy - 10, lHandX, lHandY + 9, 10, '#fed7aa');
       ctx.save();
@@ -754,13 +767,13 @@ export function generateHeroTexture(
     drawCircle(lHandX, lHandY + 18, 9, '#fed7aa', '#09090b', 2);
 
     // Right Arm (Pounding Fist)
-    const punchReach = isHeavyAttack ? 51 : 43;
+    const punchReach = isHeavyAttack ? (previewPose ? 63 : 51) : (previewPose ? 51 : 43);
     const rHandX = isAttackingPose
-      ? cx + 20 + Math.cos(localAimAngle) * (punchReach + Math.sin(phase + 0.3) * 4)
-      : cx + 38 + Math.sin(phase + Math.PI) * 4;
+      ? cx + 20 + Math.cos(localAimAngle) * (punchReach + (previewPose ? punchSweep * 17 : Math.sin(phase + 0.3) * 4))
+      : cx + 38 + Math.sin(phase + Math.PI) * (previewPose ? 1.5 : 4);
     const rHandY = isAttackingPose
-      ? cy - 8 + Math.sin(localAimAngle) * (punchReach + Math.sin(phase + 0.55) * 4)
-      : cy + 12 + Math.sin(phase + 0.6) * 2.5;
+      ? cy - 8 + Math.sin(localAimAngle) * (punchReach + (previewPose ? punchSweep * 17 : Math.sin(phase + 0.55) * 4)) - (previewPose ? punchSweep * 6 : 0)
+      : cy + 12 + Math.sin(phase + 0.6) * (previewPose ? 1.2 : 2.5);
     if (isAttackingPose) {
       fillLimb(cx + 22, cy - 10, rHandX, rHandY + 9, 10, '#fed7aa');
       ctx.save();
@@ -810,8 +823,8 @@ export function generateHeroTexture(
     ctx.fill();
 
     // Legs & Boots: Violet Thigh-high Boots under Dress
-    const leftLegX = cx - 14 + legCycle * 10;
-    const rightLegX = cx + 14 - legCycle * 10;
+    const leftLegX = cx - 14 * idleStance + legCycle * 10;
+    const rightLegX = cx + 14 * idleStance - legCycle * 10;
     fillPoly([[leftLegX - 8, 235], [leftLegX + 8, 235], [leftLegX + 6, 275], [leftLegX - 6, 275]], '#581c87', '#3b0764', 2);
     fillPoly([[rightLegX - 8, 235], [rightLegX + 8, 235], [rightLegX + 6, 275], [rightLegX - 6, 275]], '#581c87', '#3b0764', 2);
     drawCircle(leftLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
@@ -977,11 +990,13 @@ export function generateHeroTexture(
     ctx.restore();
 
     // Left arm swings naturally from the shoulder, with a small delayed wrist movement.
-    const leftArmSway = Math.sin(phase + 0.8) * (isAttackingPose ? 5 : 3.5);
+    const leftArmSway = Math.sin(phase + 0.8) * (isAttackingPose ? (previewPose ? 11 : 5) : (previewPose ? 1.2 : 3.5));
     const staffX = isAttackingPose
-      ? cx + Math.cos(localAimAngle) * 38
-      : cx + 38 + Math.sin(phase + 0.25) * 4.2;
-    const staffY = isAttackingPose ? cy + Math.sin(localAimAngle) * 38 : cy;
+      ? cx + Math.cos(localAimAngle) * 38 + (previewPose ? Math.sin(attackProgress * Math.PI * 2) * 10 : 0)
+      : cx + 38 + Math.sin(phase + 0.25) * (previewPose ? 1.5 : 4.2);
+    const staffY = isAttackingPose
+      ? cy + Math.sin(localAimAngle) * 38 - (previewPose ? Math.sin(attackProgress * Math.PI * 2) * 5 : 0)
+      : cy;
     fillPoly([
       [cx - 20, cy - 18],
       [cx - 34 + leftArmSway, cy + 4],
@@ -1010,8 +1025,8 @@ export function generateHeroTexture(
     ctx.translate(staffX, staffY);
     // The staff shaft points along the same direction as the cast's targeting line.
     ctx.rotate(isAttackingPose
-      ? localAimAngle + Math.PI / 2 + Math.sin(phase) * 0.035
-      : Math.sin(phase + 0.3) * 0.1);
+      ? localAimAngle + Math.PI / 2 + (previewPose ? Math.sin(attackProgress * Math.PI * 2) * 0.28 : Math.sin(phase) * 0.035)
+      : Math.sin(phase + 0.3) * (previewPose ? 0.035 : 0.1));
 
     // Shaft: Polished Ebony with Gold Rings
     ctx.strokeStyle = '#1e1b4b';
