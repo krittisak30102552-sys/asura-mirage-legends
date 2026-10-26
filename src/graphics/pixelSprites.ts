@@ -1068,6 +1068,41 @@ export function generateHeroTexture(
     ctx.restore();
   }
 
+  // Presentation-only attack FX for the isolated Character Lab.
+  if (previewPose && isAttackingPose) {
+    const power = Math.sin(attackProgress * Math.PI);
+    const color = heroId === 'katherine' ? '#c2a5ff' : awakenedGinzo ? '#ffe28a' : heroId === 'bamdee' ? '#73ffe0' : heroId === 'quan' ? '#ffd36b' : '#ff647d';
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.14 + power * 0.46;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    if (heroId === 'katherine') {
+      const gx = cx + facing * 42, gy = cy - 42 - power * 7;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 28 + power * 8, attackProgress * Math.PI * 1.7, attackProgress * Math.PI * 1.7 + Math.PI * 1.45);
+      ctx.stroke();
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 38, -attackProgress * Math.PI, -attackProgress * Math.PI + Math.PI * 1.2);
+      ctx.stroke();
+      for (let i=0;i<4;i++){const angle=attackProgress*Math.PI*2+i*Math.PI/2;const sx=gx+Math.cos(angle)*(34+power*5),sy=gy+Math.sin(angle)*(34+power*5);ctx.fillStyle='#fff6d5';ctx.fillRect(sx-2,sy-2,4,4);}
+    } else if (heroId === 'quan') {
+      const ix=cx+facing*(54+power*18),iy=cy-2-power*9;
+      ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(ix-facing*19,iy+9);ctx.lineTo(ix+facing*4,iy);ctx.lineTo(ix-facing*7,iy-17);ctx.moveTo(ix-facing*10,iy+2);ctx.lineTo(ix+facing*16,iy-7);ctx.stroke();
+      ctx.fillStyle='#fff7cc';ctx.beginPath();ctx.arc(ix,iy,4+power*4,0,Math.PI*2);ctx.fill();
+    } else {
+      const sx=cx+facing*9,sy=cy-13,rx=70+power*12,ry=35+power*7,angle=-0.94+attackProgress*Math.PI*.95;
+      ctx.lineWidth=10+power*4;ctx.beginPath();ctx.ellipse(sx,sy,rx,ry,facing<0?-.16:.16,angle,angle+1.22);ctx.stroke();
+      ctx.globalAlpha*=.72;ctx.lineWidth=2.5;ctx.strokeStyle='#fff9ed';ctx.beginPath();ctx.ellipse(sx,sy,rx-3,ry-2,facing<0?-.16:.16,angle+.08,angle+1.12);ctx.stroke();
+      ctx.globalAlpha*=.58;ctx.lineWidth=2;
+      for(let i=0;i<3;i++){const yy=sy+(i-1)*13;ctx.beginPath();ctx.moveTo(sx-facing*(44+i*5),yy+7);ctx.lineTo(sx-facing*(15+i*5),yy-2);ctx.stroke();}
+    }
+    ctx.restore();
+  }
+
   return createActorPixelTexture(canvas, heroId === 'bamdee' ? 'hue-rotate(200deg) saturate(1.1)' : undefined);
 }
 
