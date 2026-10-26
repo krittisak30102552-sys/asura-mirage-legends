@@ -1,7 +1,6 @@
 /**
  * Procedural sprite textures for heroes, monsters, and combat effects.
- * Heroes and enemies are smooth, anti-aliased 2D art (full-resolution source with
- * trilinear filtering); combat effects keep their crisp nearest-neighbor look.
+ * Playable heroes use original frame-by-frame pixel art; enemies and combat effects keep their existing renderers.
  */
 
 import * as THREE from 'three';
@@ -10,7 +9,7 @@ import { drawBiomeEnemy } from './biomeSprites';
 
 export function createCanvasTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
-  // Linear sampling keeps combat effects soft and clean, matching the smooth 2D characters.
+  // Generic smooth texture helper remains for environment and enemy effects.
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = false;
@@ -44,30 +43,495 @@ function createActorPixelTexture(source: HTMLCanvasElement, tintFilter?: string)
 }
 
 
-// ----------------------------------------------------------------------
-// REFERENCE HERO SPRITES + PIXEL-ART PASS
-// Reference sprite sheets are animated in the browser; the existing 25 FPS
-// texture loop captures the current frame and layers state-based movement.
-// ----------------------------------------------------------------------
-type ReferenceHeroId = 'ginzo' | 'katherine';
-const referenceHeroImages: Partial<Record<ReferenceHeroId, HTMLImageElement>> = {};
 
-function getReferenceHeroImage(heroId: ReferenceHeroId): HTMLImageElement | null {
-  if (typeof document === 'undefined') return null;
-  let image = referenceHeroImages[heroId];
-  if (!image) {
-    image = document.createElement('img');
-    image.decoding = 'async';
-    const assetPath = heroId === 'ginzo'
-      ? 'assets/characters/Ginzo_Default_Idle.webp'
-      : 'assets/characters/Katherine_Default_Idle.webp';
-    image.src = new URL(assetPath, document.baseURI).toString();
-    referenceHeroImages[heroId] = image;
+// ----------------------------------------------------------------------
+// ORIGINAL PIXEL HERO ART
+// Drawn for Asura Mirage Legends: visual references guide the style only.
+// Every limb, face, garment, weapon, and animation pose is rendered here.
+// 96 x 120 low-resolution canvas + nearest-neighbour sampling = crisp pixels.
+// ----------------------------------------------------------------------
+type PixelHeroPalette = {
+  outline: string; skin: string; skinShade: string; hair: string; hairShade: string;
+  hairLight: string; coat: string; coatShade: string; coatLight: string; pants: string;
+  pantsShade: string; boots: string; belt: string; metal: string; metalLight: string;
+  accent: string; accentShade: string; eye: string;
+};
+
+const HERO_PIXEL_PALETTES: Record<HeroId, PixelHeroPalette> = {
+  ginzo: {
+    outline: '#15131b', skin: '#f0b58b', skinShade: '#b96959',
+    hair: '#f0f0e9', hairShade: '#989eaa', hairLight: '#ffffff',
+    coat: '#a91f31', coatShade: '#5a1224', coatLight: '#ed4c4d',
+    pants: '#34202a', pantsShade: '#201c2b', boots: '#101d29',
+    belt: '#36252c', metal: '#a7b5c4', metalLight: '#f7f7ed',
+    accent: '#e7c8a0', accentShade: '#765144', eye: '#30232b'
+  },
+  quan: {
+    outline: '#171922', skin: '#f0bc91', skinShade: '#b66f56',
+    hair: '#24202b', hairShade: '#12151e', hairLight: '#5a4350',
+    coat: '#e7e1c8', coatShade: '#969da9', coatLight: '#fff7de',
+    pants: '#283344', pantsShade: '#161f2e', boots: '#171a24',
+    belt: '#b52b39', metal: '#8ed8d0', metalLight: '#d7fff2',
+    accent: '#39a9a1', accentShade: '#19656e', eye: '#29212a'
+  },
+  katherine: {
+    outline: '#191624', skin: '#ffe0c1', skinShade: '#cd8f7c',
+    hair: '#f1c45b', hairShade: '#b87b32', hairLight: '#fff0a1',
+    coat: '#30233f', coatShade: '#1c1a31', coatLight: '#58446b',
+    pants: '#29253c', pantsShade: '#171728', boots: '#131522',
+    belt: '#b84c8e', metal: '#d9deef', metalLight: '#ffffff',
+    accent: '#b76bd0', accentShade: '#6e4099', eye: '#4a6a9a'
+  },
+  bamdee: {
+    outline: '#101922', skin: '#edb18a', skinShade: '#a96155',
+    hair: '#eef4ec', hairShade: '#98b9bb', hairLight: '#ffffff',
+    coat: '#087d68', coatShade: '#064239', coatLight: '#23d6a2',
+    pants: '#192a36', pantsShade: '#0d1a27', boots: '#0b1921',
+    belt: '#d4b653', metal: '#8ce5d3', metalLight: '#e6fff5',
+    accent: '#a7f56b', accentShade: '#246c54', eye: '#20262d'
   }
-  return image.complete && image.naturalWidth > 0 ? image : null;
+};
+
+function pixelPoly(ctx: CanvasRenderingContext2D, points: Array<[number, number]>, fill: string, outline: string, lineWidth = 2): void {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'miter';
+  ctx.stroke();
 }
 
-function createCrispPixelTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
+function pixelRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string, outline?: string): void {
+  ctx.fillStyle = fill;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  if (outline) {
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(Math.round(x) + 1, Math.round(y) + 1, Math.round(w) - 2, Math.round(h) - 2);
+  }
+}
+
+function pixelLine(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string, width: number): void {
+  ctx.beginPath();
+  ctx.moveTo(Math.round(x1), Math.round(y1));
+  ctx.lineTo(Math.round(x2), Math.round(y2));
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+  ctx.lineWidth = width;
+  ctx.stroke();
+}
+
+function drawPixelKatana(
+  ctx: CanvasRenderingContext2D, hx: number, hy: number, angle: number,
+  palette: PixelHeroPalette, gold: boolean, teal = false
+): void {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const px = -dy;
+  const py = dx;
+  const guardX = hx + dx * 5;
+  const guardY = hy + dy * 5;
+  const bladeStartX = hx + dx * 7;
+  const bladeStartY = hy + dy * 7;
+  const tipX = hx + dx * 39;
+  const tipY = hy + dy * 39;
+  const bladeWidth = 2.5;
+
+  pixelPoly(ctx, [
+    [bladeStartX + px * bladeWidth + dx * 2, bladeStartY + py * bladeWidth + dy * 2],
+    [tipX - dx * 2 + px, tipY - dy * 2 + py],
+    [tipX + dx * 1.5, tipY + dy * 1.5],
+    [tipX - dx * 2 - px, tipY - dy * 2 - py],
+    [bladeStartX - px * bladeWidth + dx * 2, bladeStartY - py * bladeWidth + dy * 2]
+  ], gold ? '#f6c94b' : teal ? '#5cebd0' : palette.metal, palette.outline, 2);
+
+  pixelLine(ctx, bladeStartX + px * 0.5, bladeStartY + py * 0.5,
+    tipX - dx * 3 + px * 0.5, tipY - dy * 3 + py * 0.5,
+    gold ? '#fff2a1' : teal ? '#e3fff8' : palette.metalLight, 1.5);
+
+  // Dark wrapped handle, alternating wrap stitches, and a distinctive guard.
+  pixelLine(ctx, hx - dx * 8, hy - dy * 8, guardX, guardY, palette.outline, 6);
+  pixelLine(ctx, hx - dx * 8, hy - dy * 8, guardX, guardY, palette.accentShade, 3);
+  for (let i = 1; i <= 3; i++) {
+    const t = i * 2;
+    pixelRect(ctx, hx - dx * t - 1, hy - dy * t - 1, 3, 2,
+      i % 2 ? (gold ? '#ffdc67' : palette.accent) : palette.outline);
+  }
+  pixelLine(ctx, guardX + px * 4.5, guardY + py * 4.5,
+    guardX - px * 4.5, guardY - py * 4.5,
+    palette.outline, 5);
+  pixelLine(ctx, guardX + px * 4.5, guardY + py * 4.5,
+    guardX - px * 4.5, guardY - py * 4.5,
+    gold ? '#ffdd64' : palette.accent, 2.5);
+}
+
+function drawPixelStaff(
+  ctx: CanvasRenderingContext2D, hx: number, hy: number, angle: number,
+  palette: PixelHeroPalette, frame: number, casting: boolean
+): void {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const px = -dy;
+  const py = dx;
+  const endX = hx + dx * 33;
+  const endY = hy + dy * 33;
+  const bottomX = hx - dx * 25;
+  const bottomY = hy - dy * 25;
+  pixelLine(ctx, bottomX, bottomY, endX, endY, palette.outline, 6);
+  pixelLine(ctx, bottomX, bottomY, endX, endY, palette.metal, 3);
+  pixelLine(ctx, bottomX, bottomY, endX, endY, palette.metalLight, 1);
+  for (let i = 0; i < 4; i++) {
+    const t = -15 + i * 5;
+    const x = hx + dx * t;
+    const y = hy + dy * t;
+    pixelLine(ctx, x + px * 3, y + py * 3, x - px * 3, y - py * 3,
+      i % 2 ? palette.accent : palette.accentShade, 2);
+  }
+  const gem = casting && frame % 3 === 0 ? '#fff3b8' : '#b9f7ff';
+  pixelPoly(ctx, [
+    [endX, endY - 7], [endX + 6, endY], [endX, endY + 7], [endX - 6, endY]
+  ], palette.accent, palette.outline, 2);
+  pixelPoly(ctx, [
+    [endX, endY - 4], [endX + 3, endY], [endX, endY + 3], [endX - 3, endY]
+  ], gem, palette.metalLight, 1);
+  // Crescent prongs are part of the staff silhouette, not a floating ring effect.
+  pixelLine(ctx, endX - px * 7 + dx * 2, endY - py * 7 + dy * 2,
+    endX + px * 7 + dx * 2, endY + py * 7 + dy * 2, palette.outline, 3);
+  pixelLine(ctx, endX - px * 7 + dx * 2, endY - py * 7 + dy * 2,
+    endX + px * 7 + dx * 2, endY + py * 7 + dy * 2, palette.accent, 1.5);
+}
+
+function drawPixelBoot(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, palette: PixelHeroPalette): void {
+  pixelPoly(ctx, [[x, y], [x + width - 3, y], [x + width, y + 5], [x + width, y + 8], [x - 2, y + 8], [x - 2, y + 4]],
+    palette.boots, palette.outline, 2);
+  pixelRect(ctx, x, y + 3, width - 2, 2, palette.accentShade);
+}
+
+function drawSamuraiPixelHero(
+  ctx: CanvasRenderingContext2D, palette: PixelHeroPalette, frame: number,
+  state: HeroAnimationState, weaponAngle: number, bob: number,
+  runStep: number, armSwing: number, lunge: number, gold: boolean, teal: boolean
+): void {
+  const out = palette.outline;
+  const leg = state === 'run' ? runStep : state.startsWith('attack') ? Math.round(Math.sin(frame / 11 * Math.PI) * 2) : 0;
+  const bodyY = -bob + lunge;
+
+  // Split hakama legs; knees, folded cuffs and boots shift independently in the run cycle.
+  pixelPoly(ctx, [[34 + leg, 64 + bodyY], [46 + leg, 65 + bodyY], [45, 83 + bodyY],
+    [39 + leg, 99 + bodyY], [29 + leg, 99 + bodyY], [33, 82 + bodyY]],
+    palette.pants, out);
+  pixelPoly(ctx, [[47 - leg, 65 + bodyY], [58 - leg, 64 + bodyY], [61, 82 + bodyY],
+    [65 - leg, 99 + bodyY], [54 - leg, 99 + bodyY], [49, 82 + bodyY]],
+    palette.pantsShade, out);
+  pixelRect(ctx, 34 + leg, 82 + bodyY, 10, 3, palette.accentShade);
+  pixelRect(ctx, 52 - leg, 82 + bodyY, 9, 3, palette.accentShade);
+  drawPixelBoot(ctx, 29 + leg, 98 + bodyY, 14, palette);
+  drawPixelBoot(ctx, 53 - leg, 98 + bodyY, 14, palette);
+
+  // Dark inner tunic and asymmetric haori, with a separate collar, hem and seam lights.
+  pixelPoly(ctx, [[38, 34 + bodyY], [53, 34 + bodyY], [60, 45 + bodyY],
+    [57, 68 + bodyY], [33, 68 + bodyY], [29, 46 + bodyY]], palette.coatShade, out);
+  pixelPoly(ctx, [[37, 36 + bodyY], [48, 36 + bodyY], [48, 66 + bodyY],
+    [34, 66 + bodyY], [31, 47 + bodyY]], palette.coat, out);
+  pixelPoly(ctx, [[48, 36 + bodyY], [54, 37 + bodyY], [60, 46 + bodyY],
+    [56, 67 + bodyY], [47, 67 + bodyY]], palette.coatShade, out);
+  pixelPoly(ctx, [[42, 36 + bodyY], [48, 39 + bodyY], [53, 35 + bodyY],
+    [50, 45 + bodyY], [45, 47 + bodyY]], palette.metalLight, out, 1.5);
+  pixelRect(ctx, 45, 47 + bodyY, 4, 18, gold ? '#f7d35f' : teal ? '#54e6bc' : palette.accent, out);
+  pixelRect(ctx, 35, 61 + bodyY, 21, 6, palette.belt, out);
+  pixelRect(ctx, 46, 61 + bodyY, 5, 6, gold ? '#ffe28a' : palette.metalLight, out);
+  pixelRect(ctx, 35, 67 + bodyY, 21, 2, out);
+
+  // Far sleeve and arm are drawn behind the torso.
+  pixelPoly(ctx, [[34, 39 + bodyY], [42, 42 + bodyY], [38 + armSwing, 53 + bodyY],
+    [30 + armSwing, 52 + bodyY], [28, 45 + bodyY]], palette.coatShade, out);
+  pixelPoly(ctx, [[54, 40 + bodyY], [60, 43 + bodyY], [63 + armSwing, 51 + bodyY],
+    [59 + armSwing, 56 + bodyY], [52, 49 + bodyY]], palette.coat, out);
+  pixelRect(ctx, 57 + armSwing, 52 + bodyY, 7, 6, palette.skin, out);
+  pixelRect(ctx, 34 + armSwing, 51 + bodyY, 6, 5, palette.skin, out);
+  pixelRect(ctx, 59 + armSwing, 52 + bodyY, 3, 2, palette.skinShade);
+
+  // Face framed by white hair and a tied-back, tapered ponytail.
+  pixelPoly(ctx, [[37, 20 + bodyY], [43, 16 + bodyY], [54, 18 + bodyY],
+    [59, 25 + bodyY], [56, 34 + bodyY], [41, 35 + bodyY], [37, 29 + bodyY]],
+    palette.skin, out);
+  pixelPoly(ctx, [[38, 23 + bodyY], [34, 15 + bodyY], [40, 8 + bodyY],
+    [52, 8 + bodyY], [59, 16 + bodyY], [56, 23 + bodyY], [48, 18 + bodyY],
+    [43, 23 + bodyY], [41, 30 + bodyY], [37, 27 + bodyY]], palette.hair, out);
+  pixelPoly(ctx, [[40, 12 + bodyY], [32, 10 + bodyY], [24, 14 + bodyY],
+    [31, 17 + bodyY], [25, 22 + bodyY], [35, 23 + bodyY], [40, 18 + bodyY]],
+    palette.hairShade, out);
+  pixelPoly(ctx, [[39, 10 + bodyY], [44, 7 + bodyY], [53, 10 + bodyY],
+    [58, 16 + bodyY], [50, 14 + bodyY], [43, 15 + bodyY]], palette.hairLight, out, 1);
+  pixelRect(ctx, 43, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 51, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 45, 31 + bodyY, 5, 1, palette.skinShade);
+  pixelRect(ctx, 40, 33 + bodyY, 14, 2, palette.skinShade);
+  // Red hair tie on Ginzo, green-gold cord on Bamdee, gold clasp on the awakened form.
+  pixelRect(ctx, 34, 16 + bodyY, 4, 3, gold ? '#ffe18a' : teal ? '#baf77c' : '#d94b47', out);
+  pixelRect(ctx, 49, 21 + bodyY, 5, 2, palette.metalLight);
+
+  // Katana and the gripping hand are separate pieces, so the blade sweeps through frames.
+  const swordAngle = weaponAngle;
+  drawPixelKatana(ctx, 62 + armSwing, 54 + bodyY, swordAngle, palette, gold, teal);
+  pixelRect(ctx, 60 + armSwing, 51 + bodyY, 5, 6, palette.skin, out);
+  pixelRect(ctx, 61 + armSwing, 54 + bodyY, 3, 2, palette.skinShade);
+
+  // A tiny gold or jade spark appears only in selected frames; no constant magic ring.
+  if ((gold || teal) && (frame === 2 || frame === 6 || frame === 10) && state !== 'dead') {
+    const sx = 81 + Math.round(Math.cos(swordAngle) * 2);
+    const sy = 42 + Math.round(Math.sin(swordAngle) * 2);
+    pixelRect(ctx, sx, sy, 3, 3, gold ? '#fff0a1' : '#b9ffd9');
+    pixelRect(ctx, sx + 1, sy - 2, 1, 7, gold ? '#fff0a1' : '#b9ffd9');
+  }
+}
+
+function drawKatherinePixelHero(
+  ctx: CanvasRenderingContext2D, palette: PixelHeroPalette, frame: number,
+  state: HeroAnimationState, staffAngle: number, bob: number,
+  runStep: number, armSwing: number, lunge: number
+): void {
+  const out = palette.outline;
+  const bodyY = -bob + lunge;
+  const leg = state === 'run' ? runStep : state.startsWith('attack') ? Math.round(Math.sin(frame / 11 * Math.PI) * 2) : 0;
+
+  pixelPoly(ctx, [[36 + leg, 67 + bodyY], [47 + leg, 67 + bodyY], [43, 86 + bodyY],
+    [39 + leg, 101 + bodyY], [30 + leg, 101 + bodyY], [33, 84 + bodyY]],
+    palette.pants, out);
+  pixelPoly(ctx, [[47 - leg, 67 + bodyY], [57 - leg, 66 + bodyY], [61, 84 + bodyY],
+    [65 - leg, 101 + bodyY], [55 - leg, 101 + bodyY], [50, 84 + bodyY]],
+    palette.pantsShade, out);
+  drawPixelBoot(ctx, 30 + leg, 100 + bodyY, 13, palette);
+  drawPixelBoot(ctx, 54 - leg, 100 + bodyY, 13, palette);
+
+  // Layered skirt panels and a dark bodice make Katherine read as a mage, not a recolour.
+  pixelPoly(ctx, [[35, 51 + bodyY], [57, 51 + bodyY], [63, 72 + bodyY],
+    [48, 78 + bodyY], [30, 72 + bodyY]], palette.accentShade, out);
+  pixelPoly(ctx, [[37, 55 + bodyY], [46, 56 + bodyY], [47, 74 + bodyY],
+    [34, 70 + bodyY]], palette.coatLight, out, 1.5);
+  pixelPoly(ctx, [[47, 56 + bodyY], [56, 54 + bodyY], [60, 70 + bodyY],
+    [49, 75 + bodyY]], palette.accent, out, 1.5);
+  pixelRect(ctx, 40, 45 + bodyY, 13, 20, palette.coat, out);
+  pixelPoly(ctx, [[40, 43 + bodyY], [45, 40 + bodyY], [54, 43 + bodyY],
+    [58, 52 + bodyY], [50, 57 + bodyY], [39, 53 + bodyY]], palette.coatShade, out);
+  pixelPoly(ctx, [[43, 41 + bodyY], [48, 46 + bodyY], [53, 41 + bodyY],
+    [51, 49 + bodyY], [46, 51 + bodyY]], palette.metalLight, out, 1);
+  pixelRect(ctx, 41, 61 + bodyY, 13, 4, palette.belt, out);
+  pixelRect(ctx, 46, 61 + bodyY, 4, 4, palette.metalLight, out);
+  // Cape tails flutter in opposite directions in the run loop.
+  const capeFlutter = state === 'run' ? Math.round(Math.sin(frame / 12 * Math.PI * 2) * 3) : state.startsWith('attack') ? -2 : 0;
+  pixelPoly(ctx, [[36, 40 + bodyY], [43, 43 + bodyY], [37 - capeFlutter, 59 + bodyY],
+    [30 - capeFlutter, 65 + bodyY], [32, 49 + bodyY]], palette.accentShade, out);
+  pixelPoly(ctx, [[53, 42 + bodyY], [60, 42 + bodyY], [65 + capeFlutter, 57 + bodyY],
+    [61 + capeFlutter, 63 + bodyY], [54, 51 + bodyY]], palette.accent, out);
+
+  // Far hand, near sleeve, then a small gripping hand.
+  pixelPoly(ctx, [[34, 40 + bodyY], [42, 43 + bodyY], [39 + armSwing, 52 + bodyY],
+    [33 + armSwing, 54 + bodyY], [30, 46 + bodyY]], palette.coat, out);
+  pixelPoly(ctx, [[53, 41 + bodyY], [60, 43 + bodyY], [62 + armSwing, 49 + bodyY],
+    [59 + armSwing, 54 + bodyY], [52, 49 + bodyY]], palette.coatLight, out);
+  pixelRect(ctx, 59 + armSwing, 51 + bodyY, 6, 5, palette.skin, out);
+
+  // Face, layered blonde fringe, long side locks, and a gold hair ornament.
+  pixelPoly(ctx, [[39, 20 + bodyY], [43, 17 + bodyY], [53, 18 + bodyY],
+    [57, 25 + bodyY], [55, 34 + bodyY], [42, 34 + bodyY], [38, 28 + bodyY]],
+    palette.skin, out);
+  pixelPoly(ctx, [[37, 24 + bodyY], [36, 15 + bodyY], [43, 10 + bodyY],
+    [53, 11 + bodyY], [59, 18 + bodyY], [58, 28 + bodyY], [54, 35 + bodyY],
+    [51, 26 + bodyY], [48, 20 + bodyY], [44, 25 + bodyY], [41, 23 + bodyY]],
+    palette.hair, out);
+  pixelPoly(ctx, [[39, 24 + bodyY], [33, 20 + bodyY], [35, 32 + bodyY],
+    [39, 39 + bodyY], [43, 34 + bodyY]], palette.hairShade, out);
+  pixelPoly(ctx, [[52, 23 + bodyY], [58, 22 + bodyY], [59, 33 + bodyY],
+    [55, 40 + bodyY], [52, 34 + bodyY]], palette.hairShade, out);
+  pixelPoly(ctx, [[39, 16 + bodyY], [44, 11 + bodyY], [52, 13 + bodyY],
+    [56, 18 + bodyY], [47, 16 + bodyY], [42, 21 + bodyY]], palette.hairLight, out, 1);
+  pixelRect(ctx, 43, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 51, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 45, 31 + bodyY, 5, 1, palette.skinShade);
+  pixelRect(ctx, 51, 11 + bodyY, 4, 3, '#f8e4a1', out);
+  pixelRect(ctx, 55, 13 + bodyY, 3, 2, palette.accent);
+
+  // Staff angle changes during casts; the gem glints on alternating key frames.
+  const anchorX = 61 + armSwing;
+  const anchorY = 52 + bodyY;
+  drawPixelStaff(ctx, anchorX, anchorY, staffAngle, palette, frame, state.startsWith('attack'));
+  pixelRect(ctx, anchorX - 2, anchorY - 2, 6, 6, palette.skin, out);
+
+  if (state.startsWith('attack') && (frame === 3 || frame === 6 || frame === 9)) {
+    const gx = anchorX + Math.round(Math.cos(staffAngle) * 34);
+    const gy = anchorY + Math.round(Math.sin(staffAngle) * 34);
+    pixelPoly(ctx, [[gx, gy - 4], [gx + 3, gy], [gx, gy + 4], [gx - 3, gy]], '#fff4b4', palette.accent, 1);
+  }
+}
+
+function drawQuanPixelHero(
+  ctx: CanvasRenderingContext2D, palette: PixelHeroPalette, frame: number,
+  state: HeroAnimationState, bob: number, runStep: number, armSwing: number, lunge: number
+): void {
+  const out = palette.outline;
+  const bodyY = -bob + lunge;
+  const leg = state === 'run' ? runStep : state.startsWith('attack') ? Math.round(Math.sin(frame / 11 * Math.PI) * 2) : 0;
+  const punchCurve = state.startsWith('attack') ? [0, 1, 3, 7, 11, 13, 10, 6, 3, 1, 0, 0][frame] : 0;
+
+  pixelPoly(ctx, [[35 + leg, 66 + bodyY], [46 + leg, 66 + bodyY], [43, 83 + bodyY],
+    [39 + leg, 100 + bodyY], [29 + leg, 100 + bodyY], [33, 83 + bodyY]], palette.pants, out);
+  pixelPoly(ctx, [[48 - leg, 66 + bodyY], [57 - leg, 66 + bodyY], [61, 83 + bodyY],
+    [65 - leg, 100 + bodyY], [55 - leg, 100 + bodyY], [50, 83 + bodyY]], palette.pantsShade, out);
+  drawPixelBoot(ctx, 29 + leg, 99 + bodyY, 14, palette);
+  drawPixelBoot(ctx, 54 - leg, 99 + bodyY, 14, palette);
+
+  pixelPoly(ctx, [[36, 39 + bodyY], [54, 39 + bodyY], [61, 49 + bodyY],
+    [57, 67 + bodyY], [34, 67 + bodyY], [29, 49 + bodyY]], palette.coat, out);
+  pixelPoly(ctx, [[45, 40 + bodyY], [53, 41 + bodyY], [59, 51 + bodyY],
+    [55, 65 + bodyY], [47, 65 + bodyY]], palette.coatShade, out);
+  pixelPoly(ctx, [[40, 38 + bodyY], [46, 42 + bodyY], [53, 38 + bodyY],
+    [50, 48 + bodyY], [45, 48 + bodyY]], palette.metalLight, out, 1.5);
+  pixelRect(ctx, 34, 59 + bodyY, 23, 6, palette.belt, out);
+  pixelRect(ctx, 47, 59 + bodyY, 5, 6, palette.metalLight, out);
+  pixelPoly(ctx, [[31, 41 + bodyY], [40, 42 + bodyY], [37, 53 + bodyY],
+    [29, 54 + bodyY], [27, 47 + bodyY]], palette.accent, out);
+  pixelPoly(ctx, [[52, 41 + bodyY], [59 + punchCurve, 44 + bodyY], [65 + punchCurve, 51 + bodyY],
+    [59 + punchCurve, 56 + bodyY], [51, 50 + bodyY]], palette.accentShade, out);
+  pixelRect(ctx, 31, 49 + bodyY, 8, 6, palette.skin, out);
+  pixelRect(ctx, 57 + punchCurve, 49 + bodyY, 8, 7, palette.skin, out);
+  pixelRect(ctx, 59 + punchCurve, 47 + bodyY, 5, 3, palette.skinShade);
+  pixelRect(ctx, 32, 50 + bodyY, 7, 2, palette.skinShade);
+
+  // Hair knot, ribbon and fringe.
+  pixelPoly(ctx, [[37, 21 + bodyY], [41, 16 + bodyY], [53, 18 + bodyY],
+    [58, 25 + bodyY], [55, 34 + bodyY], [42, 34 + bodyY], [37, 28 + bodyY]],
+    palette.skin, out);
+  pixelPoly(ctx, [[37, 24 + bodyY], [34, 16 + bodyY], [42, 11 + bodyY],
+    [53, 12 + bodyY], [58, 20 + bodyY], [53, 23 + bodyY], [46, 18 + bodyY],
+    [42, 26 + bodyY]], palette.hair, out);
+  pixelPoly(ctx, [[43, 12 + bodyY], [44, 6 + bodyY], [51, 6 + bodyY],
+    [56, 12 + bodyY], [52, 17 + bodyY]], palette.hairShade, out);
+  pixelRect(ctx, 44, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 51, 27 + bodyY, 2, 2, palette.eye);
+  pixelRect(ctx, 45, 31 + bodyY, 5, 1, palette.skinShade);
+  pixelRect(ctx, 44, 13 + bodyY, 7, 2, palette.accent);
+}
+
+function addPixelCombatSpark(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, frame: number): void {
+  if (frame % 3 !== 0) return;
+  pixelRect(ctx, x, y - 3, 2, 8, color);
+  pixelRect(ctx, x - 3, y, 8, 2, color);
+}
+
+function generateOriginalHeroPixelTexture(
+  heroId: HeroId,
+  state: HeroAnimationState,
+  frameIndex: number,
+  isGinzoEvolved: boolean,
+  aimAngle: number,
+  facing: number
+): THREE.CanvasTexture {
+  const W = 96;
+  const H = 120;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+
+  const frame = ((frameIndex % 12) + 12) % 12;
+  const phase = frame / 12 * Math.PI * 2;
+  const isAttack = state.startsWith('attack');
+  const attackSlot = Number(state.replace('attack', '')) || 1;
+  const attackT = frame / 11;
+  const strikeCurve = Math.sin(attackT * Math.PI);
+  const palette = { ...HERO_PIXEL_PALETTES[heroId] };
+  const awakened = heroId === 'ginzo' && isGinzoEvolved;
+
+  if (awakened) {
+    // A full remaster palette: deep bronze shadows, amber cloth, bright gold trim.
+    palette.coat = '#e2a52c';
+    palette.coatShade = '#835019';
+    palette.coatLight = '#ffe06a';
+    palette.accent = '#ffd45e';
+    palette.accentShade = '#9a6320';
+    palette.belt = '#54381d';
+    palette.metal = '#fff0a2';
+    palette.metalLight = '#ffffff';
+  }
+
+  const bob = state === 'idle'
+    ? Math.round(Math.sin(phase) * 1.25)
+    : state === 'run'
+      ? Math.round(Math.abs(Math.sin(phase * 2)) * 2.5)
+      : state === 'dash'
+        ? Math.round(1 + Math.sin(phase) * 1.5)
+        : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 3 : 1)) : 0;
+  const runStep = state === 'run' ? Math.round(Math.sin(phase) * 5)
+    : state === 'dash' ? Math.round(Math.sin(phase) * 3)
+      : state === 'idle' ? Math.round(Math.sin(phase) * 1) : 0;
+  const armSwing = state === 'run' ? Math.round(Math.cos(phase) * 3)
+    : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 6 : 3))
+      : state === 'idle' ? Math.round(Math.sin(phase) * 1.5) : 0;
+  const lunge = state === 'dash' ? 4 : isAttack ? Math.round(strikeCurve * (attackSlot >= 3 ? 5 : 3)) : 0;
+  const screenAimAngle = Math.atan2(Math.sin(aimAngle) * 0.58, Math.cos(aimAngle));
+  const localAimAngle = facing < 0 ? Math.PI - screenAimAngle : screenAimAngle;
+  const slashFrames = [-0.9, -0.75, -0.55, -0.25, 0.15, 0.55, 0.9, 0.72, 0.42, 0.15, -0.08, -0.25];
+
+  ctx.save();
+  if (state === 'dead') {
+    ctx.translate(48, 108);
+    ctx.rotate(facing < 0 ? -0.72 : 0.72);
+    ctx.scale(1.04, 0.62);
+    ctx.translate(-48, -108);
+  }
+  if (facing < 0) {
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+  }
+  const bodyTilt = state === 'run' ? Math.sin(phase) * -0.025
+    : state === 'dash' ? -0.11
+      : isAttack ? -strikeCurve * (attackSlot >= 3 ? 0.085 : 0.045) : 0;
+  ctx.translate(48, 78 - bob);
+  ctx.rotate(bodyTilt);
+  ctx.translate(-48, -78);
+
+  // Katherine's staff has its own arm and keyframed casting arc. Samurai sword
+  // arcs likewise change pose every frame instead of rotating a still image.
+  if (heroId === 'katherine') {
+    const staffBase = state === 'idle' ? -0.82 + Math.sin(phase) * 0.045
+      : state === 'run' ? -0.72 + Math.sin(phase) * 0.1
+        : isAttack ? localAimAngle - 0.36 + slashFrames[frame] * 0.16
+          : state === 'dash' ? localAimAngle - 0.12 : -0.82;
+    drawKatherinePixelHero(ctx, palette, frame, state, staffBase, bob, runStep, armSwing, lunge);
+    if (isAttack) addPixelCombatSpark(ctx, 78, 31 + Math.round(Math.sin(phase) * 2), '#fff4b4', frame);
+  } else if (heroId === 'quan') {
+    drawQuanPixelHero(ctx, palette, frame, state, bob, runStep, armSwing, lunge);
+    if (isAttack) addPixelCombatSpark(ctx, 73 + Math.round(strikeCurve * 5), 52, palette.metalLight, frame);
+  } else {
+    const baseAngle = state === 'idle' ? 0.27 + Math.sin(phase) * 0.045
+      : state === 'run' ? 0.22 + Math.sin(phase) * 0.12
+        : isAttack ? localAimAngle + slashFrames[frame] * (attackSlot >= 3 ? 1.05 : 0.82)
+          : state === 'dash' ? localAimAngle - 0.18 : 0.27;
+    drawSamuraiPixelHero(ctx, palette, frame, state, baseAngle, bob, runStep, armSwing, lunge,
+      awakened, heroId === 'bamdee');
+  }
+
+  // Hurt feedback is a handful of bright pixels so the silhouette stays readable.
+  if (state === 'hurt') {
+    pixelRect(ctx, 33, 42, 3, 3, '#fff6df');
+    pixelRect(ctx, 57, 50, 2, 4, '#fff6df');
+  }
+  if (awakened && state !== 'dead' && (frame === 1 || frame === 5 || frame === 9)) {
+    addPixelCombatSpark(ctx, 67, 34, '#ffe98a', frame);
+    pixelRect(ctx, 29, 50, 2, 2, '#ffd65b');
+  }
+  if (heroId === 'bamdee' && state !== 'dead' && (frame === 2 || frame === 8)) {
+    pixelRect(ctx, 26, 41, 2, 4, '#80ffe0');
+  }
+
+  ctx.restore();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
@@ -77,178 +541,6 @@ function createCrispPixelTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture
   return texture;
 }
 
-/** Converts the existing procedural 12-pose art into a controlled pixel palette. */
-function createPixelArtHeroTexture(source: HTMLCanvasElement, tintFilter?: string): THREE.CanvasTexture {
-  let sourceCanvas = source;
-  if (tintFilter) {
-    sourceCanvas = document.createElement('canvas');
-    sourceCanvas.width = source.width;
-    sourceCanvas.height = source.height;
-    const tintContext = sourceCanvas.getContext('2d')!;
-    tintContext.imageSmoothingEnabled = false;
-    tintContext.filter = tintFilter;
-    tintContext.drawImage(source, 0, 0);
-    tintContext.filter = 'none';
-  }
-
-  const pixelCanvas = document.createElement('canvas');
-  pixelCanvas.width = 128;
-  pixelCanvas.height = 160;
-  const pixelContext = pixelCanvas.getContext('2d', { willReadFrequently: true })!;
-  pixelContext.imageSmoothingEnabled = false;
-  pixelContext.drawImage(sourceCanvas, 0, 0, pixelCanvas.width, pixelCanvas.height);
-
-  // Quantize RGB gently to remove vector-render gradients while preserving
-  // outlines, skin tones, fabric highlights, and the original transparency.
-  const pixels = pixelContext.getImageData(0, 0, pixelCanvas.width, pixelCanvas.height);
-  for (let i = 0; i < pixels.data.length; i += 4) {
-    if (pixels.data[i + 3] < 24) continue;
-    pixels.data[i] = Math.min(255, Math.round(pixels.data[i] / 24) * 24);
-    pixels.data[i + 1] = Math.min(255, Math.round(pixels.data[i + 1] / 24) * 24);
-    pixels.data[i + 2] = Math.min(255, Math.round(pixels.data[i + 2] / 24) * 24);
-  }
-  pixelContext.putImageData(pixels, 0, 0);
-  return createCrispPixelTexture(pixelCanvas);
-}
-
-/** Convert Ginzo's red haori and red blade into a deep-to-bright gold palette. */
-function applyGinzoGoldPalette(canvas: HTMLCanvasElement): void {
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) return;
-  const image = context.getImageData(0, 0, canvas.width, canvas.height);
-  const data = image.data;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 24) continue;
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    if (r > 70 && g < 132 && b < 110 && r > g * 1.28 && r > b * 1.25) {
-      if (r > 220) {
-        data[i] = 255; data[i + 1] = 213; data[i + 2] = 78;
-      } else if (r > 150) {
-        data[i] = 226; data[i + 1] = 157; data[i + 2] = 38;
-      } else if (r > 105) {
-        data[i] = 165; data[i + 1] = 105; data[i + 2] = 27;
-      } else {
-        data[i] = 92; data[i + 1] = 56; data[i + 2] = 20;
-      }
-    }
-  }
-  context.putImageData(image, 0, 0);
-}
-
-function generateReferenceHeroTexture(
-  heroId: HeroId,
-  state: HeroAnimationState,
-  frameIndex: number,
-  isGinzoEvolved: boolean,
-  aimAngle: number,
-  facing: number
-): THREE.CanvasTexture | null {
-  if (heroId !== 'ginzo' && heroId !== 'katherine') return null;
-  const sprite = getReferenceHeroImage(heroId);
-  if (!sprite) return null;
-
-  const W = 128;
-  const H = 160;
-  // Keep the supplied sprite's native aspect ratio inside the engine's canvas.
-  const drawHeight = Math.min(H, W * sprite.naturalHeight / sprite.naturalWidth);
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.imageSmoothingEnabled = false;
-
-  const frame = ((frameIndex % 12) + 12) % 12;
-  const phase = (frame / 12) * Math.PI * 2;
-  const attacking = state.startsWith('attack');
-  const attackProgress = frame / 11;
-  const evolved = heroId === 'ginzo' && isGinzoEvolved;
-
-  // A restrained gold aura distinguishes Awakened Ginzo without hiding the sprite.
-  if (evolved) {
-    const glow = ctx.createRadialGradient(W / 2, H * 0.58, 5, W / 2, H * 0.58, 78);
-    glow.addColorStop(0, 'rgba(255, 207, 72, 0.24)');
-    glow.addColorStop(0.62, 'rgba(245, 158, 11, 0.10)');
-    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  let bob = 0;
-  let rotation = 0;
-  let scaleX = 1;
-  let scaleY = 1;
-  let shiftX = 0;
-
-  if (state === 'idle') {
-    bob = Math.sin(phase) * 0.8;
-    rotation = Math.sin(phase * 0.5) * 0.012;
-  } else if (state === 'run') {
-    bob = Math.abs(Math.sin(phase * 2)) * 2.5;
-    rotation = 0.035 * (facing < 0 ? -1 : 1);
-    scaleX = 1.015;
-    scaleY = 0.985 + Math.sin(phase * 2) * 0.012;
-    shiftX = facing * Math.sin(phase) * 1.4;
-  } else if (state === 'dash') {
-    bob = 1 + Math.sin(phase) * 1.2;
-    rotation = 0.105 * (facing < 0 ? -1 : 1);
-    scaleX = 1.07;
-    scaleY = 0.94;
-    shiftX = facing * 4.5;
-    // Two low-opacity afterimages sell the dash while retaining the pixel silhouette.
-    for (let trail = 2; trail >= 1; trail--) {
-      ctx.save();
-      ctx.globalAlpha = evolved ? 0.17 : 0.13;
-      ctx.translate(W / 2 - facing * trail * 5, H - trail * 1.4);
-      ctx.scale(facing < 0 ? -1 : 1, 1);
-      ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
-      ctx.restore();
-    }
-  } else if (attacking) {
-    const strike = Math.sin(attackProgress * Math.PI);
-    const slot = Number(state.replace('attack', '')) || 1;
-    bob = strike * (slot >= 3 ? 2.5 : 1.2);
-    rotation = (0.018 + strike * (slot >= 3 ? 0.095 : 0.065)) * (facing < 0 ? -1 : 1);
-    rotation += THREE.MathUtils.clamp(Math.sin(aimAngle) * 0.025, -0.025, 0.025);
-    scaleX = 1 + strike * (slot >= 3 ? 0.075 : 0.035);
-    scaleY = 1 - strike * 0.035;
-    shiftX = facing * strike * (slot >= 3 ? 5.5 : 3.2);
-  } else if (state === 'hurt') {
-    bob = -1;
-    rotation = -0.08 * (facing < 0 ? -1 : 1);
-    scaleX = 0.97;
-    scaleY = 1.02;
-  } else if (state === 'dead') {
-    bob = -18;
-    rotation = 1.0 * (facing < 0 ? -1 : 1);
-    scaleX = 1.12;
-    scaleY = 0.56;
-  }
-
-  if (!attacking && state !== 'dead') {
-    rotation += THREE.MathUtils.clamp(Math.sin(aimAngle) * 0.012, -0.012, 0.012);
-  }
-
-  ctx.save();
-  ctx.translate(W / 2 + shiftX, H - bob);
-  ctx.rotate(rotation);
-  ctx.scale((facing < 0 ? -1 : 1) * scaleX, scaleY);
-  ctx.drawImage(sprite, -W / 2, -drawHeight, W, drawHeight);
-  ctx.restore();
-
-  if (state === 'hurt') {
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.globalAlpha = 0.42;
-    ctx.fillStyle = '#fff7ed';
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-  }
-
-  if (evolved) applyGinzoGoldPalette(canvas);
-  return createCrispPixelTexture(canvas);
-}
 
 function createPixelEffectTexture(source: HTMLCanvasElement, maxSide: number): THREE.CanvasTexture {
   const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
@@ -273,996 +565,9 @@ export function generateHeroTexture(
   aimAngle: number = 0,
   facing: number = 1
 ): THREE.CanvasTexture {
-  const referenceTexture = generateReferenceHeroTexture(heroId, state, frameIndex, isGinzoEvolved, aimAngle, facing);
-  if (referenceTexture) return referenceTexture;
-
-  const W = 256;
-  const H = 320;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = true;
-
-  // Twelve redraw poses per cycle, played at 25 FPS by the combat engine.
-  // More poses let knees, shoulders, elbows, head and weapon follow through smoothly.
-  const f = frameIndex % 12;
-  const phase = (f / 12) * Math.PI * 2;
-  const attackProgress = f / 11;
-  const isAttackingPose = state.startsWith('attack');
-  const isHeavyAttack = state === 'attack3' || state === 'attack4';
-  const awakenedGinzo = (heroId === 'ginzo' && isGinzoEvolved) || heroId === 'bamdee';
-  // Convert world X/Z aim into the sprite's isometric screen direction. The facing
-  // value compensates for the mesh's horizontal mirror so the weapon still lines up.
-  const screenAimAngle = Math.atan2(Math.sin(aimAngle) * 0.58, Math.cos(aimAngle));
-  const directedAimAngle = facing < 0 ? Math.PI - screenAimAngle : screenAimAngle;
-  const cx = 128;
-  let cy = 175; // ground/center reference
-
-  // Whole-body motion plus secondary follow-through for each limb.
-  let bobY = 0;
-  let leanX = 0;
-  let legCycle = 0;
-  let armSwing = 0;
-  let weaponAngle = 0;
-  let bodyTilt = 0;
-  let headTilt = 0;
-  let auraGlow = false;
-
-  if (state === 'idle') {
-    const breath = Math.sin(phase * 0.5);
-    bobY = breath * 2.1;
-    legCycle = breath * 0.06;
-    armSwing = breath * 2.4;
-    bodyTilt = breath * 0.014;
-    headTilt = Math.sin(phase * 0.5 + 0.35) * 0.025;
-    weaponAngle = 0.34 + breath * 0.035;
-  } else if (state === 'run') {
-    const stride = Math.sin(phase);
-    bobY = Math.abs(Math.sin(phase * 2)) * 5.5;
-    leanX = 6 + stride * 1.8;
-    legCycle = stride;
-    armSwing = Math.cos(phase);
-    bodyTilt = -0.045 + stride * 0.025;
-    headTilt = -0.012 + Math.sin(phase + 0.5) * 0.026;
-    weaponAngle = 0.34 + Math.sin(phase + 0.4) * 0.2;
-  } else if (state === 'dash') {
-    leanX = 18;
-    bobY = 7.5 + Math.sin(phase) * 1.1;
-    legCycle = -0.62 + Math.sin(phase) * 0.16;
-    armSwing = 0.9 + Math.sin(phase) * 0.15;
-    bodyTilt = -0.15 + Math.sin(phase) * 0.035;
-    headTilt = 0.045 + Math.sin(phase + 0.4) * 0.02;
-    weaponAngle = -0.18 + Math.sin(phase) * 0.2;
-    auraGlow = true;
-  } else if (isAttackingPose) {
-    const swing = Math.sin(attackProgress * Math.PI * 2);
-    leanX = isHeavyAttack ? 14 + swing * 2.5 : 8 + swing * 2;
-    bobY = 2.5 + Math.sin(attackProgress * Math.PI) * (isHeavyAttack ? 5 : 2.5);
-    legCycle = (isHeavyAttack ? -0.34 : 0.12) + Math.sin(phase) * 0.35;
-    armSwing = Math.sin(phase + 0.6) * 0.72;
-    bodyTilt = (isHeavyAttack ? -0.18 : -0.095) + swing * (isHeavyAttack ? 0.13 : 0.08);
-    headTilt = -bodyTilt * 0.42 + Math.sin(phase + 0.3) * 0.024;
-    weaponAngle = (isHeavyAttack ? 0.98 : 0.42) + swing * (isHeavyAttack ? 0.62 : 0.46);
-    auraGlow = true;
-  }
-
-  cy += bobY;
-
-  // Helper drawing functions
-  const fillPoly = (pts: [number, number][], fill: string | CanvasGradient, stroke?: string, lineWidth = 2) => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-    if (stroke) {
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = lineWidth;
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    }
-  };
-
-  // Draw a limb as a tapered segment between shoulder/elbow/hand points. Using its
-  // own direction keeps the forearm aligned instead of stretching a horizontal sleeve.
-  const fillLimb = (
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-    halfWidth: number,
-    fill: string | CanvasGradient,
-    stroke = '#09090b',
-    lineWidth = 2
-  ) => {
-    const dx = endX - startX;
-    const dy = endY - startY;
-    const length = Math.max(1, Math.hypot(dx, dy));
-    const nx = (-dy / length) * halfWidth;
-    const ny = (dx / length) * halfWidth;
-    fillPoly([
-      [startX + nx, startY + ny],
-      [startX - nx, startY - ny],
-      [endX - nx, endY - ny],
-      [endX + nx, endY + ny],
-    ], fill, stroke, lineWidth);
-  };
-
-  const drawCircle = (x: number, y: number, r: number, fill: string | CanvasGradient, stroke?: string, lw = 2) => {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = fill;
-    ctx.fill();
-    if (stroke) {
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = lw;
-      ctx.stroke();
-    }
-  };
-
-  // ====================================================================
-  // 1. GINZO (Wandering Ronin Swordsman - Otherworld Legends)
-  // Silver ponytail, red haori coat, black hakama, razor steel katana
-  // ====================================================================
-  if (heroId === 'ginzo' || heroId === 'bamdee') {
-    // Ground Shadow
-    const shadowGrad = ctx.createRadialGradient(cx, 290, 5, cx, 290, 48);
-    shadowGrad.addColorStop(0, 'rgba(0,0,0,0.45)');
-    shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, 290, 48, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Combat aura
-    if (auraGlow) {
-      const aura = ctx.createRadialGradient(cx + leanX, cy, 30, cx + leanX, cy, 95);
-      aura.addColorStop(0, 'rgba(239, 68, 68, 0.25)');
-      aura.addColorStop(0.7, 'rgba(244, 63, 94, 0.12)');
-      aura.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(cx + leanX, cy, 95, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (awakenedGinzo) {
-      // Golden awakening halo and speed-rune streaks: drawn behind the ronin silhouette.
-      const awakeningAura = ctx.createRadialGradient(cx, cy, 26, cx, cy, 124);
-      awakeningAura.addColorStop(0, 'rgba(253, 230, 138, 0.25)');
-      awakeningAura.addColorStop(0.56, 'rgba(251, 191, 36, 0.16)');
-      awakeningAura.addColorStop(1, 'rgba(217, 119, 6, 0)');
-      ctx.fillStyle = awakeningAura;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 124, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.save();
-      ctx.strokeStyle = '#fde68a';
-      ctx.globalAlpha = state.startsWith('attack') || state === 'dash' ? 0.95 : 0.68;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([9, 7]);
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + 4, 62, 108, -0.18, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      for (let ray = 0; ray < 10; ray++) {
-        const a = (ray / 10) * Math.PI * 2 + f * 0.09;
-        const inner = 79 + (ray % 3) * 5;
-        const outer = inner + 12 + (ray % 2) * 7;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
-        ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // Legs: Black pleated Hakama with smooth fabric folds
-    const leftLegX = cx - 18 + legCycle * 14;
-    const rightLegX = cx + 18 - legCycle * 14;
-
-    // Hakama Pants
-    const hakamaGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
-    hakamaGrad.addColorStop(0, '#27272a');
-    hakamaGrad.addColorStop(0.5, '#18181b');
-    hakamaGrad.addColorStop(1, '#09090b');
-
-    // Left Hakama Leg
-    fillPoly([
-      [cx - 12, cy + 45],
-      [leftLegX - 22, 265],
-      [leftLegX + 4, 265],
-      [cx, cy + 55],
-    ], hakamaGrad, '#09090b', 2.5);
-
-    // Right Hakama Leg
-    fillPoly([
-      [cx, cy + 55],
-      [rightLegX - 4, 265],
-      [rightLegX + 22, 265],
-      [cx + 12, cy + 45],
-    ], hakamaGrad, '#09090b', 2.5);
-
-    // Feet: White Tabi Socks & Wooden Geta Sandals
-    // Left foot
-    drawCircle(leftLegX - 8, 273, 7, '#ffffff', '#09090b', 2);
-    fillPoly([[leftLegX - 16, 278], [leftLegX + 2, 278], [leftLegX + 2, 283], [leftLegX - 16, 283]], '#92400e', '#451a03', 1.5);
-    // Right foot
-    drawCircle(rightLegX + 8, 273, 7, '#ffffff', '#09090b', 2);
-    fillPoly([[rightLegX, 278], [rightLegX + 18, 278], [rightLegX + 18, 283], [rightLegX, 283]], '#92400e', '#451a03', 1.5);
-
-    // Flowing Silver Ponytail (behind body)
-    const hairGrad = ctx.createLinearGradient(cx - 50, cy - 80, cx, cy);
-    hairGrad.addColorStop(0, '#f8fafc');
-    hairGrad.addColorStop(0.7, '#cbd5e1');
-    hairGrad.addColorStop(1, '#94a3b8');
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(cx - 14, cy - 42);
-    ctx.bezierCurveTo(cx - 45, cy - 48, cx - 75 - (state === 'run' ? 25 : 0), cy - 20, cx - 65 - (state === 'run' ? 30 : 0), cy + 15);
-    ctx.bezierCurveTo(cx - 50, cy + 5, cx - 30, cy - 20, cx - 12, cy - 35);
-    ctx.closePath();
-    ctx.fillStyle = hairGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Hair ribbon
-    drawCircle(cx - 16, cy - 40, 5, awakenedGinzo ? '#facc15' : '#ef4444', awakenedGinzo ? '#fef3c7' : '#7f1d1d', 1.5);
-    ctx.restore();
-
-    // Rotate the upper body around the waist; head and weapon inherit the follow-through.
-    ctx.save();
-    ctx.translate(cx, cy + 34);
-    ctx.rotate(bodyTilt);
-    ctx.translate(-cx, -(cy + 34));
-    const localAimAngle = directedAimAngle - bodyTilt;
-
-    // Torso: Crimson Red Haori Coat with White Kimono V-neck
-    const haoriGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
-    haoriGrad.addColorStop(0, awakenedGinzo ? '#fef3c7' : '#ef4444');
-    haoriGrad.addColorStop(0.4, awakenedGinzo ? '#f59e0b' : '#dc2626');
-    haoriGrad.addColorStop(1, awakenedGinzo ? '#92400e' : '#991b1b');
-
-    // Haori Back / Body
-    fillPoly([
-      [cx - 32, cy - 20],
-      [cx + 32, cy - 20],
-      [cx + 28, cy + 48],
-      [cx - 28, cy + 48],
-    ], haoriGrad, awakenedGinzo ? '#fde68a' : '#09090b', awakenedGinzo ? 3.5 : 2.5);
-
-    if (awakenedGinzo) {
-      ctx.save();
-      ctx.strokeStyle = '#fef3c7';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(cx - 25, cy - 13);
-      ctx.lineTo(cx - 15, cy + 26);
-      ctx.moveTo(cx + 25, cy - 13);
-      ctx.lineTo(cx + 15, cy + 26);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Inner White Kimono V-Neck
-    fillPoly([
-      [cx - 14, cy - 20],
-      [cx + 14, cy - 20],
-      [cx, cy + 18],
-    ], '#f8fafc', '#cbd5e1', 1.5);
-
-    // Chest Skin Gap (V-neck opening)
-    fillPoly([
-      [cx - 6, cy - 14],
-      [cx + 6, cy - 14],
-      [cx, cy + 8],
-    ], '#fed7aa', '#d97706', 1);
-
-    // Black Waist Sash (Obi) with Gold Buckle
-    fillPoly([
-      [cx - 26, cy + 30],
-      [cx + 26, cy + 30],
-      [cx + 26, cy + 44],
-      [cx - 26, cy + 44],
-    ], '#18181b', '#09090b', 2);
-    drawCircle(cx, cy + 37, 7, '#fbbf24', '#b45309', 2);
-
-    // Katana Scabbard on Hip
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy + 34);
-    ctx.lineTo(cx - 55, cy + 68);
-    ctx.lineWidth = 7;
-    ctx.strokeStyle = '#18181b';
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#fbbf24';
-    ctx.stroke();
-    ctx.restore();
-
-    // The head counter-tilts slightly to preserve balance during each move.
-    ctx.save();
-    ctx.translate(cx, cy - 48);
-    ctx.rotate(headTilt);
-    ctx.translate(-cx, -(cy - 48));
-
-    // Head: Proportioned Anime Face
-    const faceGrad = ctx.createLinearGradient(cx, cy - 75, cx, cy - 25);
-    faceGrad.addColorStop(0, '#ffedd5');
-    faceGrad.addColorStop(1, '#fde68a');
-
-    // Face oval
-    ctx.beginPath();
-    ctx.ellipse(cx, cy - 48, 22, 26, 0, 0, Math.PI * 2);
-    ctx.fillStyle = faceGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Sharp anime eyes & eyebrows
-    // Left eye
-    ctx.fillStyle = '#09090b';
-    ctx.beginPath();
-    ctx.ellipse(cx - 9, cy - 48, 4, 3, 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx - 8, cy - 49, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    // Right eye
-    ctx.fillStyle = '#09090b';
-    ctx.beginPath();
-    ctx.ellipse(cx + 9, cy - 48, 4, 3, -0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx + 10, cy - 49, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Red eyeliner accent (Ronin styling)
-    ctx.strokeStyle = '#dc2626';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 14, cy - 47);
-    ctx.lineTo(cx - 5, cy - 49);
-    ctx.moveTo(cx + 14, cy - 47);
-    ctx.lineTo(cx + 5, cy - 49);
-    ctx.stroke();
-
-    // Eyebrows
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 15, cy - 54);
-    ctx.lineTo(cx - 4, cy - 52);
-    ctx.moveTo(cx + 15, cy - 54);
-    ctx.lineTo(cx + 4, cy - 52);
-    ctx.stroke();
-
-    // Silver Bangs & Forehead Hair
-    fillPoly([
-      [cx - 24, cy - 65],
-      [cx + 24, cy - 65],
-      [cx + 26, cy - 48],
-      [cx + 16, cy - 52],
-      [cx + 6, cy - 38],
-      [cx, cy - 50],
-      [cx - 8, cy - 36],
-      [cx - 18, cy - 50],
-      [cx - 25, cy - 44],
-    ], hairGrad, '#09090b', 2);
-
-    ctx.restore();
-
-    // Left Arm (Sleeve)
-    const leftArmX = cx - 35 - armSwing * 12;
-    fillPoly([
-      [cx - 28, cy - 18],
-      [leftArmX - 12, cy + 18],
-      [leftArmX + 12, cy + 22],
-      [cx - 16, cy + 10],
-    ], haoriGrad, '#09090b', 2);
-    drawCircle(leftArmX, cy + 26, 7, '#ffedd5', '#d97706', 1.5);
-
-    // Shoulder-to-hand reach follows the same locked direction as the ground slash VFX.
-    // The small secondary movement is a shoulder/elbow follow-through, not a wrist-only swing.
-    const rightArmReach = isAttackingPose
-      ? (isHeavyAttack ? 39 : 35) + Math.sin(phase + 0.25) * (isHeavyAttack ? 3 : 2)
-      : 3.5;
-    const shoulderX = cx + 24;
-    const shoulderY = cy - 18;
-    const elbowFollow = isAttackingPose ? Math.sin(phase + 0.55) * 2 : 0;
-    const rightArmX = isAttackingPose
-      ? shoulderX + Math.cos(localAimAngle) * rightArmReach - Math.sin(localAimAngle) * elbowFollow
-      : cx + 32 + Math.sin(phase) * 3.5;
-    const rightArmY = isAttackingPose
-      ? shoulderY + Math.sin(localAimAngle) * rightArmReach + Math.cos(localAimAngle) * elbowFollow - 12
-      : cy + 15 + Math.sin(phase) * 2.5;
-    if (isAttackingPose) {
-      fillLimb(shoulderX, shoulderY, rightArmX, rightArmY + 8, 9, haoriGrad, '#09090b', 2);
-    } else {
-      fillPoly([
-        [cx + 16, cy - 18],
-        [cx + 32, cy - 18],
-        [rightArmX + 10, rightArmY + 8],
-        [rightArmX - 10, rightArmY + 8],
-      ], haoriGrad, '#09090b', 2);
-    }
-    drawCircle(rightArmX, rightArmY + 12, 7, '#ffedd5', '#d97706', 1.5);
-
-    // KATANA: Steel Blade with Metallic Gleam
-    ctx.save();
-    ctx.translate(rightArmX, rightArmY + 12);
-    // Blade length points along the precise aim direction used by the slash effect.
-    // The tiny sweep is only visual follow-through and never reverses the intended hit direction.
-    ctx.rotate(isAttackingPose
-      ? localAimAngle + 0.265 + Math.sin(phase) * 0.045
-      : weaponAngle || 0.4);
-
-    // Tsuka (Hilt)
-    ctx.strokeStyle = '#18181b';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(-16, 8);
-    ctx.lineTo(0, 0);
-    ctx.stroke();
-
-    // Tsuba (Guard)
-    drawCircle(0, 0, 7, '#fbbf24', '#78350f', 2);
-
-    // Razor Blade with Mirror Gradient
-    const bladeGrad = ctx.createLinearGradient(0, 0, 85, -30);
-    bladeGrad.addColorStop(0, '#f8fafc');
-    bladeGrad.addColorStop(0.5, '#ffffff');
-    bladeGrad.addColorStop(0.8, '#cbd5e1');
-    bladeGrad.addColorStop(1, awakenedGinzo ? '#facc15' : '#67e8f9');
-
-    ctx.beginPath();
-    ctx.moveTo(2, -2);
-    ctx.lineTo(82, -24);
-    ctx.lineTo(86, -20);
-    ctx.lineTo(4, 3);
-    ctx.closePath();
-    ctx.fillStyle = bladeGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Blade Edge Sparkle
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(6, -3);
-    ctx.lineTo(84, -23);
-    ctx.stroke();
-
-    ctx.restore();
-    ctx.restore();
-  }
-
-  // ====================================================================
-  // 2. QUAN HUYING (Kung Fu Master - Otherworld Legends)
-  // Emerald Changshan tunic, gold dragon cloud trim, kung fu pants, Chi
-  // ====================================================================
-  else if (heroId === 'quan') {
-    // Ground Shadow
-    const shadowGrad = ctx.createRadialGradient(cx, 290, 5, cx, 290, 48);
-    shadowGrad.addColorStop(0, 'rgba(0,0,0,0.45)');
-    shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, 290, 48, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Golden Chi Flame Aura
-    const chiGrad = ctx.createRadialGradient(cx, cy, 35, cx, cy, 95);
-    chiGrad.addColorStop(0, auraGlow ? 'rgba(251, 191, 36, 0.35)' : 'rgba(52, 211, 153, 0.15)');
-    chiGrad.addColorStop(0.7, auraGlow ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.05)');
-    chiGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = chiGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 95, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Legs: Indigo Martial Arts Trousers with White Wraps
-    const leftLegX = cx - 18 + legCycle * 14;
-    const rightLegX = cx + 18 - legCycle * 14;
-
-    const pantsGrad = ctx.createLinearGradient(cx - 30, cy + 40, cx + 30, 275);
-    pantsGrad.addColorStop(0, '#1e1b4b');
-    pantsGrad.addColorStop(0.6, '#312e81');
-    pantsGrad.addColorStop(1, '#0f172a');
-
-    // Left Kung Fu Leg
-    fillPoly([
-      [cx - 14, cy + 45],
-      [leftLegX - 18, 255],
-      [leftLegX + 4, 255],
-      [cx, cy + 55],
-    ], pantsGrad, '#09090b', 2.5);
-
-    // Right Kung Fu Leg
-    fillPoly([
-      [cx, cy + 55],
-      [rightLegX - 4, 255],
-      [rightLegX + 18, 255],
-      [cx + 14, cy + 45],
-    ], pantsGrad, '#09090b', 2.5);
-
-    // White Shin Wraps
-    fillPoly([[leftLegX - 14, 255], [leftLegX + 2, 255], [leftLegX + 2, 273], [leftLegX - 14, 273]], '#f8fafc', '#94a3b8', 1.5);
-    fillPoly([[rightLegX - 2, 255], [rightLegX + 14, 255], [rightLegX + 14, 273], [rightLegX - 2, 273]], '#f8fafc', '#94a3b8', 1.5);
-
-    // Kung Fu Slippers (Black cloth with gold edge)
-    drawCircle(leftLegX - 6, 278, 8, '#09090b', '#fbbf24', 1.5);
-    drawCircle(rightLegX + 6, 278, 8, '#09090b', '#fbbf24', 1.5);
-
-    // Rotate from the waist so the martial artist's chest leads the strike.
-    ctx.save();
-    ctx.translate(cx, cy + 34);
-    ctx.rotate(bodyTilt);
-    ctx.translate(-cx, -(cy + 34));
-    const localAimAngle = directedAimAngle - bodyTilt;
-
-    // Torso: Emerald Changshan Tunic with Gold Trim
-    const tunicGrad = ctx.createLinearGradient(cx - 35, cy - 20, cx + 35, cy + 50);
-    tunicGrad.addColorStop(0, '#059669');
-    tunicGrad.addColorStop(0.5, '#047857');
-    tunicGrad.addColorStop(1, '#065f46');
-
-    // Tunic Body
-    fillPoly([
-      [cx - 28, cy - 20],
-      [cx + 28, cy - 20],
-      [cx + 26, cy + 52],
-      [cx - 26, cy + 52],
-    ], tunicGrad, '#09090b', 2.5);
-
-    // Golden Dragon Cloud Motif Embroidery
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy + 8, 16, -Math.PI * 0.7, Math.PI * 0.7);
-    ctx.stroke();
-    drawCircle(cx, cy + 8, 6, '#f59e0b', '#fef08a', 1.5);
-
-    // Chinese Mandarin Collar with Gold Trim
-    fillPoly([
-      [cx - 16, cy - 24],
-      [cx + 16, cy - 24],
-      [cx + 12, cy - 14],
-      [cx - 12, cy - 14],
-    ], '#047857', '#fbbf24', 2);
-
-    // Brown Rope Belt with Gold Tassels
-    fillPoly([
-      [cx - 25, cy + 28],
-      [cx + 25, cy + 28],
-      [cx + 25, cy + 38],
-      [cx - 25, cy + 38],
-    ], '#78350f', '#09090b', 2);
-    // Tassel hanging down
-    fillPoly([[cx - 8, cy + 38], [cx + 2, cy + 38], [cx - 2, cy + 62], [cx - 6, cy + 62]], '#fbbf24', '#b45309', 1.5);
-
-    ctx.save();
-    ctx.translate(cx, cy - 48);
-    ctx.rotate(headTilt);
-    ctx.translate(-cx, -(cy - 48));
-
-    // Head: Anime Martial Artist Face with High Hair Bun
-    const faceGrad = ctx.createLinearGradient(cx, cy - 75, cx, cy - 25);
-    faceGrad.addColorStop(0, '#ffedd5');
-    faceGrad.addColorStop(1, '#fed7aa');
-
-    ctx.beginPath();
-    ctx.ellipse(cx, cy - 48, 22, 26, 0, 0, Math.PI * 2);
-    ctx.fillStyle = faceGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Dark glossy hair with martial topknot bun
-    const darkHairGrad = ctx.createLinearGradient(cx - 30, cy - 85, cx + 30, cy - 35);
-    darkHairGrad.addColorStop(0, '#18181b');
-    darkHairGrad.addColorStop(0.5, '#27272a');
-    darkHairGrad.addColorStop(1, '#09090b');
-
-    // Topknot Bun
-    drawCircle(cx, cy - 80, 16, darkHairGrad, '#09090b', 2);
-    // Golden hairpin & red ribbon
-    fillPoly([[cx - 22, cy - 82], [cx + 22, cy - 82], [cx + 18, cy - 78], [cx - 18, cy - 78]], '#fbbf24', '#78350f', 1.5);
-    // Flying ribbon
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(cx + 14, cy - 80);
-    ctx.quadraticCurveTo(cx + 36, cy - 72, cx + 42, cy - 55);
-    ctx.stroke();
-
-    // Bangs & Hairline
-    fillPoly([
-      [cx - 24, cy - 64],
-      [cx + 24, cy - 64],
-      [cx + 26, cy - 48],
-      [cx + 12, cy - 54],
-      [cx + 4, cy - 38],
-      [cx - 4, cy - 52],
-      [cx - 14, cy - 38],
-      [cx - 24, cy - 48],
-    ], darkHairGrad, '#09090b', 2);
-
-    // Fiery Amber Eyes (Determined martial gaze)
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.ellipse(cx - 9, cy - 48, 4.5, 3.5, 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fef08a';
-    ctx.beginPath();
-    ctx.arc(cx - 8, cy - 49, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.ellipse(cx + 9, cy - 48, 4.5, 3.5, -0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fef08a';
-    ctx.beginPath();
-    ctx.arc(cx + 10, cy - 49, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyebrows
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 15, cy - 54);
-    ctx.lineTo(cx - 4, cy - 51);
-    ctx.moveTo(cx + 15, cy - 54);
-    ctx.lineTo(cx + 4, cy - 51);
-    ctx.stroke();
-
-    ctx.restore();
-
-    // Toned Arms with Golden Dragon Gauntlets & Chi Flames
-    // The rear fist guards while the lead shoulder, elbow and fist drive toward the aim.
-    const punchWave = Math.sin(phase + 0.25);
-    const lHandX = isAttackingPose
-      ? cx - 20 + Math.cos(localAimAngle + Math.PI) * (20 + punchWave * 3)
-      : cx - 38 - Math.sin(phase) * 4;
-    const lHandY = isAttackingPose
-      ? cy + 6 + Math.sin(localAimAngle + Math.PI) * (20 + punchWave * 3)
-      : cy + 5 + Math.sin(phase + Math.PI) * 2;
-    if (isAttackingPose) {
-      fillLimb(cx - 20, cy - 10, lHandX, lHandY + 9, 10, '#fed7aa');
-      ctx.save();
-      ctx.translate(lHandX, lHandY + 8);
-      ctx.rotate(localAimAngle + Math.PI);
-      fillPoly([[-8, -8], [8, -4], [7, 8], [-8, 5]], '#fbbf24', '#b45309', 2);
-      ctx.restore();
-    } else {
-      fillPoly([
-        [cx - 26, cy - 18],
-        [lHandX - 10, lHandY - 4],
-        [lHandX + 12, lHandY + 14],
-        [cx - 16, cy + 8],
-      ], '#fed7aa', '#09090b', 2);
-      fillPoly([[lHandX - 8, lHandY - 2], [lHandX + 8, lHandY + 2], [lHandX + 4, lHandY + 16], [lHandX - 10, lHandY + 12]], '#fbbf24', '#b45309', 2);
-    }
-    drawCircle(lHandX, lHandY + 18, 9, '#fed7aa', '#09090b', 2);
-
-    // Right Arm (Pounding Fist)
-    const punchReach = isHeavyAttack ? 51 : 43;
-    const rHandX = isAttackingPose
-      ? cx + 20 + Math.cos(localAimAngle) * (punchReach + Math.sin(phase + 0.3) * 4)
-      : cx + 38 + Math.sin(phase + Math.PI) * 4;
-    const rHandY = isAttackingPose
-      ? cy - 8 + Math.sin(localAimAngle) * (punchReach + Math.sin(phase + 0.55) * 4)
-      : cy + 12 + Math.sin(phase + 0.6) * 2.5;
-    if (isAttackingPose) {
-      fillLimb(cx + 22, cy - 10, rHandX, rHandY + 9, 10, '#fed7aa');
-      ctx.save();
-      ctx.translate(rHandX, rHandY + 8);
-      ctx.rotate(localAimAngle);
-      fillPoly([[-8, -8], [8, -4], [7, 8], [-8, 5]], '#fbbf24', '#b45309', 2);
-      ctx.restore();
-    } else {
-      fillPoly([
-        [cx + 16, cy - 18],
-        [cx + 28, cy - 18],
-        [rHandX + 12, rHandY + 4],
-        [rHandX - 8, rHandY + 8],
-      ], '#fed7aa', '#09090b', 2);
-      fillPoly([[rHandX - 6, rHandY], [rHandX + 10, rHandY + 2], [rHandX + 6, rHandY + 16], [rHandX - 8, rHandY + 14]], '#fbbf24', '#b45309', 2);
-    }
-    drawCircle(rHandX, rHandY + 18, 9, '#fed7aa', '#09090b', 2);
-
-    // Glowing Golden Chi Flames on Fists
-    drawCircle(lHandX, lHandY + 18, 14, 'rgba(251, 191, 36, 0.45)');
-    drawCircle(rHandX, rHandY + 18, 14, 'rgba(251, 191, 36, 0.45)');
-    ctx.restore();
-  }
-
-  // ====================================================================
-  // 3. KATHERINE (Arch-Sorceress - Otherworld Legends)
-  // Blonde curls, curved purple witch hat, starry robe, Starlight Staff
-  // ====================================================================
-  else {
-    // Ground Shadow
-    const shadowGrad = ctx.createRadialGradient(cx, 290, 5, cx, 290, 48);
-    shadowGrad.addColorStop(0, 'rgba(0,0,0,0.45)');
-    shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, 290, 48, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Arcane Mystic Aura
-    const arcaneGrad = ctx.createRadialGradient(cx, cy, 35, cx, cy, 100);
-    arcaneGrad.addColorStop(0, auraGlow ? 'rgba(168, 85, 247, 0.35)' : 'rgba(147, 51, 234, 0.15)');
-    arcaneGrad.addColorStop(0.7, auraGlow ? 'rgba(126, 34, 206, 0.2)' : 'rgba(59, 130, 246, 0.08)');
-    arcaneGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = arcaneGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 100, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Legs & Boots: Violet Thigh-high Boots under Dress
-    const leftLegX = cx - 14 + legCycle * 10;
-    const rightLegX = cx + 14 - legCycle * 10;
-    fillPoly([[leftLegX - 8, 235], [leftLegX + 8, 235], [leftLegX + 6, 275], [leftLegX - 6, 275]], '#581c87', '#3b0764', 2);
-    fillPoly([[rightLegX - 8, 235], [rightLegX + 8, 235], [rightLegX + 6, 275], [rightLegX - 6, 275]], '#581c87', '#3b0764', 2);
-    drawCircle(leftLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
-    drawCircle(rightLegX, 278, 7, '#3b0764', '#fbbf24', 1.5);
-
-    // The robe, shoulders and staff sway together while the feet keep their gait cycle.
-    ctx.save();
-    ctx.translate(cx, cy + 26);
-    ctx.rotate(bodyTilt * 0.78);
-    ctx.translate(-cx, -(cy + 26));
-    const localAimAngle = directedAimAngle - bodyTilt * 0.78;
-
-    // Flowing Sorceress Robe / Dress
-    const robeGrad = ctx.createLinearGradient(cx - 45, cy - 20, cx + 45, 260);
-    robeGrad.addColorStop(0, '#7e22ce');
-    robeGrad.addColorStop(0.5, '#6b21a8');
-    robeGrad.addColorStop(1, '#3b0764');
-
-    // Flared Gown Skirt with Gold Star Hem
-    fillPoly([
-      [cx - 22, cy + 24],
-      [cx + 22, cy + 24],
-      [cx + 42, 255],
-      [cx - 42, 255],
-    ], robeGrad, '#09090b', 2.5);
-
-    // Golden Rune Hem
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(cx - 41, 253);
-    ctx.lineTo(cx + 41, 253);
-    ctx.stroke();
-
-    // Corset Bodice & Waist Ribbon
-    fillPoly([
-      [cx - 24, cy - 20],
-      [cx + 24, cy - 20],
-      [cx + 22, cy + 26],
-      [cx - 22, cy + 26],
-    ], '#9333ea', '#09090b', 2);
-
-    // Gold Corset Lacing
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 8, cy - 10);
-    ctx.lineTo(cx + 8, cy + 6);
-    ctx.moveTo(cx + 8, cy - 10);
-    ctx.lineTo(cx - 8, cy + 6);
-    ctx.stroke();
-
-    // Head, hair and hat rotate together; the wide robe follows with a slight delay.
-    ctx.save();
-    ctx.translate(cx, cy - 65);
-    ctx.rotate(headTilt);
-    ctx.translate(-cx, -(cy - 65));
-
-    // Flowing Golden-Blonde Hair (Behind Head & Shoulders)
-    const blondeGrad = ctx.createLinearGradient(cx - 45, cy - 70, cx + 45, cy + 20);
-    blondeGrad.addColorStop(0, '#fef08a');
-    blondeGrad.addColorStop(0.5, '#fde047');
-    blondeGrad.addColorStop(1, '#eab308');
-
-    // Left Hair Wave
-    ctx.beginPath();
-    ctx.moveTo(cx - 22, cy - 45);
-    ctx.quadraticCurveTo(cx - 48, cy - 15, cx - 38, cy + 25);
-    ctx.quadraticCurveTo(cx - 24, cy + 10, cx - 18, cy - 25);
-    ctx.closePath();
-    ctx.fillStyle = blondeGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Right Hair Wave
-    ctx.beginPath();
-    ctx.moveTo(cx + 22, cy - 45);
-    ctx.quadraticCurveTo(cx + 48, cy - 15, cx + 38, cy + 25);
-    ctx.quadraticCurveTo(cx + 24, cy + 10, cx + 18, cy - 25);
-    ctx.closePath();
-    ctx.fillStyle = blondeGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Head: Delicate Anime Sorceress Face
-    const faceGrad = ctx.createLinearGradient(cx, cy - 75, cx, cy - 25);
-    faceGrad.addColorStop(0, '#fff1f2');
-    faceGrad.addColorStop(1, '#ffedd5');
-
-    ctx.beginPath();
-    ctx.ellipse(cx, cy - 48, 21, 25, 0, 0, Math.PI * 2);
-    ctx.fillStyle = faceGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Sapphire-Blue Anime Eyes
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath();
-    ctx.ellipse(cx - 8, cy - 48, 4.5, 3.5, 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx - 7, cy - 49, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath();
-    ctx.ellipse(cx + 8, cy - 48, 4.5, 3.5, -0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx + 9, cy - 49, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cute blush
-    drawCircle(cx - 13, cy - 43, 4, 'rgba(244, 63, 94, 0.3)');
-    drawCircle(cx + 13, cy - 43, 4, 'rgba(244, 63, 94, 0.3)');
-
-    // Curved Arch-Sorceress Witch Hat
-    const hatGrad = ctx.createLinearGradient(cx - 45, cy - 130, cx + 45, cy - 60);
-    hatGrad.addColorStop(0, '#581c87');
-    hatGrad.addColorStop(0.6, '#6b21a8');
-    hatGrad.addColorStop(1, '#7e22ce');
-
-    // Wide Hat Brim
-    ctx.beginPath();
-    ctx.ellipse(cx, cy - 64, 46, 15, 0, 0, Math.PI * 2);
-    ctx.fillStyle = hatGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Gold Hat Band
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy - 64, 28, 8, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Glowing Gold Star Buckle
-    drawCircle(cx, cy - 66, 7, '#fbbf24', '#b45309', 2);
-
-    // Pointed Hat Cone with Dramatic Curve
-    ctx.beginPath();
-    ctx.moveTo(cx - 26, cy - 68);
-    ctx.quadraticCurveTo(cx - 15, cy - 110, cx - 2, cy - 135);
-    ctx.quadraticCurveTo(cx + 25, cy - 145, cx + 18, cy - 120);
-    ctx.quadraticCurveTo(cx + 16, cy - 90, cx + 26, cy - 68);
-    ctx.closePath();
-    ctx.fillStyle = hatGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    ctx.restore();
-
-    // Left arm swings naturally from the shoulder, with a small delayed wrist movement.
-    const leftArmSway = Math.sin(phase + 0.8) * (isAttackingPose ? 5 : 3.5);
-    const staffX = isAttackingPose
-      ? cx + Math.cos(localAimAngle) * 38
-      : cx + 38 + Math.sin(phase + 0.25) * 4.2;
-    const staffY = isAttackingPose ? cy + Math.sin(localAimAngle) * 38 : cy;
-    fillPoly([
-      [cx - 20, cy - 18],
-      [cx - 34 + leftArmSway, cy + 4],
-      [cx - 20 + leftArmSway, cy + 18],
-      [cx - 12, cy + 6],
-    ], robeGrad, '#09090b', 2);
-    drawCircle(cx - 22 + leftArmSway, cy + 18 + Math.sin(phase + 0.5) * 2, 6, '#ffedd5', '#d97706', 1.5);
-
-    // Right hand sits on the shaft even as it rotates to match the cast direction.
-    const staffHandX = isAttackingPose ? staffX - Math.cos(localAimAngle) * 10 : staffX - 2;
-    const staffHandY = isAttackingPose ? staffY - Math.sin(localAimAngle) * 10 : cy + 10;
-    if (isAttackingPose) {
-      fillLimb(cx + 20, cy - 12, staffHandX, staffHandY, 9, robeGrad);
-    } else {
-      fillPoly([
-        [cx + 14, cy - 18],
-        [staffX - 10, cy + 8],
-        [staffX + 6, cy + 12],
-        [cx + 24, cy - 8],
-      ], robeGrad, '#09090b', 2);
-    }
-    drawCircle(staffHandX, staffHandY, 6, '#ffedd5', '#d97706', 1.5);
-
-    // STARLIGHT ARCHMAGE STAFF
-    ctx.save();
-    ctx.translate(staffX, staffY);
-    // The staff shaft points along the same direction as the cast's targeting line.
-    ctx.rotate(isAttackingPose
-      ? localAimAngle + Math.PI / 2 + Math.sin(phase) * 0.035
-      : Math.sin(phase + 0.3) * 0.1);
-
-    // Shaft: Polished Ebony with Gold Rings
-    ctx.strokeStyle = '#1e1b4b';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(0, -95);
-    ctx.lineTo(0, 85);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-4, -40);
-    ctx.lineTo(4, -40);
-    ctx.moveTo(-4, 20);
-    ctx.lineTo(4, 20);
-    ctx.stroke();
-
-    // Glowing Astral Star Gem at Staff Head
-    const gemGrad = ctx.createRadialGradient(0, -98, 2, 0, -98, 20);
-    gemGrad.addColorStop(0, '#ffffff');
-    gemGrad.addColorStop(0.4, '#38bdf8');
-    gemGrad.addColorStop(0.8, '#9333ea');
-    gemGrad.addColorStop(1, 'rgba(147, 51, 234, 0)');
-
-    ctx.fillStyle = gemGrad;
-    ctx.beginPath();
-    ctx.arc(0, -98, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Gold Crescent Staff Head surrounding Gem
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, -98, 14, -Math.PI * 0.75, Math.PI * 0.75);
-    ctx.stroke();
-
-    ctx.restore();
-    ctx.restore();
-  }
-
-  return createPixelArtHeroTexture(canvas, heroId === 'bamdee' ? 'hue-rotate(200deg) saturate(1.1)' : undefined);
+  return generateOriginalHeroPixelTexture(heroId, state, frameIndex, isGinzoEvolved, aimAngle, facing);
 }
 
-// ----------------------------------------------------------------------
 // ENEMY SPRITE GENERATOR (Illustrated Smooth Graphics for Mobs & 10 Wiki Bosses)
 // ----------------------------------------------------------------------
 export function generateEnemyTexture(
