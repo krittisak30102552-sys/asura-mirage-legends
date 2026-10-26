@@ -137,7 +137,7 @@ export function generateHeroTexture(
     bobY = (previewPose ? 1.4 : 2.5) + Math.sin(attackProgress * Math.PI) * (isHeavyAttack ? 5 : 2.5);
     legCycle = (isHeavyAttack ? -0.34 : 0.12) + Math.sin(phase) * 0.35;
     // Stronger shoulder and wrist follow-through for the isolated animation preview.
-    armSwing = Math.sin(attackProgress * Math.PI * 2 + 0.6) * (previewPose ? 1.25 : 0.72);
+    armSwing = previewPose ? Math.sin(attackProgress * Math.PI * 2 + 0.6) * 1.25 : Math.sin(phase + 0.6) * 0.72;
     bodyTilt = (isHeavyAttack ? -0.18 : -0.095) + swing * (isHeavyAttack ? 0.13 : 0.08);
     headTilt = -bodyTilt * 0.42 + Math.sin(phase + 0.3) * 0.024;
     weaponAngle = (isHeavyAttack ? 0.98 : 0.42) + swing * (previewPose ? (isHeavyAttack ? 1.02 : 0.78) : (isHeavyAttack ? 0.62 : 0.46));
