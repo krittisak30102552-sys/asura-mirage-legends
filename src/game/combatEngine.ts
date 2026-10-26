@@ -74,6 +74,7 @@ import {
   DIFFICULTY_CONFIGS,
 } from './combatRules';
 import { PlayerCombat } from './combat';
+import { getCharacterAnimationFrameCount } from '../data/characterConfig';
 import type { CombatEvent, Target as CombatTarget } from './combat';
 
 export interface EnemyActor {
@@ -636,6 +637,8 @@ export class CombatEngine {
 
   public setHero(heroId: HeroId) {
     this.activeHeroId = heroId;
+    this.animFrame = 0;
+    this.animTimer = 0;
     this.recalcHeroStats();
     this.playerStats.hp = this.playerStats.maxHp;
     this.playerStats.shield = this.playerStats.maxShield;
@@ -3526,7 +3529,7 @@ export class CombatEngine {
       // anticipation -> strike -> recovery, driven by the action timer when there is one
       const progress = this.actionAnimationTimer > 0 && this.actionAnimationDuration > 0
         ? 1 - this.actionAnimationTimer / this.actionAnimationDuration
-        : Math.min(1, this.animFrame / 11);
+        : Math.min(1, this.animFrame / Math.max(1, getCharacterAnimationFrameCount(this.activeHeroId, this.isGinzoEvolved) - 1));
       const power = this.animState === 'attack3' || this.animState === 'attack4' ? 1.45 : 1;
       if (progress < 0.22) {
         const k = smooth(progress / 0.22);
@@ -3602,7 +3605,7 @@ export class CombatEngine {
     this.animTimer += dt;
     if (this.animTimer >= 1 / 25) {
       this.animTimer %= 1 / 25;
-      this.animFrame = (this.animFrame + 1) % 12;
+      this.animFrame = (this.animFrame + 1) % getCharacterAnimationFrameCount(this.activeHeroId, this.isGinzoEvolved);
       this.updateHeroTexture();
     }
 

@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Run combat and character configuration tests
+        run: pnpm test
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
