@@ -305,6 +305,9 @@ export class CombatEngine {
 
   // Targeting lock
   public lockedTarget: EnemyActor | null = null;
+  /** Enemy directly under the mouse cursor, used as the first-priority combat target. */
+  public aimedTarget: EnemyActor | null = null;
+  private hasMouseAim = false;
 
   // Stage tracking (20 Waves)
   public currentWave: number = 1;
@@ -1997,6 +2000,8 @@ export class CombatEngine {
       const dx = this.mouseWorldX - this.playerX;
       const dz = this.mouseWorldZ - this.playerZ;
       this.playerAimAngle = Math.atan2(dz, dx);
+      this.hasMouseAim = true;
+      this.refreshAimedTarget();
       if (dx > 0.1) this.playerFacing = 1;
       else if (dx < -0.1) this.playerFacing = -1;
     }
@@ -2022,7 +2027,7 @@ export class CombatEngine {
   ) {
     if (slot === 4) {
       // Prototype timing: 1.05s charge, dash through nearest target, then 12 cuts at 80ms intervals.
-      const target = this.enemies
+      const target = this.getPreferredTarget() ?? this.enemies
         .filter((enemy) => enemy.state !== 'dead')
         .sort((a, b) => Math.hypot(a.x - pX, a.z - pZ) - Math.hypot(b.x - pX, b.z - pZ))[0];
       if (!target && this.currentMode !== 'lobby') return;
@@ -2095,7 +2100,7 @@ export class CombatEngine {
       this.isInvulnerable = true;
       this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.32);
 
-      for (const enemy of this.enemies) {
+      for (const enemy of this.getEnemiesTargetFirst()) {
         if (enemy.state === 'dead') continue;
         const t = THREE.MathUtils.clamp(
           ((enemy.x - pX) * dx + (enemy.z - pZ) * dz) / lengthSq,
@@ -2190,7 +2195,7 @@ export class CombatEngine {
           this.hitstopTimer = Math.max(this.hitstopTimer, 0.018);
         }
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dx = enemy.x - this.playerX;
           const dz = enemy.z - this.playerZ;
@@ -2241,7 +2246,7 @@ export class CombatEngine {
     const heroId = this.activeHeroId;
     let angle = this.playerAimAngle;
     if (this.hasAwakenedKit() && slot === 4) {
-      const target = this.enemies
+      const target = this.getPreferredTarget() ?? this.enemies
         .filter((enemy) => enemy.state !== 'dead')
         .sort((a, b) => Math.hypot(a.x - this.playerX, a.z - this.playerZ) - Math.hypot(b.x - this.playerX, b.z - this.playerZ))[0];
       if (!target) {
@@ -2268,7 +2273,7 @@ export class CombatEngine {
         this.arena.addCameraShake(0.28);
 
         let hitCount = 0;
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dx = enemy.x - pX;
           const dz = enemy.z - pZ;
@@ -2295,7 +2300,7 @@ export class CombatEngine {
         this.arena.spawnSakuraStormVFX(pX, pZ);
         this.arena.addCameraShake(0.38);
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
           if (dist <= 4.6) {
@@ -2334,7 +2339,7 @@ export class CombatEngine {
         this.invulnerableTimer = 0.45;
         this.isInvulnerable = true;
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const l2 = Math.hypot(targetX - pX, targetZ - pZ) ** 2;
           const t = Math.max(0, Math.min(1, ((enemy.x - pX) * (targetX - pX) + (enemy.z - pZ) * (targetZ - pZ)) / l2));
@@ -2355,7 +2360,7 @@ export class CombatEngine {
         this.arena.spawnHeavenDrumPalmVFX(pX, pZ, angle);
         this.arena.addCameraShake(0.3);
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dx = enemy.x - pX;
           const dz = enemy.z - pZ;
@@ -2380,7 +2385,7 @@ export class CombatEngine {
         this.arena.spawnJadeDragonSpiralVFX(pX, pZ);
         this.arena.addCameraShake(0.34);
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
           if (dist <= 4.5) {
@@ -2395,8 +2400,9 @@ export class CombatEngine {
 
       } else {
         // Quan 3: Celestial Dragon Ascension (มังกรสวรรค์ทะยานฟ้า)
-        const targetX = this.lockedTarget ? this.lockedTarget.x : pX + Math.cos(angle) * 2.8;
-        const targetZ = this.lockedTarget ? this.lockedTarget.z : pZ + Math.sin(angle) * 2.8;
+        const target = this.getPreferredTarget();
+        const targetX = target ? target.x : pX + Math.cos(angle) * 2.8;
+        const targetZ = target ? target.z : pZ + Math.sin(angle) * 2.8;
 
         this.arena.spawnGroundTelegraph(targetX, targetZ, 4.6, 0.35, 0xfbbf24, 'circle');
         this.arena.spawnDragonAscensionVFX(targetX, targetZ);
@@ -2404,7 +2410,7 @@ export class CombatEngine {
         this.arena.addCameraShake(0.5);
         this.hitstopTimer = 0.06;
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dist = Math.hypot(enemy.x - targetX, enemy.z - targetZ);
           if (dist <= 5.0) {
@@ -2426,7 +2432,7 @@ export class CombatEngine {
         this.arena.spawnFrostNovaVFX(pX, pZ);
         this.arena.addCameraShake(0.28);
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dist = Math.hypot(enemy.x - pX, enemy.z - pZ);
           if (dist <= 4.5) {
@@ -2455,7 +2461,7 @@ export class CombatEngine {
         soundEngine.playThunderBolt();
         this.arena.addCameraShake(0.32);
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const l2 = Math.hypot(targetX - pX, targetZ - pZ) ** 2;
           const t = Math.max(0, Math.min(1, ((enemy.x - pX) * (targetX - pX) + (enemy.z - pZ) * (targetZ - pZ)) / l2));
@@ -2479,7 +2485,7 @@ export class CombatEngine {
         this.arena.spawnMeteorVFX(targetX, targetZ, () => {
           soundEngine.playKiExplosion();
           this.arena.addCameraShake(0.55);
-          for (const enemy of this.enemies) {
+          for (const enemy of this.getEnemiesTargetFirst()) {
             if (enemy.state === 'dead') continue;
             const dist = Math.hypot(enemy.x - targetX, enemy.z - targetZ);
             if (dist <= 5.2) {
@@ -2532,8 +2538,70 @@ export class CombatEngine {
     }
   }
 
+  /** Select an enemy when the ground cursor is placed over its feet. */
+  private refreshAimedTarget() {
+    if (!this.hasMouseAim) {
+      this.aimedTarget = null;
+      return;
+    }
+
+    let nearest: EnemyActor | null = null;
+    let nearestCursorDistance = 2.8;
+    for (const enemy of this.enemies) {
+      if (enemy.state === 'dead') continue;
+      const cursorDistance = Math.hypot(enemy.x - this.mouseWorldX, enemy.z - this.mouseWorldZ);
+      if (cursorDistance < nearestCursorDistance) {
+        nearest = enemy;
+        nearestCursorDistance = cursorDistance;
+      }
+    }
+
+    this.aimedTarget = nearest;
+    if (nearest) {
+      const dx = nearest.x - this.playerX;
+      const dz = nearest.z - this.playerZ;
+      this.playerAimAngle = Math.atan2(dz, dx);
+      if (dx > 0.1) this.playerFacing = 1;
+      else if (dx < -0.1) this.playerFacing = -1;
+    }
+  }
+
+  /** Prefer the cursor-selected enemy, then the enemy most directly in the aim line. */
+  private getPreferredTarget(): EnemyActor | null {
+    if (this.aimedTarget && this.aimedTarget.state !== 'dead') return this.aimedTarget;
+
+    let best: EnemyActor | null = null;
+    let bestAngle = 0.58;
+    let bestDistance = 12;
+    for (const enemy of this.enemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.x - this.playerX;
+      const dz = enemy.z - this.playerZ;
+      const distance = Math.hypot(dx, dz);
+      if (distance > 12) continue;
+      const angle = Math.atan2(dz, dx);
+      const diff = Math.abs(Math.atan2(
+        Math.sin(angle - this.playerAimAngle),
+        Math.cos(angle - this.playerAimAngle)
+      ));
+      if (diff < bestAngle || (Math.abs(diff - bestAngle) < 0.0001 && distance < bestDistance)) {
+        best = enemy;
+        bestAngle = diff;
+        bestDistance = distance;
+      }
+    }
+    return best ?? (this.lockedTarget?.state !== 'dead' ? this.lockedTarget : null);
+  }
+
+  /** Put the aimed enemy first without removing the normal multi-target hit behavior. */
+  private getEnemiesTargetFirst(): EnemyActor[] {
+    const priority = this.getPreferredTarget();
+    if (!priority) return [...this.enemies];
+    return [priority, ...this.enemies.filter((enemy) => enemy !== priority)];
+  }
+
   private getCombatTargets(): CombatTarget[] {
-    const targets = this.enemies.map((enemy) => {
+    const targets = this.getEnemiesTargetFirst().map((enemy) => {
       let target = this.combatTargets.get(enemy);
       if (!target) {
         target = {
@@ -4225,6 +4293,7 @@ export class CombatEngine {
     }
 
     this.lockedTarget = closestEnemy;
+    this.refreshAimedTarget();
   }
 
   private updateProjectiles(dt: number) {
@@ -4235,7 +4304,7 @@ export class CombatEngine {
       p.z += p.vz * dt;
 
       if (p.owner === 'player') {
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getEnemiesTargetFirst()) {
           if (enemy.state === 'dead') continue;
           const dist = Math.hypot(enemy.x - p.x, enemy.z - p.z);
           if (dist <= p.radius + 0.6) {
