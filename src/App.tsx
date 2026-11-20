@@ -214,8 +214,9 @@ export default function App() {
     };
 
     // 1. Target Lock-On Yellow Brackets [ ] on closest targeted enemy
-    if (engine.currentMode === 'dungeon' && engine.lockedTarget && engine.lockedTarget.state !== 'dead') {
-      const target = engine.lockedTarget;
+    const visibleTarget = engine.aimedTarget ?? engine.lockedTarget;
+    if (engine.currentMode === 'dungeon' && visibleTarget && visibleTarget.state !== 'dead') {
+      const target = visibleTarget;
       _v.set(target.x, 1.1, target.z);
       _v.project(arena.camera);
 
