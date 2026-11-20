@@ -1166,11 +1166,7 @@ export default function App() {
             joystickMoveRef.current = { x, z };
           }}
           onJoystickAim={(angle) => {
-            if (engineRef.current) {
-              engineRef.current.playerAimAngle = angle;
-              if (Math.cos(angle) > 0.1) engineRef.current.playerFacing = 1;
-              else if (Math.cos(angle) < -0.1) engineRef.current.playerFacing = -1;
-            }
+            engineRef.current?.handleTouchAim(angle);
           }}
         />
       )}
