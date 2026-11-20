@@ -2007,6 +2007,18 @@ export class CombatEngine {
     }
   }
 
+  /** Mobile joystick aim: prioritize an enemy in the direction the stick is pushed. */
+  public handleTouchAim(angle: number) {
+    this.playerAimAngle = angle;
+    this.hasMouseAim = true;
+    const aimDistance = 8;
+    this.mouseWorldX = this.playerX + Math.cos(angle) * aimDistance;
+    this.mouseWorldZ = this.playerZ + Math.sin(angle) * aimDistance;
+    if (Math.cos(angle) > 0.1) this.playerFacing = 1;
+    else if (Math.cos(angle) < -0.1) this.playerFacing = -1;
+    this.refreshAimedTarget();
+  }
+
   public handleAttack() {
     if ((this.currentMode !== 'dungeon' && this.currentMode !== 'lobby') ||
         this.bossIntroTimer > 0 || this.isDashing || this.ginzoUltimateSequence) return;

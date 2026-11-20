@@ -709,8 +709,13 @@ export const HUD: React.FC<HUDProps> = ({
             {/* Normal Attack (LMB / Tap) */}
             <button
               type="button"
-              onClick={onAttack}
-              className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAttack?.();
+              }}
+              className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform touch-none select-none"
+              style={{ touchAction: 'none' }}
               title="โจมตีปกติ (คลิกซ้าย หรือกดปุ่ม)"
             >
               <div
@@ -743,11 +748,14 @@ export const HUD: React.FC<HUDProps> = ({
                 <button
                   key={skill.id}
                   type="button"
-                  onClick={() => onSkill?.(skill.slot as (1 | 2 | 3 | 4))}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (!isOnCd) onSkill?.(skill.slot as (1 | 2 | 3 | 4));
+                  }}
                   disabled={isOnCd}
                   className="flex flex-col items-center group cursor-pointer active:scale-90 transition-transform disabled:opacity-60 touch-none select-none"
                   style={{ touchAction: 'none' }}
-                  onPointerDown={(event) => { event.preventDefault(); }}
                   title={`${skill.name} (${skill.nameTh}) [กดเลข ${skill.slot}]`}
                 >
                   <div
